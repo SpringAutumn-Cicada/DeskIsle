@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private bool mouseSelecting;
     private int viewVersion;
     private bool closing;
+    private readonly DispatcherTimer saveTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private IReadOnlyList<FileTile> tiles = [];
     private FileTile? selectedTile;
     private int columns;
@@ -37,15 +38,18 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         state = store.Load();
-        Width = double.IsFinite(state.Width) ? Math.Clamp(state.Width, 260, SystemParameters.WorkArea.Width) : 360;
-        Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, SystemParameters.WorkArea.Height) : 430;
+        Width = double.IsFinite(state.Width) ? Math.Clamp(state.Width, 260, Math.Max(260, SystemParameters.WorkArea.Width)) : 360;
+        Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, Math.Max(180, SystemParameters.WorkArea.Height)) : 430;
         Left = double.IsFinite(state.Left) ? Math.Clamp(state.Left, SystemParameters.WorkArea.Left, Math.Max(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Right - Width)) : SystemParameters.WorkArea.Left;
         Top = double.IsFinite(state.Top) ? Math.Clamp(state.Top, SystemParameters.WorkArea.Top, Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - Height)) : SystemParameters.WorkArea.Top;
         PreviewMouseDown += (_, _) => mouseSelecting = true;
         PreviewKeyDown += (_, _) => mouseSelecting = false;
+        saveTimer.Tick += (_, _) => { saveTimer.Stop(); if (!closing) SaveCard(); };
+        LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
+        SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
         Loaded += async (_, _) => { await LoadReferences(); if (desktopIcons.RecoveryPending) { try { desktopIcons.Restore(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "桌面图标恢复失败，请使用恢复入口。"; } } UpdateDesktopButton(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
-        Closing += (_, _) => { closing = true; ++viewVersion; SaveCard(); desktopIcons.Dispose(); };
+        Closing += (_, _) => { closing = true; saveTimer.Stop(); ++viewVersion; SaveCard(); desktopIcons.Dispose(); };
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
@@ -121,18 +125,29 @@ public partial class MainWindow : Window
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
         e.Effects = (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : DragDropEffects.Copy;
         var skipped = 0;
-        foreach (var raw in paths)
+        var normalized = await Task.Run(() => paths.Select(raw =>
         {
             try
             {
                 var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(raw));
-                if ((!File.Exists(path) && !Directory.Exists(path)) || state.References.Contains(path, StringComparer.OrdinalIgnoreCase)) { skipped++; continue; }
+                return File.Exists(path) || Directory.Exists(path) ? path : null;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { return null; }
+        }).ToArray());
+        if (closing) return;
+        foreach (var raw in normalized)
+        {
+            try
+            {
+                if (raw == null) { skipped++; continue; }
+                var path = raw;
+                if (state.References.Contains(path, StringComparer.OrdinalIgnoreCase)) { skipped++; continue; }
                 state.References.Add(path);
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { skipped++; }
         }
-        await LoadReferences();
         SaveCard();
+        await LoadReferences();
         if (skipped > 0) Status.Text += $" · 跳过{skipped}项重复或无效路径";
     }
     private async void CollectionClick(object sender, RoutedEventArgs e) => await LoadReferences();

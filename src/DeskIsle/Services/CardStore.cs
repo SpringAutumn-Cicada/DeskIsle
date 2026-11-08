@@ -46,7 +46,11 @@ public sealed class CardStore
         if (File.Exists(path))
         {
             // Preserve a valid backup when recovering from a damaged primary.
-            try { JsonSerializer.Deserialize<CardState>(File.ReadAllText(path)); File.Copy(path, path + ".bak", true); }
+            try
+            {
+                var previous = JsonSerializer.Deserialize<CardState>(File.ReadAllText(path));
+                if (previous is { SchemaVersion: 1, References: not null }) File.Copy(path, path + ".bak", true);
+            }
             catch (JsonException) { }
         }
         File.Move(temp, path, true);
