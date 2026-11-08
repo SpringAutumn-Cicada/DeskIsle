@@ -14,6 +14,11 @@ namespace DeskIsle;
 public partial class MainWindow : Window
 {
     private readonly DesktopHost host = new();
+    private readonly FileIconService icons = new();
+    private IReadOnlyList<FileTile> tiles = [];
+    private FileTile? selectedTile;
+    private int columns;
+    private string modeDetails = "浮动模式 · Win+D 可能隐藏卡片";
     private readonly DispatcherTimer monitor = new() { Interval = TimeSpan.FromSeconds(3) };
     private CancellationTokenSource? loading;
     private string? directory;
@@ -37,7 +42,7 @@ public partial class MainWindow : Window
             desktopRequested = false;
             UpdateMode("桌面连接中断，已切换为浮动模式；可手动重试。");
         };
-        Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); host.Detach(); };
+        Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
     private async void ChooseClick(object sender, RoutedEventArgs e)
@@ -56,6 +61,7 @@ public partial class MainWindow : Window
         loading?.Cancel();
         var request = new CancellationTokenSource();
         loading = request;
+        tiles = [];
         Files.ItemsSource = null;
         Status.Text = "正在读取目录…";
         try
@@ -63,7 +69,8 @@ public partial class MainWindow : Window
             var path = directory;
             var entries = await Task.Run(() => FolderReader.Read(path, request.Token), request.Token);
             if (request.IsCancellationRequested) return;
-            Files.ItemsSource = entries;
+            tiles = entries.Select(x => new FileTile(x)).ToArray();
+            RebuildRows();
             Status.Text = entries.Count == 0 ? "目录为空。" : $"{entries.Count} 个项目 · 双击打开";
         }
         catch (OperationCanceledException) { }
@@ -77,12 +84,13 @@ public partial class MainWindow : Window
     private async void RefreshClick(object sender, RoutedEventArgs e) => await LoadFolder();
     private void OpenClick(object sender, RoutedEventArgs e)
     {
-        if (Files.SelectedItem is FolderEntry entry) ShellOpen(entry.FullPath);
+        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
+        if (tile != null) ShellOpen(tile.FullPath);
     }
     private void RevealClick(object sender, RoutedEventArgs e)
     {
-        if (Files.SelectedItem is not FolderEntry entry) return;
-        ShellOpen(Path.GetDirectoryName(entry.FullPath)!);
+        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
+        if (tile != null) ShellOpen(Path.GetDirectoryName(tile.FullPath)!);
     }
     private void ShellOpen(string path)
     {
@@ -101,9 +109,42 @@ public partial class MainWindow : Window
     }
     private void UpdateMode(string? reason)
     {
-        ModeButton.Content = host.Attached ? "切换浮动模式" : "尝试桌面模式";
-        ModeText.Text = reason ?? (host.Attached ? "桌面模式 · 兼容性待 Windows 验收" : "浮动模式 · Win+D 可能隐藏卡片");
+        ModeButton.Header = host.Attached ? "切换浮动模式" : "尝试桌面模式";
+        modeDetails = reason ?? (host.Attached ? "桌面模式 · 兼容性待 Windows 验收" : "浮动模式 · Win+D 可能隐藏卡片");
+        ModeText.Text = host.Attached ? "桌面模式" : "浮动模式 · 详情见菜单";
     }
+    private void RebuildRows()
+    {
+        columns = Math.Max(1, (int)((Files.ActualWidth - 24) / 100));
+        Files.ItemsSource = tiles.Chunk(columns).Select(x => new TileRow(x)).ToArray();
+    }
+    private void GridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (Files != null && Math.Max(1, (int)((Files.ActualWidth - 24) / 100)) != columns) RebuildRows();
+    }
+    private void TileContextChanged(object sender, DependencyPropertyChangedEventArgs e) => TileLoaded(sender, new RoutedEventArgs());
+    private async void TileLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: FileTile tile } || tile.IconRequested) return;
+        tile.IconRequested = true;
+        tile.Icon = await icons.GetAsync(tile.Entry.IsDirectory, tile.FullPath);
+        if (tile.Icon == null) tile.IconRequested = false;
+    }
+    private void TileRightClick(object sender, MouseButtonEventArgs e)
+    {
+        selectedTile = (sender as FrameworkElement)?.DataContext as FileTile;
+        (sender as UIElement)?.Focus();
+    }
+    private void TileKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { OpenClick(sender, e); e.Handled = true; }
+    }
+    private void MoreClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        { menu.PlacementTarget = button; menu.IsOpen = true; }
+    }
+    private void ModeInfoClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, modeDetails, "显示模式");
     private void OpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (Surface != null) Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * e.NewValue), 36, 41, 53));

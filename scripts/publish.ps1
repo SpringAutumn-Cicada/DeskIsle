@@ -8,5 +8,7 @@ Push-Location $root
 try {
     & $dotnet publish src/DeskIsle/DeskIsle.csproj -c Release -r win-x64 --self-contained true -o artifacts/DeskIsle-win-x64
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
-    Compress-Archive -Path artifacts/DeskIsle-win-x64 -DestinationPath artifacts/DeskIsle-0.1.0-win-x64.zip -Force
+    [xml]$project = Get-Content src/DeskIsle/DeskIsle.csproj
+    $version = $project.Project.PropertyGroup.Version
+    Compress-Archive -Path artifacts/DeskIsle-win-x64 -DestinationPath ("artifacts/DeskIsle-$version-win-x64.zip") -Force
 } finally { Pop-Location }
