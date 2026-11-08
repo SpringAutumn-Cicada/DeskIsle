@@ -141,6 +141,32 @@ public partial class MainWindow
             after = point.Y >= bounds.Bottom || point.Y >= bounds.Top && point.X >= bounds.Left + bounds.Width / 2;
             insertionIndex = tiles.ToList().IndexOf(target) + (after ? 1 : 0);
         }
+        // A slot has one canonical geometry, regardless of which adjacent tile was hit.
+        var line = Rect.Empty;
+        if (!bounds.IsEmpty)
+        {
+            var realized = VisibleTiles(Files).Where(b => b.DataContext is FileTile)
+                .ToDictionary(b => (FileTile)b.DataContext, b => new Rect(b.TranslatePoint(new Point(), Files), b.RenderSize));
+            var leftIndex = insertionIndex - 1;
+            var rightIndex = insertionIndex;
+            if (leftIndex >= 0 && rightIndex < tiles.Count && rightIndex % columns != 0 &&
+                realized.TryGetValue(tiles[leftIndex], out var left) && realized.TryGetValue(tiles[rightIndex], out var right))
+            {
+                var x = (left.Right + right.Left) / 2;
+                line = new Rect(x, right.Top + 5, 0, Math.Max(0, right.Height - 10));
+                bounds = right; // Stable highlight for this slot, too.
+            }
+            else if (rightIndex < tiles.Count && realized.TryGetValue(tiles[rightIndex], out var next))
+            {
+                bounds = next;
+                line = new Rect(next.Left - 3, next.Top + 5, 0, Math.Max(0, next.Height - 10));
+            }
+            else if (leftIndex >= 0 && realized.TryGetValue(tiles[leftIndex], out var previous))
+            {
+                bounds = previous;
+                line = new Rect(previous.Right + 3, previous.Top + 5, 0, Math.Max(0, previous.Height - 10));
+            }
+        }
         if (reorderAdorner == null)
         {
             reorderLayer = AdornerLayer.GetAdornerLayer(Files);
@@ -148,10 +174,10 @@ public partial class MainWindow
             reorderLayer?.Add(reorderAdorner);
         }
         var changed = reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != bounds ||
-            reorderAdorner.After != after || reorderAdorner.Pointer != point || reorderAdorner.Tile != reorderSource;
+            reorderAdorner.InsertionLine != line || reorderAdorner.Pointer != point || reorderAdorner.Tile != reorderSource;
         reorderAdorner.Visibility = Visibility.Visible;
         reorderAdorner.Target = bounds;
-        reorderAdorner.After = after;
+        reorderAdorner.InsertionLine = line;
         reorderAdorner.Pointer = point;
         reorderAdorner.Tile = reorderSource;
         if (changed) reorderAdorner.InvalidateVisual();

@@ -7,7 +7,7 @@ namespace DeskIsle.Services;
 public sealed class ReorderAdorner(UIElement element) : Adorner(element)
 {
     public Rect Target { get; set; }
-    public bool After { get; set; }
+    public Rect InsertionLine { get; set; } = Rect.Empty;
     public Point Pointer { get; set; }
     public FileTile? Tile { get; set; }
     protected override void OnRender(DrawingContext dc)
@@ -18,10 +18,13 @@ public sealed class ReorderAdorner(UIElement element) : Adorner(element)
         if (!Target.IsEmpty)
         {
             dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(24, 131, 213, 205)), null, Target, 8, 8);
-            var x = After ? Target.Right + 1 : Target.Left - 1;
-            dc.DrawLine(new Pen(accent, 2), new Point(x, Target.Top + 5), new Point(x, Target.Bottom - 5));
-            dc.DrawEllipse(accent, null, new Point(x, Target.Top + 5), 2.5, 2.5);
-            dc.DrawEllipse(accent, null, new Point(x, Target.Bottom - 5), 2.5, 2.5);
+        }
+        if (!InsertionLine.IsEmpty)
+        {
+            var x = InsertionLine.X;
+            dc.DrawLine(new Pen(accent, 2), new Point(x, InsertionLine.Top), new Point(x, InsertionLine.Bottom));
+            dc.DrawEllipse(accent, null, new Point(x, InsertionLine.Top), 2.5, 2.5);
+            dc.DrawEllipse(accent, null, new Point(x, InsertionLine.Bottom), 2.5, 2.5);
         }
         var left = Math.Clamp(Pointer.X + 14, 0, Math.Max(0, AdornedElement.RenderSize.Width - 170));
         var top = Math.Clamp(Pointer.Y + 16, 0, Math.Max(0, AdornedElement.RenderSize.Height - 42));

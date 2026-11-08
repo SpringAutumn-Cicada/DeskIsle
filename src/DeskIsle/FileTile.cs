@@ -16,4 +16,4 @@ public sealed class FileTile(FolderEntry entry) : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Changed([CallerMemberName] string? property = null) => PropertyChanged?.Invoke(this, new(property));
 }
-public sealed record TileRow(IReadOnlyList<FileTile> Items);
+public sealed record TileRow(IReadOnlyList<FileTile> Items, double Width);

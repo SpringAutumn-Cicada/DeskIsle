@@ -289,10 +289,19 @@ public partial class MainWindow : Window
         ModeButton.Header = host.Attached ? "切换浮动模式" : "尝试桌面模式";
         modeDetails = reason ?? (host.Attached ? "桌面模式 · 兼容性待 Windows 验收" : "浮动模式 · Win+D 可能隐藏卡片");
     }
+    private int GridColumnCount()
+    {
+        var viewport = FindScroll(Files)?.ViewportWidth ?? 0;
+        return Math.Max(1, (int)((viewport > 0 ? viewport : Math.Max(0, Files.ActualWidth - 14)) / 86));
+    }
+    private void GridViewportChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (Files != null && e.ViewportWidthChange != 0 && GridColumnCount() != columns) RebuildRows();
+    }
     private void RebuildRows()
     {
-        columns = Math.Max(1, (int)((Files.ActualWidth - 24) / 86));
-        Files.ItemsSource = tiles.Chunk(columns).Select(x => new TileRow(x)).ToArray();
+        columns = GridColumnCount();
+        Files.ItemsSource = tiles.Chunk(columns).Select(x => new TileRow(x, columns * 86)).ToArray();
     }
     private void TileBringIntoView(object sender, RequestBringIntoViewEventArgs e)
     {
@@ -301,7 +310,7 @@ public partial class MainWindow : Window
     }
     private void GridSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (Files != null && Math.Max(1, (int)((Files.ActualWidth - 24) / 86)) != columns) RebuildRows();
+        if (Files != null && GridColumnCount() != columns) RebuildRows();
     }
     private void TileContextChanged(object sender, DependencyPropertyChangedEventArgs e) => TileLoaded(sender, new RoutedEventArgs());
     private async void TileLoaded(object sender, RoutedEventArgs e)
