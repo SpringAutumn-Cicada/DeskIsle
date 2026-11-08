@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly DesktopHost host = new();
     private readonly FileIconService icons = new();
     private readonly CardStore store = new();
+    private readonly DesktopIcons desktopIcons = new();
     private CardState state = new();
     private bool mouseSelecting;
     private IReadOnlyList<FileTile> tiles = [];
@@ -42,10 +43,11 @@ public partial class MainWindow : Window
         PreviewMouseDown += (_, _) => mouseSelecting = true;
         PreviewKeyDown += (_, _) => mouseSelecting = false;
         SourceInitialized += (_, _) => host.SetHandle(this);
-        Loaded += async (_, _) => { await LoadReferences(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
-        Closing += (_, _) => SaveCard();
+        Loaded += async (_, _) => { await LoadReferences(); if (desktopIcons.RecoveryPending) { try { desktopIcons.Restore(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "桌面图标恢复失败，请使用恢复入口。"; } } UpdateDesktopButton(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
+        Closing += (_, _) => { SaveCard(); desktopIcons.Dispose(); };
         monitor.Tick += (_, _) =>
         {
+            UpdateDesktopButton();
             if (!desktopRequested || host.IsAlive) return;
             host.Detach();
             if (++recoveryAttempts <= 3 && host.TryAttach(this)) return;
@@ -55,6 +57,29 @@ public partial class MainWindow : Window
         Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
+    private void UpdateDesktopButton()
+    {
+        var visible = desktopIcons.Visible;
+        DesktopToggle.Content = visible == false ? "显示桌面图标" : "隐藏桌面图标";
+        DesktopToggle.IsEnabled = visible.HasValue;
+    }
+    private void ToggleDesktopIcons(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var success = desktopIcons.Visible == false ? desktopIcons.Restore() : desktopIcons.Hide();
+            if (!success) MessageBox.Show(this, "未能更改桌面图标显示状态，可在桌面右键的“查看”菜单中恢复。", "DeskIsle");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { MessageBox.Show(this, "无法保存恢复标记，未继续隐藏桌面图标。", "DeskIsle"); }
+        UpdateDesktopButton();
+    }
+    private void RestoreDesktopIcons(object sender, RoutedEventArgs e)
+    {
+        try { if (!desktopIcons.Restore()) MessageBox.Show(this, "未找到桌面图标视图，请在桌面右键→查看→显示桌面图标。", "DeskIsle"); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "无法清除恢复标记，请检查配置目录权限。"; }
+        UpdateDesktopButton();
+    }
     private async Task LoadReferences()
     {
         loading?.Cancel();

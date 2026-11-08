@@ -27,7 +27,7 @@
 <Button.ContextMenu><ContextMenu>
 <MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Click="RefreshClick"/><Separator/>
 <MenuItem x:Name="ModeButton" Header="尝试桌面模式" Click="ModeClick"/>
-<MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
+<MenuItem Header="恢复桌面图标" Click="RestoreDesktopIcons"/><MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
 <MenuItem Header="背景透明度"><MenuItem.HeaderTemplate><DataTemplate><StackPanel Width="180"><TextBlock Text="背景不透明度"/><Slider Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></DataTemplate></MenuItem.HeaderTemplate></MenuItem>
 <Separator/><MenuItem Header="退出" Click="ExitClick"/>
 </ContextMenu></Button.ContextMenu></Button>
@@ -41,7 +41,7 @@
 <Grid><Grid.RowDefinitions><RowDefinition Height="56"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="40" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="48" Height="48"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="12" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
 </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></DataTemplate></ListBox.ItemTemplate>
 </ListBox>
-<TextBlock Grid.Row="3" x:Name="ModeText" Text="浮动模式" Foreground="#7E8BA4" FontSize="10" Margin="2,6,2,0"/>
+<DockPanel Grid.Row="3" Margin="0,6,0,0"><Button x:Name="DesktopToggle" DockPanel.Dock="Right" Content="隐藏桌面图标" Click="ToggleDesktopIcons" FontSize="11"/><TextBlock x:Name="ModeText" Text="浮动模式" Foreground="#7E8BA4" FontSize="10" VerticalAlignment="Center"/></DockPanel>
 </Grid>
 </Border>
 </Window>
