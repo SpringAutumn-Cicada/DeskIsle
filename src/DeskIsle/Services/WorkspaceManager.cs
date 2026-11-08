@@ -1,0 +1,82 @@
+using System.IO;
+using System.Windows;
+namespace DeskIsle.Services;
+
+public sealed class WorkspaceManager : IDisposable
+{
+    private readonly WorkspaceStore store = new();
+    private readonly WorkspaceState state;
+    private readonly Dictionary<Guid, MainWindow> windows = [];
+    public DesktopIcons DesktopIcons { get; } = new();
+    public string? Warning { get; private set; }
+    public bool Exiting { get; private set; }
+    public WorkspaceManager()
+    {
+        state = store.Load();
+        Warning = store.Warning;
+        if (state.Cards.Count == 0) state.Cards.Add(new());
+    }
+    public void Start()
+    {
+        // Recovery is application-wide: creating a second card must never show hidden icons.
+        if (DesktopIcons.RecoveryPending)
+        {
+            try { if (!DesktopIcons.Restore()) Warning = "上次桌面图标状态未能恢复，请使用菜单恢复入口。"; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
+        }
+        foreach (var card in state.Cards.ToArray()) Open(card);
+    }
+    private void Open(CardState card)
+    {
+        var window = new MainWindow(this, card);
+        windows.Add(card.Id, window);
+        window.Closed += (_, _) =>
+        {
+            windows.Remove(card.Id);
+            if (windows.Count == 0 && !Exiting) Exit();
+        };
+        window.Show();
+    }
+    public void Add(MainWindow source)
+    {
+        if (store.ReadOnly) { MessageBox.Show(source, "配置处于保护模式，不能保存新卡片。", "DeskIsle"); return; }
+        var area = SystemParameters.WorkArea;
+        var left = source.Left + source.ActualWidth + 16;
+        var top = source.Top;
+        if (left + 360 > area.Right)
+        {
+            left = area.Left + 24 + state.Cards.Count % 8 * 24;
+            top = area.Top + 48 + state.Cards.Count % 8 * 24;
+        }
+        var card = new CardState { Title = "新卡片", Left = left, Top = top };
+        state.Cards.Add(card);
+        Open(card);
+        Save();
+    }
+    public void Remove(MainWindow window, CardState card)
+    {
+        if (store.ReadOnly) { MessageBox.Show(window, "配置处于保护模式，不能移除卡片。", "DeskIsle"); return; }
+        if (MessageBox.Show(window, "移除此卡片及其收藏记录？真实文件不会删除。移除最后一张卡片后程序退出。", "移除卡片", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var index = state.Cards.IndexOf(card);
+        state.Cards.Remove(card);
+        try { Save(); }
+        catch { state.Cards.Insert(index, card); throw; }
+        window.Close();
+    }
+    public void Save()
+    {
+        if (store.ReadOnly) throw new IOException("配置处于只读保护模式，未覆盖原文件。");
+        store.Save(state);
+    }
+    public void Exit()
+    {
+        if (Exiting) return;
+        Exiting = true;
+        foreach (var window in windows.Values.ToArray()) window.Close();
+        try { Save(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { MessageBox.Show("保存布局失败，旧配置保留。", "DeskIsle"); }
+        DesktopIcons.Dispose();
+        Application.Current.Shutdown();
+    }
+    public void Dispose() => DesktopIcons.Dispose();
+}

@@ -5,6 +5,8 @@ namespace DeskIsle.Services;
 public sealed class CardState
 {
     public int SchemaVersion { get; set; } = 1;
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public double BackgroundOpacity { get; set; } = .85;
     public string Title { get; set; } = "我的卡片";
     public List<string> References { get; set; } = [];
     public double Left { get; set; } = 24;

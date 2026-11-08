@@ -15,9 +15,9 @@ public partial class MainWindow : Window
 {
     private readonly DesktopHost host = new();
     private readonly FileIconService icons = new();
-    private readonly CardStore store = new();
-    private readonly DesktopIcons desktopIcons = new();
-    private CardState state = new();
+    private readonly WorkspaceManager workspace;
+    private readonly DesktopIcons desktopIcons;
+    private readonly CardState state;
     private bool mouseSelecting;
     private int viewVersion;
     private bool closing;
@@ -34,10 +34,14 @@ public partial class MainWindow : Window
     private bool desktopRequested;
     private int recoveryAttempts;
 
-    public MainWindow()
+    public MainWindow(WorkspaceManager workspace, CardState card)
     {
+        this.workspace = workspace;
+        state = card;
+        desktopIcons = workspace.DesktopIcons;
+        var backgroundOpacity = state.BackgroundOpacity;
         InitializeComponent();
-        state = store.Load();
+        OpacitySlider.Value = Math.Clamp(backgroundOpacity, .3, 1);
         Width = double.IsFinite(state.Width) ? Math.Clamp(state.Width, 260, Math.Max(260, SystemParameters.WorkArea.Width)) : 360;
         Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, Math.Max(180, SystemParameters.WorkArea.Height)) : 430;
         Left = double.IsFinite(state.Left) ? Math.Clamp(state.Left, SystemParameters.WorkArea.Left, Math.Max(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Right - Width)) : SystemParameters.WorkArea.Left;
@@ -48,8 +52,8 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
-        Loaded += async (_, _) => { await LoadReferences(); if (desktopIcons.RecoveryPending) { try { desktopIcons.Restore(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "桌面图标恢复失败，请使用恢复入口。"; } } UpdateDesktopButton(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
-        Closing += (_, _) => { closing = true; saveTimer.Stop(); ++viewVersion; SaveCard(); desktopIcons.Dispose(); };
+        Loaded += async (_, _) => { await LoadReferences(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; SetDesktopMode(true); monitor.Start(); };
+        Closing += (_, _) => { closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
@@ -130,7 +134,7 @@ public partial class MainWindow : Window
     private void SaveCard()
     {
         state.Left = Left; state.Top = Top; state.Width = ActualWidth; state.Height = ActualHeight;
-        try { store.Save(state); }
+        try { workspace.Save(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "保存失败，请检查配置目录权限。"; }
     }
     private void FileDragOver(object sender, DragEventArgs e)
@@ -310,6 +314,7 @@ public partial class MainWindow : Window
     private void OpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (Surface != null) Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * e.NewValue), 36, 41, 53));
+        if (state != null && saveTimer != null) { state.BackgroundOpacity = e.NewValue; saveTimer.Stop(); saveTimer.Start(); }
     }
     private void BeginDrag(object sender, MouseButtonEventArgs e)
     {
@@ -328,5 +333,15 @@ public partial class MainWindow : Window
     }
     private void EndDrag(object sender, MouseButtonEventArgs e) { dragging = false; Header.ReleaseMouseCapture(); }
     private void LostDrag(object sender, MouseEventArgs e) => dragging = false;
-    private void ExitClick(object sender, RoutedEventArgs e) => Close();
+    private void AddCardClick(object sender, RoutedEventArgs e)
+    {
+        try { workspace.Add(this); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "保存新卡片失败，请检查配置目录权限。"; }
+    }
+    private void RemoveCardClick(object sender, RoutedEventArgs e)
+    {
+        try { workspace.Remove(this, state); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "保存失败，未关闭卡片。"; }
+    }
+    private void ExitClick(object sender, RoutedEventArgs e) => workspace.Exit();
 }

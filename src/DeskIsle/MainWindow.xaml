@@ -26,11 +26,11 @@
 <TextBox x:Name="TitleEditor" Visibility="Collapsed" MaxLength="40" FontSize="16" FontWeight="SemiBold" Background="#30394B" Foreground="#F1F3F8" BorderBrush="#7EABE0" Padding="4,2" KeyDown="RenameKeyDown" LostKeyboardFocus="RenameLostFocus"/>
 <Button Grid.Column="1" Content="•••" Width="32" Height="28" Padding="0" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
-<MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
+<MenuItem Header="添加新卡片" Icon="＋" Click="AddCardClick"/><MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
 <MenuItem x:Name="ModeButton" Header="尝试桌面模式" Click="ModeClick"/>
 <MenuItem x:Name="DesktopToggle" Header="隐藏桌面图标" Click="ToggleDesktopIcons" Icon="◉"/><MenuItem Header="恢复桌面图标" Click="RestoreDesktopIcons"/><MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
-<MenuItem Header="卡片外观" Icon="◐"><MenuItem StaysOpenOnClick="True"><MenuItem.Header><StackPanel Width="160"><TextBlock Text="背景不透明度" Margin="0,0,0,8" Foreground="#AEBBD2"/><Slider Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></MenuItem.Header></MenuItem></MenuItem>
-<Separator/><MenuItem Header="退出" Click="ExitClick"/>
+<MenuItem Header="卡片外观" Icon="◐"><MenuItem StaysOpenOnClick="True"><MenuItem.Header><StackPanel Width="160"><TextBlock Text="背景不透明度" Margin="0,0,0,8" Foreground="#AEBBD2"/><Slider x:Name="OpacitySlider" Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></MenuItem.Header></MenuItem></MenuItem>
+<Separator/><MenuItem Header="移除此卡片…" Click="RemoveCardClick"/><MenuItem Header="退出全部卡片" Click="ExitClick"/>
 </ContextMenu></Button.ContextMenu></Button>
 </Grid>
 <TextBlock Grid.Row="1" x:Name="Status" Text="拖入文件或文件夹 · 原文件位置不变" TextWrapping="Wrap" Margin="2,6,2,8" Foreground="#AEBAD0" FontSize="11"/>
