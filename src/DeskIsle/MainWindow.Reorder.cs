@@ -118,6 +118,8 @@ public partial class MainWindow
     {
         var point = reorderPointer;
         var targetButton = FindTile(Files.InputHitTest(point) as DependencyObject);
+        // Hover feedback follows the actual pointer hit, independent of the insertion slot.
+        var hoverBounds = targetButton == null ? Rect.Empty : new Rect(targetButton.TranslatePoint(new Point(), Files), targetButton.RenderSize);
         // Gaps and unused row space choose the closest realized tile, not an arbitrary last item.
         if (targetButton == null)
         {
@@ -154,16 +156,13 @@ public partial class MainWindow
             {
                 var x = (left.Right + right.Left) / 2;
                 line = new Rect(x, right.Top + 5, 0, Math.Max(0, right.Height - 10));
-                bounds = right; // Stable highlight for this slot, too.
             }
             else if (rightIndex < tiles.Count && realized.TryGetValue(tiles[rightIndex], out var next))
             {
-                bounds = next;
                 line = new Rect(next.Left - 3, next.Top + 5, 0, Math.Max(0, next.Height - 10));
             }
             else if (leftIndex >= 0 && realized.TryGetValue(tiles[leftIndex], out var previous))
             {
-                bounds = previous;
                 line = new Rect(previous.Right + 3, previous.Top + 5, 0, Math.Max(0, previous.Height - 10));
             }
         }
@@ -173,10 +172,10 @@ public partial class MainWindow
             reorderAdorner = new ReorderAdorner(Files) { IsHitTestVisible = false };
             reorderLayer?.Add(reorderAdorner);
         }
-        var changed = reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != bounds ||
+        var changed = reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != hoverBounds ||
             reorderAdorner.InsertionLine != line || reorderAdorner.Pointer != point || reorderAdorner.Tile != reorderSource;
         reorderAdorner.Visibility = Visibility.Visible;
-        reorderAdorner.Target = bounds;
+        reorderAdorner.Target = hoverBounds;
         reorderAdorner.InsertionLine = line;
         reorderAdorner.Pointer = point;
         reorderAdorner.Tile = reorderSource;
