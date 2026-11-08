@@ -17,6 +17,7 @@
 </Style>
 </Window.Resources>
 <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12"/></WindowChrome.WindowChrome>
+<AdornerDecorator>
 <Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="16" Padding="14">
 <Grid>
 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
@@ -39,11 +40,12 @@
 <ListBox Grid.Row="2" Margin="0,8,0,0" x:Name="Files" Background="Transparent" Foreground="#F1F3F8" BorderThickness="0" SizeChanged="GridSizeChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
 <ListBox.Resources><Style TargetType="ListBoxItem"><EventSetter Event="RequestBringIntoView" Handler="TileBringIntoView"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="Focusable" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate></Setter.Value></Setter></Style></ListBox.Resources>
 <ListBox.ItemTemplate><DataTemplate><ItemsControl ItemsSource="{Binding Items}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-<ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource Tile}" RequestBringIntoView="TileBringIntoView" Loaded="TileLoaded" DataContextChanged="TileContextChanged" MouseDoubleClick="OpenClick" KeyDown="TileKeyDown" PreviewMouseRightButtonDown="TileRightClick" ToolTip="{Binding FullPath}">
+<ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource Tile}" RequestBringIntoView="TileBringIntoView" PreviewMouseLeftButtonDown="TilePress" PreviewMouseLeftButtonUp="TileRelease" PreviewMouseMove="TileMove" Loaded="TileLoaded" DataContextChanged="TileContextChanged" MouseDoubleClick="OpenClick" KeyDown="TileKeyDown" PreviewMouseRightButtonDown="TileRightClick" ToolTip="{Binding FullPath}">
 <Button.ContextMenu><ContextMenu><MenuItem Header="打开" Click="OpenClick"/><MenuItem Header="打开所在位置" Click="RevealClick"/><MenuItem Header="移出卡片（保留原文件）" Click="RemoveReference"/><MenuItem Header="重新定位引用…" Click="RelocateReference"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/></ContextMenu></Button.ContextMenu>
 <Grid><Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="32" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="40" Height="40"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="32" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
 </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></DataTemplate></ListBox.ItemTemplate>
 </ListBox>
 </Grid>
 </Border>
+</AdornerDecorator>
 </Window>

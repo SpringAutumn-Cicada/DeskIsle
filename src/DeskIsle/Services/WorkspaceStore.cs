@@ -62,6 +62,7 @@ public sealed class WorkspaceStore
         foreach (var card in state.Cards)
         {
             if (card == null || card.Id == Guid.Empty || !ids.Add(card.Id) || card.References == null || card.References.Any(x => string.IsNullOrWhiteSpace(x) || !Path.IsPathFullyQualified(x))) throw new JsonException();
+            card.FolderOrders = new Dictionary<string, List<string>>((card.FolderOrders ?? new Dictionary<string, List<string>>()).Where(x => x.Value != null).ToDictionary(x => x.Key, x => x.Value.Where(p => !string.IsNullOrWhiteSpace(p)).ToList()), StringComparer.OrdinalIgnoreCase);
             card.Title = string.IsNullOrWhiteSpace(card.Title) ? "我的卡片" : card.Title.Trim()[..Math.Min(40, card.Title.Trim().Length)];
             if (!double.IsFinite(card.BackgroundOpacity)) card.BackgroundOpacity = .85;
             card.BackgroundOpacity = Math.Clamp(card.BackgroundOpacity, .3, 1);

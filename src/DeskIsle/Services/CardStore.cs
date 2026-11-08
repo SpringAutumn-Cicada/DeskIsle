@@ -9,6 +9,7 @@ public sealed class CardState
     public double BackgroundOpacity { get; set; } = .85;
     public string Title { get; set; } = "我的卡片";
     public List<string> References { get; set; } = [];
+    public Dictionary<string, List<string>> FolderOrders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public double Left { get; set; } = 24;
     public double Top { get; set; } = 48;
     public double Width { get; set; } = 360;

@@ -70,7 +70,7 @@ public partial class MainWindow : Window
             desktopRequested = false;
             UpdateMode("桌面连接中断，已切换为浮动模式；可手动重试。");
         };
-        Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
+        Closed += (_, _) => { monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
     private void RenameClick(object sender, RoutedEventArgs e)
@@ -146,6 +146,7 @@ public partial class MainWindow : Window
     }
     private void FileDragOver(object sender, DragEventArgs e)
     {
+        if (IsReorder(e)) { ReorderOver(e); return; }
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
         Surface.BorderBrush = e.Effects == DragDropEffects.None ? new SolidColorBrush(Color.FromRgb(94, 106, 128)) : new SolidColorBrush(Color.FromRgb(114, 201, 193));
@@ -153,11 +154,13 @@ public partial class MainWindow : Window
     }
     private void FileDragLeave(object sender, DragEventArgs e)
     {
+        if (IsReorder(e)) { ClearReorderPreview(); return; }
         Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
         Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
     }
     private async void FileDrop(object sender, DragEventArgs e)
     {
+        if (IsReorder(e)) { ReorderDrop(e); return; }
         FileDragLeave(sender, e);
         e.Handled = true;
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
@@ -236,7 +239,13 @@ public partial class MainWindow : Window
             var path = directory;
             var entries = await Task.Run(() => FolderReader.Read(path, request.Token), request.Token);
             if (request.IsCancellationRequested || version != viewVersion || closing) return;
-            tiles = entries.Select(x => new FileTile(x)).ToArray();
+            IEnumerable<DeskIsle.Core.FolderEntry> ordered = entries;
+            if (state.FolderOrders.TryGetValue(path, out var savedOrder))
+            {
+                var ranks = savedOrder.Select((value, index) => (value, index)).GroupBy(x => x.value, StringComparer.OrdinalIgnoreCase).ToDictionary(x => x.Key, x => x.First().index, StringComparer.OrdinalIgnoreCase);
+                ordered = entries.OrderBy(x => ranks.GetValueOrDefault(x.FullPath, int.MaxValue));
+            }
+            tiles = ordered.Select(x => new FileTile(x)).ToArray();
             RebuildRows();
             Status.Text = entries.Count == 0 ? "目录为空。" : "";
         }
@@ -251,6 +260,7 @@ public partial class MainWindow : Window
     private async void RefreshClick(object sender, RoutedEventArgs e) { if (directory == null) await LoadReferences(); else await LoadFolder(); }
     private void OpenClick(object sender, RoutedEventArgs e)
     {
+        if (DateTime.UtcNow < suppressOpenUntil) return;
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
         if (tile != null) ShellOpen(tile.FullPath);
     }
