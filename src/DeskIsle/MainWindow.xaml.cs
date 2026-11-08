@@ -92,7 +92,7 @@ public partial class MainWindow : Window
     private void UpdateDesktopButton()
     {
         var visible = desktopIcons.Visible;
-        DesktopToggle.Content = visible == false ? "显示桌面图标" : "隐藏桌面图标";
+        DesktopToggle.Header = visible == false ? "显示桌面图标" : "隐藏桌面图标";
         DesktopToggle.IsEnabled = visible.HasValue;
     }
     private void ToggleDesktopIcons(object sender, RoutedEventArgs e)
@@ -302,6 +302,7 @@ public partial class MainWindow : Window
     }
     private void MoreClick(object sender, RoutedEventArgs e)
     {
+        UpdateDesktopButton();
         if (sender is Button { ContextMenu: { } menu } button)
         { menu.PlacementTarget = button; menu.IsOpen = true; }
     }

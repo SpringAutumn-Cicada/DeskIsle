@@ -17,19 +17,19 @@
 </Style>
 </Window.Resources>
 <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12"/></WindowChrome.WindowChrome>
-<Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="12" Padding="12">
+<Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="16" Padding="14">
 <Grid>
 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
 <Grid x:Name="Header" Background="Transparent" MouseLeftButtonDown="BeginDrag" MouseMove="ContinueDrag" MouseLeftButtonUp="EndDrag" LostMouseCapture="LostDrag">
 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
 <TextBlock x:Name="TitleText" Text="我的卡片" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Left" MaxWidth="240" TextTrimming="CharacterEllipsis" Cursor="IBeam" ToolTip="点击重命名；拖动标题旁空白区域移动" MouseLeftButtonDown="RenameClick"/>
 <TextBox x:Name="TitleEditor" Visibility="Collapsed" MaxLength="40" FontSize="16" FontWeight="SemiBold" Background="#30394B" Foreground="#F1F3F8" BorderBrush="#7EABE0" Padding="4,2" KeyDown="RenameKeyDown" LostKeyboardFocus="RenameLostFocus"/>
-<Button Grid.Column="1" Content="•••" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
+<Button Grid.Column="1" Content="•••" Width="32" Height="28" Padding="0" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
-<MenuItem Header="重命名卡片" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Click="RefreshClick"/><Separator/>
+<MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
 <MenuItem x:Name="ModeButton" Header="尝试桌面模式" Click="ModeClick"/>
-<MenuItem Header="恢复桌面图标" Click="RestoreDesktopIcons"/><MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
-<MenuItem Header="背景透明度"><MenuItem.HeaderTemplate><DataTemplate><StackPanel Width="180"><TextBlock Text="背景不透明度"/><Slider Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></DataTemplate></MenuItem.HeaderTemplate></MenuItem>
+<MenuItem x:Name="DesktopToggle" Header="隐藏桌面图标" Click="ToggleDesktopIcons" Icon="◉"/><MenuItem Header="恢复桌面图标" Click="RestoreDesktopIcons"/><MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
+<MenuItem Header="卡片外观" Icon="◐"><MenuItem StaysOpenOnClick="True"><MenuItem.Header><StackPanel Width="160"><TextBlock Text="背景不透明度" Margin="0,0,0,8" Foreground="#AEBBD2"/><Slider Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></MenuItem.Header></MenuItem></MenuItem>
 <Separator/><MenuItem Header="退出" Click="ExitClick"/>
 </ContextMenu></Button.ContextMenu></Button>
 </Grid>
@@ -38,11 +38,11 @@
 <ListBox.Resources><Style TargetType="ListBoxItem"><EventSetter Event="RequestBringIntoView" Handler="TileBringIntoView"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="Focusable" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate></Setter.Value></Setter></Style></ListBox.Resources>
 <ListBox.ItemTemplate><DataTemplate><ItemsControl ItemsSource="{Binding Items}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
 <ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource Tile}" RequestBringIntoView="TileBringIntoView" Loaded="TileLoaded" DataContextChanged="TileContextChanged" MouseDoubleClick="OpenClick" KeyDown="TileKeyDown" PreviewMouseRightButtonDown="TileRightClick" ToolTip="{Binding FullPath}">
-<Button.ContextMenu><ContextMenu><MenuItem Header="打开" Click="OpenClick"/><MenuItem Header="打开所在位置" Click="RevealClick"/><MenuItem Header="移出卡片（保留原文件）" Click="RemoveReference"/><MenuItem Header="重新定位引用…" Click="RelocateReference"/><MenuItem Header="刷新" Click="RefreshClick"/></ContextMenu></Button.ContextMenu>
+<Button.ContextMenu><ContextMenu><MenuItem Header="打开" Click="OpenClick"/><MenuItem Header="打开所在位置" Click="RevealClick"/><MenuItem Header="移出卡片（保留原文件）" Click="RemoveReference"/><MenuItem Header="重新定位引用…" Click="RelocateReference"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/></ContextMenu></Button.ContextMenu>
 <Grid><Grid.RowDefinitions><RowDefinition Height="56"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="40" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="48" Height="48"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="12" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
 </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></DataTemplate></ListBox.ItemTemplate>
 </ListBox>
-<DockPanel Grid.Row="3" Margin="0,6,0,0"><Button x:Name="DesktopToggle" DockPanel.Dock="Right" Content="隐藏桌面图标" Click="ToggleDesktopIcons" FontSize="11"/><TextBlock x:Name="ModeText" Text="浮动模式" Foreground="#7E8BA4" FontSize="10" VerticalAlignment="Center"/></DockPanel>
+<TextBlock Grid.Row="3" x:Name="ModeText" Text="浮动模式" Foreground="#7E8BA4" FontSize="10" Margin="2,8,2,0"/>
 </Grid>
 </Border>
 </Window>
