@@ -46,7 +46,14 @@ public partial class MainWindow : Window
         Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, Math.Max(180, SystemParameters.WorkArea.Height)) : 430;
         Left = double.IsFinite(state.Left) ? Math.Clamp(state.Left, SystemParameters.WorkArea.Left, Math.Max(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Right - Width)) : SystemParameters.WorkArea.Left;
         Top = double.IsFinite(state.Top) ? Math.Clamp(state.Top, SystemParameters.WorkArea.Top, Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - Height)) : SystemParameters.WorkArea.Top;
-        PreviewMouseDown += (_, _) => mouseSelecting = true;
+        PreviewMouseDown += (_, _) =>
+        {
+            mouseSelecting = true;
+            // Blank card regions do not take keyboard focus. Commit explicitly
+            // before dispatching the click, without consuming its original action.
+            if (TitleEditor.Visibility == Visibility.Visible && !TitleEditor.IsMouseOver) FinishRename(true);
+        };
+        Deactivated += (_, _) => FinishRename(true);
         PreviewKeyDown += (_, _) => mouseSelecting = false;
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); if (!closing) SaveCard(); };
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
@@ -129,7 +136,7 @@ public partial class MainWindow : Window
         if (closing) return;
         tiles = entries;
         RebuildRows();
-        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹 · 原文件位置不变" : $"{tiles.Count} 个引用 · 双击打开";
+        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
     }
     private void SaveCard()
     {
@@ -147,7 +154,7 @@ public partial class MainWindow : Window
     private void FileDragLeave(object sender, DragEventArgs e)
     {
         Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
-        Status.Text = directory == null ? $"{tiles.Count} 个引用 · 拖入即可添加" : $"{tiles.Count} 个项目 · 双击打开";
+        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
     }
     private async void FileDrop(object sender, DragEventArgs e)
     {
@@ -231,7 +238,7 @@ public partial class MainWindow : Window
             if (request.IsCancellationRequested || version != viewVersion || closing) return;
             tiles = entries.Select(x => new FileTile(x)).ToArray();
             RebuildRows();
-            Status.Text = entries.Count == 0 ? "目录为空。" : $"{entries.Count} 个项目 · 双击打开";
+            Status.Text = entries.Count == 0 ? "目录为空。" : "";
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -271,11 +278,10 @@ public partial class MainWindow : Window
     {
         ModeButton.Header = host.Attached ? "切换浮动模式" : "尝试桌面模式";
         modeDetails = reason ?? (host.Attached ? "桌面模式 · 兼容性待 Windows 验收" : "浮动模式 · Win+D 可能隐藏卡片");
-        ModeText.Text = host.Attached ? "桌面模式" : "浮动模式 · 详情见菜单";
     }
     private void RebuildRows()
     {
-        columns = Math.Max(1, (int)((Files.ActualWidth - 24) / 100));
+        columns = Math.Max(1, (int)((Files.ActualWidth - 24) / 86));
         Files.ItemsSource = tiles.Chunk(columns).Select(x => new TileRow(x)).ToArray();
     }
     private void TileBringIntoView(object sender, RequestBringIntoViewEventArgs e)
@@ -285,7 +291,7 @@ public partial class MainWindow : Window
     }
     private void GridSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (Files != null && Math.Max(1, (int)((Files.ActualWidth - 24) / 100)) != columns) RebuildRows();
+        if (Files != null && Math.Max(1, (int)((Files.ActualWidth - 24) / 86)) != columns) RebuildRows();
     }
     private void TileContextChanged(object sender, DependencyPropertyChangedEventArgs e) => TileLoaded(sender, new RoutedEventArgs());
     private async void TileLoaded(object sender, RoutedEventArgs e)

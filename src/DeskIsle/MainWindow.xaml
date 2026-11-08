@@ -8,7 +8,7 @@
  </ControlTemplate></Setter.Value></Setter>
 </Style>
 <Style x:Key="Tile" TargetType="Button">
- <Setter Property="Width" Value="94"/><Setter Property="Height" Value="108"/><Setter Property="Margin" Value="3"/><Setter Property="Padding" Value="5"/><Setter Property="Foreground" Value="#F1F3F8"/>
+ <Setter Property="Width" Value="80"/><Setter Property="Height" Value="94"/><Setter Property="Margin" Value="3"/><Setter Property="Padding" Value="5"/><Setter Property="Foreground" Value="#F1F3F8"/>
  <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/>
  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="TileBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers>
  <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TileBorder" Property="Background" Value="#244B6388"/></Trigger>
@@ -19,11 +19,13 @@
 <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12"/></WindowChrome.WindowChrome>
 <Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="16" Padding="14">
 <Grid>
-<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
 <Grid x:Name="Header" Background="Transparent" MouseLeftButtonDown="BeginDrag" MouseMove="ContinueDrag" MouseLeftButtonUp="EndDrag" LostMouseCapture="LostDrag">
 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
 <TextBlock x:Name="TitleText" Text="我的卡片" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Left" MaxWidth="240" TextTrimming="CharacterEllipsis" Cursor="IBeam" ToolTip="点击重命名；拖动标题旁空白区域移动" MouseLeftButtonDown="RenameClick"/>
-<TextBox x:Name="TitleEditor" Visibility="Collapsed" MaxLength="40" FontSize="16" FontWeight="SemiBold" Background="#30394B" Foreground="#F1F3F8" BorderBrush="#7EABE0" Padding="4,2" KeyDown="RenameKeyDown" LostKeyboardFocus="RenameLostFocus"/>
+<TextBox x:Name="TitleEditor" Visibility="Collapsed" MaxLength="40" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center" MinWidth="120" MaxWidth="240" Background="#2B3445" Foreground="#E8EFFB" CaretBrush="#A8C8FA" SelectionBrush="#638BBC" BorderBrush="#657EAA" BorderThickness="1" Padding="8,4" KeyDown="RenameKeyDown" LostKeyboardFocus="RenameLostFocus">
+<TextBox.Template><ControlTemplate TargetType="TextBox"><Border x:Name="EditorBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="EditorBorder" Property="BorderBrush" Value="#98B8EB"/></Trigger></ControlTemplate.Triggers></ControlTemplate></TextBox.Template>
+</TextBox>
 <Button Grid.Column="1" Content="•••" Width="32" Height="28" Padding="0" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
 <MenuItem Header="添加新卡片" Icon="＋" Click="AddCardClick"/><MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
@@ -33,16 +35,15 @@
 <Separator/><MenuItem Header="移除此卡片…" Click="RemoveCardClick"/><MenuItem Header="退出全部卡片" Click="ExitClick"/>
 </ContextMenu></Button.ContextMenu></Button>
 </Grid>
-<TextBlock Grid.Row="1" x:Name="Status" Text="拖入文件或文件夹 · 原文件位置不变" TextWrapping="Wrap" Margin="2,6,2,8" Foreground="#AEBAD0" FontSize="11"/>
-<ListBox Grid.Row="2" x:Name="Files" Background="Transparent" Foreground="#F1F3F8" BorderThickness="0" SizeChanged="GridSizeChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+<TextBlock Grid.Row="1" x:Name="Status" Text="" TextWrapping="Wrap" Margin="2,6,2,0" Foreground="#AEBAD0" FontSize="11"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+<ListBox Grid.Row="2" Margin="0,8,0,0" x:Name="Files" Background="Transparent" Foreground="#F1F3F8" BorderThickness="0" SizeChanged="GridSizeChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
 <ListBox.Resources><Style TargetType="ListBoxItem"><EventSetter Event="RequestBringIntoView" Handler="TileBringIntoView"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="Focusable" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate></Setter.Value></Setter></Style></ListBox.Resources>
 <ListBox.ItemTemplate><DataTemplate><ItemsControl ItemsSource="{Binding Items}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
 <ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource Tile}" RequestBringIntoView="TileBringIntoView" Loaded="TileLoaded" DataContextChanged="TileContextChanged" MouseDoubleClick="OpenClick" KeyDown="TileKeyDown" PreviewMouseRightButtonDown="TileRightClick" ToolTip="{Binding FullPath}">
 <Button.ContextMenu><ContextMenu><MenuItem Header="打开" Click="OpenClick"/><MenuItem Header="打开所在位置" Click="RevealClick"/><MenuItem Header="移出卡片（保留原文件）" Click="RemoveReference"/><MenuItem Header="重新定位引用…" Click="RelocateReference"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/></ContextMenu></Button.ContextMenu>
-<Grid><Grid.RowDefinitions><RowDefinition Height="56"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="40" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="48" Height="48"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="12" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
+<Grid><Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="32" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="40" Height="40"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="32" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
 </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></DataTemplate></ListBox.ItemTemplate>
 </ListBox>
-<TextBlock Grid.Row="3" x:Name="ModeText" Text="浮动模式" Foreground="#7E8BA4" FontSize="10" Margin="2,8,2,0"/>
 </Grid>
 </Border>
 </Window>
