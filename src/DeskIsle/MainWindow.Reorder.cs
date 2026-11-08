@@ -9,6 +9,13 @@ namespace DeskIsle;
 
 public partial class MainWindow
 {
+    public static readonly DependencyProperty IsReorderingProperty = DependencyProperty.Register(
+        nameof(IsReordering), typeof(bool), typeof(MainWindow), new PropertyMetadata(false));
+    public bool IsReordering
+    {
+        get => (bool)GetValue(IsReorderingProperty);
+        private set => SetValue(IsReorderingProperty, value);
+    }
     private const string ReorderFormat = "DeskIsle.ReferenceOrder.v1";
     private sealed record ReorderPayload(Guid CardId, string Path);
     private Point tilePressPoint;
@@ -37,6 +44,7 @@ public partial class MainWindow
         e.Handled = true;
         pressedTile = null;
         reorderSource = tile;
+        IsReordering = true;
         button.ReleaseMouseCapture();
         button.Opacity = .35;
         try
@@ -49,6 +57,7 @@ public partial class MainWindow
         {
             button.Opacity = 1;
             reorderSource = null;
+            IsReordering = false;
             suppressOpenUntil = DateTime.UtcNow.AddMilliseconds(250);
             ClearReorderPreview();
         }
@@ -64,7 +73,7 @@ public partial class MainWindow
     {
         e.Handled = true;
         e.Effects = AcceptReorder(e) && (e.AllowedEffects & DragDropEffects.Move) != 0 ? DragDropEffects.Move : DragDropEffects.None;
-        if (e.Effects == DragDropEffects.None) { ClearReorderPreview(); return; }
+        if (e.Effects == DragDropEffects.None) { HideReorderPreview(); return; }
         reorderPointer = e.GetPosition(Files);
         UpdateReorderPreview();
         if (!reorderTimer.IsEnabled)
@@ -75,13 +84,26 @@ public partial class MainWindow
             reorderTimer.Start();
         }
     }
+    private void ReorderLeave(DragEventArgs e)
+    {
+        e.Handled = true;
+        // WPF raises DragLeave when crossing child visuals too. Only hide when
+        // the pointer actually leaves the file viewport, retaining one adorner per drag.
+        if (!PointerInFiles(e)) HideReorderPreview();
+    }
+    private void HideReorderPreview()
+    {
+        reorderTimer.Stop();
+        if (reorderAdorner != null) reorderAdorner.Visibility = Visibility.Hidden;
+    }
     private void ReorderScrollTick(object? sender, EventArgs e)
     {
         if (reorderScroll == null) return;
+        var offset = reorderScroll.VerticalOffset;
         if (reorderPointer.Y < 28) reorderScroll.ScrollToVerticalOffset(reorderScroll.VerticalOffset - 18);
         else if (reorderPointer.Y > Files.ActualHeight - 28) reorderScroll.ScrollToVerticalOffset(reorderScroll.VerticalOffset + 18);
         else return;
-        UpdateReorderPreview();
+        if (offset != reorderScroll.VerticalOffset) UpdateReorderPreview();
     }
     private void UpdateReorderPreview()
     {
@@ -116,11 +138,14 @@ public partial class MainWindow
             reorderAdorner = new ReorderAdorner(Files) { IsHitTestVisible = false };
             reorderLayer?.Add(reorderAdorner);
         }
+        var changed = reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != bounds ||
+            reorderAdorner.After != after || reorderAdorner.Pointer != point || reorderAdorner.Tile != reorderSource;
+        reorderAdorner.Visibility = Visibility.Visible;
         reorderAdorner.Target = bounds;
         reorderAdorner.After = after;
         reorderAdorner.Pointer = point;
         reorderAdorner.Tile = reorderSource;
-        reorderAdorner.InvalidateVisual();
+        if (changed) reorderAdorner.InvalidateVisual();
     }
     private void ReorderDrop(DragEventArgs e)
     {

@@ -154,7 +154,7 @@ public partial class MainWindow : Window
     }
     private void FileDragLeave(object sender, DragEventArgs e)
     {
-        if (IsReorder(e)) { ClearReorderPreview(); return; }
+        if (IsReorder(e)) { ReorderLeave(e); return; }
         Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
         Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
     }
