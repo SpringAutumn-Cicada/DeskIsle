@@ -22,10 +22,11 @@
 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
 <Grid x:Name="Header" Background="Transparent" MouseLeftButtonDown="BeginDrag" MouseMove="ContinueDrag" MouseLeftButtonUp="EndDrag" LostMouseCapture="LostDrag">
 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-<TextBlock x:Name="TitleText" Text="我的卡片" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+<TextBlock x:Name="TitleText" Text="我的卡片" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Left" MaxWidth="240" TextTrimming="CharacterEllipsis" Cursor="IBeam" ToolTip="点击重命名；拖动标题旁空白区域移动" MouseLeftButtonDown="RenameClick"/>
+<TextBox x:Name="TitleEditor" Visibility="Collapsed" MaxLength="40" FontSize="16" FontWeight="SemiBold" Background="#30394B" Foreground="#F1F3F8" BorderBrush="#7EABE0" Padding="4,2" KeyDown="RenameKeyDown" LostKeyboardFocus="RenameLostFocus"/>
 <Button Grid.Column="1" Content="•••" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
-<MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Click="RefreshClick"/><Separator/>
+<MenuItem Header="重命名卡片" Click="RenameClick"/><MenuItem Header="收藏卡片" Click="CollectionClick"/><MenuItem Header="浏览目录…" Click="ChooseClick"/><MenuItem Header="刷新" Click="RefreshClick"/><Separator/>
 <MenuItem x:Name="ModeButton" Header="尝试桌面模式" Click="ModeClick"/>
 <MenuItem Header="恢复桌面图标" Click="RestoreDesktopIcons"/><MenuItem Header="查看显示模式" Click="ModeInfoClick"/>
 <MenuItem Header="背景透明度"><MenuItem.HeaderTemplate><DataTemplate><StackPanel Width="180"><TextBlock Text="背景不透明度"/><Slider Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></DataTemplate></MenuItem.HeaderTemplate></MenuItem>

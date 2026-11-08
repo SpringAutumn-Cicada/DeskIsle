@@ -62,6 +62,33 @@ public partial class MainWindow : Window
         Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
+    private void RenameClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        TitleText.Visibility = Visibility.Collapsed;
+        TitleEditor.Text = state.Title;
+        TitleEditor.Visibility = Visibility.Visible;
+        TitleEditor.Focus();
+        TitleEditor.SelectAll();
+    }
+    private void FinishRename(bool commit)
+    {
+        if (TitleEditor.Visibility != Visibility.Visible) return;
+        var title = TitleEditor.Text.Trim();
+        TitleEditor.Visibility = Visibility.Collapsed;
+        TitleText.Visibility = Visibility.Visible;
+        if (commit && title.Length > 0)
+        {
+            state.Title = title;
+            TitleText.Text = title;
+            SaveCard();
+        }
+    }
+    private void RenameKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Escape) { FinishRename(e.Key == Key.Enter); e.Handled = true; }
+    }
+    private void RenameLostFocus(object sender, KeyboardFocusChangedEventArgs e) => FinishRename(true);
     private void UpdateDesktopButton()
     {
         var visible = desktopIcons.Visible;
@@ -91,7 +118,7 @@ public partial class MainWindow : Window
         var version = ++viewVersion;
         directory = null;
         TitleText.ToolTip = null;
-        TitleText.Text = "我的卡片";
+        TitleText.Text = state.Title;
         var paths = state.References.ToArray();
         var entries = await Task.Run(() => paths.Select(path => new FileTile(new FolderEntry(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path, path, Directory.Exists(path))) { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "路径失效 · 可右键重新定位" }).ToArray());
         if (directory != null || version != viewVersion || closing) return;
@@ -178,7 +205,7 @@ public partial class MainWindow : Window
         var picker = new OpenFolderDialog { Title = "选择要展示的文件夹" };
         if (picker.ShowDialog(this) != true) return;
         directory = picker.FolderName;
-        TitleText.Text = new DirectoryInfo(directory).Name;
+        TitleText.Text = state.Title;
         TitleText.ToolTip = directory;
         await LoadFolder();
     }
@@ -285,6 +312,7 @@ public partial class MainWindow : Window
     }
     private void BeginDrag(object sender, MouseButtonEventArgs e)
     {
+        if (TitleEditor.Visibility == Visibility.Visible) return;
         if (e.OriginalSource is not TextBlock && !ReferenceEquals(e.OriginalSource, Header)) return;
         DesktopHost.GetCursorPos(out dragPoint);
         dragging = true;
