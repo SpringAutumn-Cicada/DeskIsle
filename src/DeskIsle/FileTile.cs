@@ -7,7 +7,7 @@ public sealed class FileTile(FolderEntry entry) : INotifyPropertyChanged
 {
     public FolderEntry Entry { get; } = entry;
     public string Name => Entry.Name;
-    public string Availability => System.IO.File.Exists(FullPath) || System.IO.Directory.Exists(FullPath) ? "" : "路径失效 · 可右键重新定位";
+    public string Availability { get; init; } = "";
     public string FullPath => Entry.FullPath;
     public string Placeholder => Entry.IsDirectory ? "▰" : "▤";
     private ImageSource? icon;

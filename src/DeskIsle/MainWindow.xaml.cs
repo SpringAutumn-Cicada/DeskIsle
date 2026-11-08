@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private readonly DesktopIcons desktopIcons = new();
     private CardState state = new();
     private bool mouseSelecting;
+    private int viewVersion;
+    private bool closing;
     private IReadOnlyList<FileTile> tiles = [];
     private FileTile? selectedTile;
     private int columns;
@@ -39,12 +41,11 @@ public partial class MainWindow : Window
         Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, SystemParameters.WorkArea.Height) : 430;
         Left = double.IsFinite(state.Left) ? Math.Clamp(state.Left, SystemParameters.WorkArea.Left, Math.Max(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Right - Width)) : SystemParameters.WorkArea.Left;
         Top = double.IsFinite(state.Top) ? Math.Clamp(state.Top, SystemParameters.WorkArea.Top, Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - Height)) : SystemParameters.WorkArea.Top;
-        Files.AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler((_, e) => { if (mouseSelecting) e.Handled = true; }), true);
         PreviewMouseDown += (_, _) => mouseSelecting = true;
         PreviewKeyDown += (_, _) => mouseSelecting = false;
         SourceInitialized += (_, _) => host.SetHandle(this);
         Loaded += async (_, _) => { await LoadReferences(); if (desktopIcons.RecoveryPending) { try { desktopIcons.Restore(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "桌面图标恢复失败，请使用恢复入口。"; } } UpdateDesktopButton(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
-        Closing += (_, _) => { SaveCard(); desktopIcons.Dispose(); };
+        Closing += (_, _) => { closing = true; ++viewVersion; SaveCard(); desktopIcons.Dispose(); };
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
@@ -83,11 +84,14 @@ public partial class MainWindow : Window
     private async Task LoadReferences()
     {
         loading?.Cancel();
+        var version = ++viewVersion;
         directory = null;
+        TitleText.ToolTip = null;
         TitleText.Text = "我的卡片";
         var paths = state.References.ToArray();
-        var entries = await Task.Run(() => paths.Select(path => new FileTile(new FolderEntry(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path, path, Directory.Exists(path)))).ToArray());
-        if (directory != null) return;
+        var entries = await Task.Run(() => paths.Select(path => new FileTile(new FolderEntry(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path, path, Directory.Exists(path))) { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "路径失效 · 可右键重新定位" }).ToArray());
+        if (directory != null || version != viewVersion || closing) return;
+        if (closing) return;
         tiles = entries;
         RebuildRows();
         Status.Text = tiles.Count == 0 ? "拖入文件或文件夹 · 原文件位置不变" : $"{tiles.Count} 个引用 · 双击打开";
@@ -102,10 +106,17 @@ public partial class MainWindow : Window
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
+        Surface.BorderBrush = e.Effects == DragDropEffects.None ? new SolidColorBrush(Color.FromRgb(94, 106, 128)) : new SolidColorBrush(Color.FromRgb(114, 201, 193));
         Status.Text = e.Effects == DragDropEffects.None ? "不支持此拖入内容" : "添加到卡片 · 原文件位置不变";
+    }
+    private void FileDragLeave(object sender, DragEventArgs e)
+    {
+        Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
+        Status.Text = directory == null ? $"{tiles.Count} 个引用 · 拖入即可添加" : $"{tiles.Count} 个项目 · 双击打开";
     }
     private async void FileDrop(object sender, DragEventArgs e)
     {
+        FileDragLeave(sender, e);
         e.Handled = true;
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
         e.Effects = (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : DragDropEffects.Copy;
@@ -142,7 +153,7 @@ public partial class MainWindow : Window
             if (choice == MessageBoxResult.Yes) { var picker = new OpenFolderDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FolderName; }
             else { var picker = new OpenFileDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FileName; }
         }
-        if (replacement == null) return;
+        if (replacement == null || closing) return;
         state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
         if (!state.References.Contains(replacement, StringComparer.OrdinalIgnoreCase)) state.References.Add(replacement);
         await LoadReferences(); SaveCard();
@@ -160,6 +171,7 @@ public partial class MainWindow : Window
     private async Task LoadFolder()
     {
         if (directory == null) return;
+        var version = ++viewVersion;
         loading?.Cancel();
         var request = new CancellationTokenSource();
         loading = request;
@@ -170,7 +182,7 @@ public partial class MainWindow : Window
         {
             var path = directory;
             var entries = await Task.Run(() => FolderReader.Read(path, request.Token), request.Token);
-            if (request.IsCancellationRequested) return;
+            if (request.IsCancellationRequested || version != viewVersion || closing) return;
             tiles = entries.Select(x => new FileTile(x)).ToArray();
             RebuildRows();
             Status.Text = entries.Count == 0 ? "目录为空。" : $"{entries.Count} 个项目 · 双击打开";
@@ -219,6 +231,11 @@ public partial class MainWindow : Window
     {
         columns = Math.Max(1, (int)((Files.ActualWidth - 24) / 100));
         Files.ItemsSource = tiles.Chunk(columns).Select(x => new TileRow(x)).ToArray();
+    }
+    private void TileBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+    {
+        // Stop mouse focus requests before the inner ScrollViewer sees the event.
+        if (mouseSelecting) e.Handled = true;
     }
     private void GridSizeChanged(object sender, SizeChangedEventArgs e)
     {
