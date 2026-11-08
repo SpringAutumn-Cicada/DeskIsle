@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
-        Loaded += async (_, _) => { await LoadReferences(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; SetDesktopMode(true); monitor.Start(); };
+        Loaded += async (_, _) => { await LoadReferences(); if (closing) return; UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; SetDesktopMode(true); monitor.Start(); };
         Closing += (_, _) => { closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
         {
