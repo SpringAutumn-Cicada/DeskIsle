@@ -79,6 +79,11 @@ public partial class MainWindow
         if (!reorderTimer.IsEnabled)
         {
             reorderScroll = FindScroll(Files);
+            if (reorderScroll != null)
+            {
+                reorderScroll.ScrollChanged -= ReorderScrollChanged;
+                reorderScroll.ScrollChanged += ReorderScrollChanged;
+            }
             reorderTimer.Tick -= ReorderScrollTick;
             reorderTimer.Tick += ReorderScrollTick;
             reorderTimer.Start();
@@ -99,11 +104,15 @@ public partial class MainWindow
     private void ReorderScrollTick(object? sender, EventArgs e)
     {
         if (reorderScroll == null) return;
-        var offset = reorderScroll.VerticalOffset;
         if (reorderPointer.Y < 28) reorderScroll.ScrollToVerticalOffset(reorderScroll.VerticalOffset - 18);
         else if (reorderPointer.Y > Files.ActualHeight - 28) reorderScroll.ScrollToVerticalOffset(reorderScroll.VerticalOffset + 18);
         else return;
-        if (offset != reorderScroll.VerticalOffset) UpdateReorderPreview();
+    }
+    private void ReorderScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        // ScrollToVerticalOffset is deferred by WPF; update against the actual layout,
+        // not the requested offset, and ignore events from unchanged/hidden previews.
+        if (e.VerticalChange != 0 && reorderAdorner?.Visibility == Visibility.Visible) UpdateReorderPreview();
     }
     private void UpdateReorderPreview()
     {
@@ -182,6 +191,7 @@ public partial class MainWindow
         if (reorderAdorner != null) reorderLayer?.Remove(reorderAdorner);
         reorderAdorner = null;
         reorderLayer = null;
+        if (reorderScroll != null) reorderScroll.ScrollChanged -= ReorderScrollChanged;
         reorderScroll = null;
     }
     private Button? FindTile(DependencyObject? node)
