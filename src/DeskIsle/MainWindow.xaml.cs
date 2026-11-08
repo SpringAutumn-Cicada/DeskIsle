@@ -15,6 +15,9 @@ public partial class MainWindow : Window
 {
     private readonly DesktopHost host = new();
     private readonly FileIconService icons = new();
+    private readonly CardStore store = new();
+    private CardState state = new();
+    private bool mouseSelecting;
     private IReadOnlyList<FileTile> tiles = [];
     private FileTile? selectedTile;
     private int columns;
@@ -30,10 +33,17 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Left = SystemParameters.WorkArea.Left + 24;
-        Top = SystemParameters.WorkArea.Top + 48;
+        state = store.Load();
+        Width = double.IsFinite(state.Width) ? Math.Clamp(state.Width, 260, SystemParameters.WorkArea.Width) : 360;
+        Height = double.IsFinite(state.Height) ? Math.Clamp(state.Height, 180, SystemParameters.WorkArea.Height) : 430;
+        Left = double.IsFinite(state.Left) ? Math.Clamp(state.Left, SystemParameters.WorkArea.Left, Math.Max(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Right - Width)) : SystemParameters.WorkArea.Left;
+        Top = double.IsFinite(state.Top) ? Math.Clamp(state.Top, SystemParameters.WorkArea.Top, Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - Height)) : SystemParameters.WorkArea.Top;
+        Files.AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler((_, e) => { if (mouseSelecting) e.Handled = true; }), true);
+        PreviewMouseDown += (_, _) => mouseSelecting = true;
+        PreviewKeyDown += (_, _) => mouseSelecting = false;
         SourceInitialized += (_, _) => host.SetHandle(this);
-        Loaded += (_, _) => { SetDesktopMode(true); monitor.Start(); };
+        Loaded += async (_, _) => { await LoadReferences(); if (store.Warning != null) Status.Text = store.Warning; SetDesktopMode(true); monitor.Start(); };
+        Closing += (_, _) => SaveCard();
         monitor.Tick += (_, _) =>
         {
             if (!desktopRequested || host.IsAlive) return;
@@ -45,6 +55,73 @@ public partial class MainWindow : Window
         Closed += (_, _) => { monitor.Stop(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
+    private async Task LoadReferences()
+    {
+        loading?.Cancel();
+        directory = null;
+        TitleText.Text = "我的卡片";
+        var paths = state.References.ToArray();
+        var entries = await Task.Run(() => paths.Select(path => new FileTile(new FolderEntry(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path, path, Directory.Exists(path)))).ToArray());
+        if (directory != null) return;
+        tiles = entries;
+        RebuildRows();
+        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹 · 原文件位置不变" : $"{tiles.Count} 个引用 · 双击打开";
+    }
+    private void SaveCard()
+    {
+        state.Left = Left; state.Top = Top; state.Width = ActualWidth; state.Height = ActualHeight;
+        try { store.Save(state); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "保存失败，请检查配置目录权限。"; }
+    }
+    private void FileDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+        Status.Text = e.Effects == DragDropEffects.None ? "不支持此拖入内容" : "添加到卡片 · 原文件位置不变";
+    }
+    private async void FileDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        e.Effects = (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : DragDropEffects.Copy;
+        var skipped = 0;
+        foreach (var raw in paths)
+        {
+            try
+            {
+                var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(raw));
+                if ((!File.Exists(path) && !Directory.Exists(path)) || state.References.Contains(path, StringComparer.OrdinalIgnoreCase)) { skipped++; continue; }
+                state.References.Add(path);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { skipped++; }
+        }
+        await LoadReferences();
+        SaveCard();
+        if (skipped > 0) Status.Text += $" · 跳过{skipped}项重复或无效路径";
+    }
+    private async void CollectionClick(object sender, RoutedEventArgs e) => await LoadReferences();
+    private async void RemoveReference(object sender, RoutedEventArgs e)
+    {
+        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
+        if (tile == null || directory != null) return;
+        state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
+        await LoadReferences(); SaveCard();
+    }
+    private async void RelocateReference(object sender, RoutedEventArgs e)
+    {
+        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
+        if (tile == null || directory != null) return;
+        string? replacement = null;
+        if (MessageBox.Show(this, "重新定位文件夹？选择“否”定位文件。", "重新定位", MessageBoxButton.YesNoCancel) is var choice && choice != MessageBoxResult.Cancel)
+        {
+            if (choice == MessageBoxResult.Yes) { var picker = new OpenFolderDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FolderName; }
+            else { var picker = new OpenFileDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FileName; }
+        }
+        if (replacement == null) return;
+        state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
+        if (!state.References.Contains(replacement, StringComparer.OrdinalIgnoreCase)) state.References.Add(replacement);
+        await LoadReferences(); SaveCard();
+    }
     private async void ChooseClick(object sender, RoutedEventArgs e)
     {
         var picker = new OpenFolderDialog { Title = "选择要展示的文件夹" };
@@ -81,7 +158,7 @@ public partial class MainWindow : Window
         finally { if (ReferenceEquals(loading, request)) loading = null; request.Dispose(); }
     }
 
-    private async void RefreshClick(object sender, RoutedEventArgs e) => await LoadFolder();
+    private async void RefreshClick(object sender, RoutedEventArgs e) { if (directory == null) await LoadReferences(); else await LoadFolder(); }
     private void OpenClick(object sender, RoutedEventArgs e)
     {
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
