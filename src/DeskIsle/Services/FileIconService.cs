@@ -1,76 +1,59 @@
-using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
+using System.Globalization;
+using System.IO;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-
 namespace DeskIsle.Services;
 
-/// <summary>Serial STA Shell worker; bounded cache. No file contents or thumbnails are read.</summary>
+/// <summary>Original vector artwork. No bitmap upscaling, Shell handles or file content access.</summary>
 public sealed class FileIconService : IDisposable
 {
-    private readonly BlockingCollection<(string Key, TaskCompletionSource<ImageSource?> Result)> queue = new(128);
-    private readonly Dictionary<string, ImageSource?> cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Thread worker;
-    private bool disposed;
-    public FileIconService()
-    {
-        worker = new Thread(Run) { IsBackground = true, Name = "DeskIsle icons" };
-        worker.SetApartmentState(ApartmentState.STA);
-        worker.Start();
-    }
+    private readonly Dictionary<string, ImageSource> cache = new(StringComparer.OrdinalIgnoreCase);
     public Task<ImageSource?> GetAsync(bool directory, string path)
     {
-        // Type icons intentionally avoid touching remote/offline file contents.
-        var key = directory ? "folder" : System.IO.Path.GetExtension(path).ToLowerInvariant();
-        var result = new TaskCompletionSource<ImageSource?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (disposed || !queue.TryAdd((key, result))) result.TrySetResult(null);
-        return result.Task;
-    }
-    private void Run()
-    {
-        var initialized = CoInitializeEx(0, 2) >= 0;
-        try
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        var kind = directory ? "folder" : extension switch
         {
-            foreach (var (key, result) in queue.GetConsumingEnumerable())
+            ".txt" or ".log" => "TXT", ".md" => "MD", ".pdf" => "PDF",
+            ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".svg" => "IMG",
+            ".zip" or ".7z" or ".rar" => "ZIP", ".doc" or ".docx" => "DOC",
+            ".xls" or ".xlsx" or ".csv" => "XLS", ".cs" or ".js" or ".py" or ".json" or ".html" => "CODE",
+            ".exe" or ".lnk" => "APP", _ => "FILE"
+        };
+        if (!cache.TryGetValue(kind, out var icon)) { icon = Draw(kind); cache[kind] = icon; }
+        return Task.FromResult<ImageSource?>(icon);
+    }
+    private static DrawingImage Draw(string kind)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(kind switch
+        {
+            "folder" => "#EBC16E", "MD" => "#AF9CEB", "IMG" => "#72C9C1", "ZIP" => "#DDA57F",
+            "PDF" => "#E58D9C", "XLS" => "#82C6A2", "CODE" => "#91ACED", _ => "#90B8D9"
+        });
+        var fill = new LinearGradientBrush(Color.FromArgb(255, (byte)Math.Min(255, color.R + 25), (byte)Math.Min(255, color.G + 25), (byte)Math.Min(255, color.B + 25)), color, 90);
+        var drawing = new DrawingGroup();
+        using (var dc = drawing.Open())
+        {
+            // Fixed vector viewport keeps folder and document optical sizes consistent.
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 64, 64));
+            var outline = new Pen(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), 1);
+            if (kind == "folder")
             {
-                try
-                {
-                    if (!cache.TryGetValue(key, out var image))
-                    {
-                        var info = new SHFILEINFO();
-                        var icon = SHGetFileInfo(key == "folder" ? "folder" : "file" + key,
-                            key == "folder" ? 0x10u : 0x80u, ref info, (uint)Marshal.SizeOf<SHFILEINFO>(), 0x100 | 0x10);
-                        if (icon != 0 && info.Icon != 0)
-                        {
-                            try
-                            {
-                                image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(48, 48));
-                                image.Freeze();
-                            }
-                            finally { DestroyIcon(info.Icon); }
-                        }
-                        if (cache.Count >= 256) cache.Clear();
-                        cache[key] = image;
-                    }
-                    result.TrySetResult(image);
-                }
-                catch { result.TrySetResult(null); }
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(173, 130, 65)), outline, Geometry.Parse("M5,17 Q5,12 10,12 L25,12 L31,18 L54,18 Q59,18 59,23 L59,48 Q59,53 54,53 L10,53 Q5,53 5,48 Z"));
+                dc.DrawRoundedRectangle(fill, outline, new Rect(5, 23, 54, 31), 5, 5);
+                dc.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)), 2), new Point(12, 29), new Point(36, 29));
+            }
+            else
+            {
+                dc.DrawGeometry(fill, outline, Geometry.Parse("M17,6 L39,6 L51,18 L51,53 Q51,58 46,58 L17,58 Q12,58 12,53 L12,11 Q12,6 17,6 Z"));
+                dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), null, Geometry.Parse("M39,6 L39,18 L51,18 Z"));
+                var ink = new SolidColorBrush(Color.FromArgb(180, 35, 48, 70));
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), null, new Rect(18, 25, 27, 22), 4, 4);
+                var text = new FormattedText(kind, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI Semibold"), kind.Length > 3 ? 8 : 11, ink, 1);
+                dc.DrawText(text, new Point(32 - text.Width / 2, 29));
+                dc.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)), 2), new Point(20, 51), new Point(38, 51));
             }
         }
-        finally { if (initialized) CoUninitialize(); }
+        var image = new DrawingImage(drawing); image.Freeze(); return image;
     }
-    public void Dispose() { if (disposed) return; disposed = true; queue.CompleteAdding(); }
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct SHFILEINFO
-    {
-        public nint Icon; public int Index; public uint Attributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
-    }
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern nint SHGetFileInfo(string path, uint attributes, ref SHFILEINFO info, uint size, uint flags);
-    [DllImport("ole32.dll")] private static extern int CoInitializeEx(nint reserved, uint flags);
-    [DllImport("ole32.dll")] private static extern void CoUninitialize();
-    [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
+    public void Dispose() => cache.Clear();
 }
