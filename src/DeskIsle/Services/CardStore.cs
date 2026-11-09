@@ -8,6 +8,7 @@ public sealed class CardState
     public Guid Id { get; set; } = Guid.NewGuid();
     public double BackgroundOpacity { get; set; } = .85;
     public string Title { get; set; } = "我的卡片";
+    public string? CreationDirectory { get; set; }
     public List<string> References { get; set; } = [];
     public Dictionary<string, List<string>> FolderOrders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public double Left { get; set; } = 24;

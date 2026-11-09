@@ -61,7 +61,7 @@ public partial class MainWindow : Window
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
         Loaded += async (_, _) => { await LoadReferences(); if (closing) return; UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { SetDesktopMode(true); monitor.Start(); } };
-        Closing += (_, _) => { closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
+        Closing += (_, e) => { if (creatingItem) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
@@ -149,6 +149,7 @@ public partial class MainWindow : Window
     }
     private void FileDragOver(object sender, DragEventArgs e)
     {
+        if (NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderOver(e); return; }
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -163,6 +164,7 @@ public partial class MainWindow : Window
     }
     private async void FileDrop(object sender, DragEventArgs e)
     {
+        if (NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderDrop(e); return; }
         FileDragLeave(sender, e);
         e.Handled = true;
@@ -194,7 +196,12 @@ public partial class MainWindow : Window
         await LoadReferences();
         if (skipped > 0) Status.Text += $" · 跳过{skipped}项重复或无效路径";
     }
-    private async void CollectionClick(object sender, RoutedEventArgs e) => await LoadReferences();
+    private async void CollectionClick(object sender, RoutedEventArgs e)
+    {
+        if (creatingItem) return;
+        CancelNewItem(sender, e);
+        await LoadReferences();
+    }
     private async void RemoveReference(object sender, RoutedEventArgs e)
     {
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
@@ -219,6 +226,8 @@ public partial class MainWindow : Window
     }
     private async void ChooseClick(object sender, RoutedEventArgs e)
     {
+        if (creatingItem) return;
+        CancelNewItem(sender, e);
         var picker = new OpenFolderDialog { Title = "选择要展示的文件夹" };
         if (picker.ShowDialog(this) != true) return;
         directory = picker.FolderName;

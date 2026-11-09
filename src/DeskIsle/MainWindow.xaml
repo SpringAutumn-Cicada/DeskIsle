@@ -25,6 +25,10 @@
 <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12"/></WindowChrome.WindowChrome>
 <AdornerDecorator>
 <Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="16" Padding="14">
+<Border.ContextMenu><ContextMenu>
+<MenuItem Header="新建" Icon="＋"><MenuItem Header="文件夹" Tag="Folder" Click="BeginNewItemClick"/><MenuItem Header="文本文档 (.txt)" Tag="Text" Click="BeginNewItemClick"/><MenuItem Header="Markdown 文档 (.md)" Tag="Markdown" Click="BeginNewItemClick"/></MenuItem>
+<Separator/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><MenuItem Header="添加新卡片" Click="AddCardClick"/>
+</ContextMenu></Border.ContextMenu>
 <Grid>
 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
 <Grid x:Name="Header" Background="Transparent" MouseLeftButtonDown="BeginDrag" MouseMove="ContinueDrag" MouseLeftButtonUp="EndDrag" LostMouseCapture="LostDrag">
@@ -52,6 +56,17 @@
 <Grid><Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{Binding Placeholder}" FontSize="32" Foreground="#7FA5DC" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><Image Source="{Binding Icon}" Width="40" Height="40"/><TextBlock Text="{Binding Availability}" FontSize="9" Foreground="#FFBFA7" VerticalAlignment="Bottom" HorizontalAlignment="Center"/><TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="32" VerticalAlignment="Top" Margin="0,4,0,0"/></Grid>
 </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></DataTemplate></ListBox.ItemTemplate>
 </ListBox>
+<Border x:Name="NewItemPanel" Grid.Row="2" Panel.ZIndex="10" Visibility="Collapsed" VerticalAlignment="Top" Margin="2,10,2,0" Padding="14" Background="#F5283346" BorderBrush="#657EAA" BorderThickness="1" CornerRadius="12" KeyDown="NewItemKeyDown" MaxHeight="{Binding ActualHeight, ElementName=Files}">
+<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+<TextBlock x:Name="NewItemHeading" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
+<TextBox x:Name="NewItemName" MaxLength="200" FontSize="13" Padding="8,7" Background="#1D2635" Foreground="#EDF3FF" CaretBrush="#A8C8FA" BorderBrush="#6985AC" SelectionBrush="#638BBC"/>
+<TextBlock Text="保存位置" Foreground="#99AAC4" FontSize="11" Margin="0,12,0,4"/>
+<TextBlock x:Name="NewItemLocation" FontSize="11" TextWrapping="Wrap" Foreground="#CDD8E9"/>
+<Button x:Name="NewItemBrowse" Content="更改位置…" HorizontalAlignment="Left" Click="BrowseNewItemLocation" Margin="0,6,0,8" FontSize="11"/>
+<TextBlock x:Name="NewItemError" Foreground="#F4B2A7" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+<StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="NewItemCancel" Content="取消" Click="CancelNewItem"/><Button x:Name="NewItemCreate" Content="创建" Background="#3C6376" BorderBrush="#80B5BD" Click="CreateNewItem"/></StackPanel>
+</StackPanel></ScrollViewer>
+</Border>
 </Grid>
 </Border>
 </AdornerDecorator>
