@@ -14,10 +14,10 @@ public partial class MainWindow
         var path = tile.FullPath;
         if (!File.Exists(path) && !Directory.Exists(path))
         { MessageBox.Show(this, "项目已不存在或路径不可用，可刷新或移出引用。", "无法删除"); return; }
-        if (MessageBox.Show(this, $"删除真实项目？\n\n{path}\n\n将请求Windows移入回收站；不能回收时请在系统提示中取消。\n若只想从卡片移除，请取消并使用“移出卡片”。", "删除文件", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
         deletingItem = true;
         try
         {
+            if (new DeleteConfirmation(this, path).ShowDialog() != true) return;
             // Shell dialogs preserve Windows' recycle/error/cancel behavior. Never
             // retry using File.Delete or recursively delete on a failed recycle.
             if (Directory.Exists(path)) FileSystem.DeleteDirectory(path, UIOption.AllDialogs, RecycleOption.SendToRecycleBin, UICancelOption.ThrowException);
