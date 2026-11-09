@@ -111,7 +111,9 @@ public partial class MainWindow
         try
         {
             var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Select(x => new FileTile(x)).ToArray());
-            if (closing || version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References, StringComparer.OrdinalIgnoreCase)) return;
+            if (closing) return;
+            if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References, StringComparer.OrdinalIgnoreCase))
+            { ScheduleFileSync(); return; }
             // Retain the user's custom order and avoid rebuilding unchanged controls.
             var byPath = updated.ToDictionary(x => x.FullPath, StringComparer.OrdinalIgnoreCase);
             var existing = tiles.Select(x => x.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
