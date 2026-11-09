@@ -8,6 +8,7 @@ namespace DeskIsle;
 
 public partial class MainWindow
 {
+    private Window? newItemDialog;
     private NewItemKind newItemKind;
     private string newItemDirectory = "";
     private bool creatingItem;
@@ -43,6 +44,27 @@ public partial class MainWindow
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         { if (version == newItemVersion) NewItemError.Text = "无法读取保存目录，请更换位置。"; }
         finally { if (version == newItemVersion && !closing) SetNewItemBusy(false); }
+        if (closing || version != newItemVersion || NewItemPanel.Visibility != Visibility.Visible) return;
+        if (NewItemPanel.Parent is Panel parent) parent.Children.Remove(NewItemPanel);
+        if (newItemDialog != null) newItemDialog.Content = null;
+        newItemDialog = new Window
+        {
+            Owner = this, Title = NewItemHeading.Text, Width = 400, Height = 360,
+            MaxWidth = SystemParameters.WorkArea.Width, MaxHeight = SystemParameters.WorkArea.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None,
+            AllowsTransparency = true, Background = System.Windows.Media.Brushes.Transparent,
+            Foreground = Foreground, ShowInTaskbar = false, Content = NewItemPanel
+        };
+        newItemDialog.ContentRendered += (_, _) => { NewItemName.Focus(); NewItemName.Select(0, Math.Max(0, NewItemName.Text.Length - NewItemService.Extension(newItemKind).Length)); };
+        newItemDialog.Closing += (_, args) =>
+        {
+            if (creatingItem) { args.Cancel = true; return; }
+            NewItemPanel.Visibility = Visibility.Collapsed;
+            Files.IsHitTestVisible = true;
+        };
+        newItemDialog.ShowDialog();
+
     }
     private void SetNewItemBusy(bool busy)
     {
@@ -56,7 +78,7 @@ public partial class MainWindow
     {
         if (creatingItem || newItemInFolder) return;
         var picker = new OpenFolderDialog { Title = "选择新建文件保存位置" };
-        if (picker.ShowDialog(this) == true)
+        if (picker.ShowDialog(newItemDialog ?? this) == true)
         {
             newItemDirectory = picker.FolderName;
             NewItemLocation.Text = newItemDirectory;
@@ -69,6 +91,7 @@ public partial class MainWindow
         ++newItemVersion;
         NewItemPanel.Visibility = Visibility.Collapsed;
         Files.IsHitTestVisible = true;
+        newItemDialog?.Close();
     }
     private void NewItemKeyDown(object sender, KeyEventArgs e)
     {
@@ -103,6 +126,7 @@ public partial class MainWindow
         SetNewItemBusy(false);
         NewItemPanel.Visibility = Visibility.Collapsed;
         Files.IsHitTestVisible = true;
+        newItemDialog?.Close();
         if (closing) return;
         if (newItemInFolder && directory != null) await LoadFolder(); else await LoadReferences();
         SaveCard();
