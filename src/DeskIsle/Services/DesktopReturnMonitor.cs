@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Threading;
-using System.Windows.Media;
 namespace DeskIsle.Services;
 
 /// <summary>One out-of-context WinEvent subscription for all cards; no Explorer injection.</summary>
@@ -14,8 +13,6 @@ public sealed class DesktopReturnMonitor : IDisposable
     private readonly DispatcherTimer settle;
     private bool queued;
     private int retries;
-    private bool rendered;
-    private bool watchingFrame;
     private bool disposed;
     public bool Available => hooks.Count >= 2;
     public DesktopReturnMonitor(Dispatcher dispatcher, Action recover)
@@ -23,13 +20,15 @@ public sealed class DesktopReturnMonitor : IDisposable
         this.dispatcher = dispatcher;
         this.recover = recover;
         callback = OnEvent;
-        settle = new DispatcherTimer(DispatcherPriority.Render, dispatcher) { Interval = TimeSpan.FromMilliseconds(16) };
+        // Run below WPF rendering; retries must not compete with presentation.
+        settle = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(100) };
         settle.Tick += (_, _) =>
         {
             if (disposed) { StopRecovery(); return; }
             recover();
             RecoveryTrace.Mark("retry");
-            if (++retries >= 8 || rendered) StopRecovery();
+            if (++retries >= 2) StopRecovery();
+            else settle.Interval = TimeSpan.FromMilliseconds(250);
         };
         AddHook(0x0003, 0x0003); // foreground changed, including a foreground application closing
         AddHook(0x0017, 0x0017); // minimize ended
@@ -46,33 +45,31 @@ public sealed class DesktopReturnMonitor : IDisposable
         if (disposed) return;
         if (eventId == 0x8004 && (objectId != 0 || childId != 0 || !IsShellDesktop(hwnd))) return;
         RecoveryTrace.Mark("event");
+        // Shell reorder bursts are produced by our own Z-order repair as well.
+        if (eventId == 0x8004 && settle.IsEnabled) return;
         // Keep native callback short and coalesce the transition burst on the WPF dispatcher.
         if (queued || dispatcher.HasShutdownStarted) return;
         queued = true;
-        dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+        dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             queued = false;
             if (disposed) return;
             RecoveryTrace.Mark("dispatch");
             recover();
             RecoveryTrace.Mark("recover");
-            settle.Stop();
-            retries = 0;
-            rendered = false;
-            if (!watchingFrame) { CompositionTarget.Rendering += OnFrame; watchingFrame = true; }
-            settle.Start(); // only during a transition; stop after a frame plus one retry, or 8 ticks
+            // Keep the original bounded schedule during event bursts. A WPF frame
+            // is not proof that Explorer/DWM has finished the desktop transition.
+            if (!settle.IsEnabled)
+            {
+                retries = 0;
+                settle.Interval = TimeSpan.FromMilliseconds(100);
+                settle.Start();
+            }
         }));
-    }
-    private void OnFrame(object? sender, EventArgs e)
-    {
-        rendered = true;
-        RecoveryTrace.Mark("wpf-frame");
-        if (watchingFrame) { CompositionTarget.Rendering -= OnFrame; watchingFrame = false; }
     }
     private void StopRecovery()
     {
         settle.Stop();
-        if (watchingFrame) { CompositionTarget.Rendering -= OnFrame; watchingFrame = false; }
         RecoveryTrace.FlushLater(dispatcher);
     }
     public static nint ForegroundDesktop()
