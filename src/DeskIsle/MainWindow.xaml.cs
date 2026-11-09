@@ -60,7 +60,8 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
-        fileSync.Tick += SyncFiles;
+        fileSync.Tick += (_, _) => { RebuildFileWatchers(); SyncFiles(null, EventArgs.Empty); };
+        eventSync.Tick += (_, _) => { eventSync.Stop(); eventSync.Interval = TimeSpan.FromMilliseconds(40); SyncFiles(null, EventArgs.Empty); };
         Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { SetDesktopMode(true); monitor.Start(); } };
         Closing += (_, e) => { if (HasPendingCreation) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
@@ -74,7 +75,7 @@ public partial class MainWindow : Window
             desktopRequested = false;
             UpdateMode("桌面连接中断，已切换为浮动模式；可手动重试。");
         };
-        Closed += (_, _) => { fileSync.Stop(); monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
+        Closed += (_, _) => { StopFileSync(); monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
     private void RenameClick(object sender, RoutedEventArgs e)
@@ -132,6 +133,7 @@ public partial class MainWindow : Window
         loading?.Cancel();
         var version = ++viewVersion;
         directory = null;
+        RebuildFileWatchers();
         TitleText.ToolTip = null;
         TitleText.Text = state.Title;
         var paths = state.References.ToArray();
@@ -240,6 +242,7 @@ public partial class MainWindow : Window
     private async Task LoadFolder()
     {
         if (directory == null) return;
+        RebuildFileWatchers();
         var version = ++viewVersion;
         loading?.Cancel();
         var request = new CancellationTokenSource();
