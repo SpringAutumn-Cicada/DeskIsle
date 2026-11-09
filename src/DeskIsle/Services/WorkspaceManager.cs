@@ -32,7 +32,7 @@ public sealed class WorkspaceManager : IDisposable
     {
         if (Exiting) return;
         var desktop = DesktopReturnMonitor.ForegroundDesktop();
-        if (desktop == 0) return; // A regular application still owns the foreground; leave it undisturbed.
+        // If another application owns the foreground, cards only refresh their existing surfaces.
         foreach (var window in windows.Values.ToArray()) window.RecoverOnDesktop(desktop);
     }
     private void Open(CardState card)
