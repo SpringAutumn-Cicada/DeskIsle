@@ -10,6 +10,7 @@ public sealed class WorkspaceManager : IDisposable
     public DesktopIcons DesktopIcons { get; } = new();
     public string? Warning { get; private set; }
     public bool Exiting { get; private set; }
+    private DesktopReturnMonitor? desktopReturn;
     public WorkspaceManager()
     {
         state = store.Load();
@@ -24,7 +25,15 @@ public sealed class WorkspaceManager : IDisposable
             try { if (!DesktopIcons.Restore()) Warning = "上次桌面图标状态未能恢复，请使用菜单恢复入口。"; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
         }
+        desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
         foreach (var card in state.Cards.ToArray()) Open(card);
+    }
+    private void RecoverDesktopCards()
+    {
+        if (Exiting) return;
+        var desktop = DesktopReturnMonitor.ForegroundDesktop();
+        if (desktop == 0) return; // A regular application still owns the foreground; leave it undisturbed.
+        foreach (var window in windows.Values.ToArray()) window.RecoverOnDesktop(desktop);
     }
     private void Open(CardState card)
     {
@@ -72,11 +81,16 @@ public sealed class WorkspaceManager : IDisposable
     {
         if (Exiting) return;
         Exiting = true;
+        desktopReturn?.Dispose();
         foreach (var window in windows.Values.ToArray()) window.Close();
         try { Save(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { MessageBox.Show("保存布局失败，旧配置保留。", "DeskIsle"); }
         DesktopIcons.Dispose();
         Application.Current.Shutdown();
     }
-    public void Dispose() => DesktopIcons.Dispose();
+    public void Dispose()
+    {
+        desktopReturn?.Dispose();
+        DesktopIcons.Dispose();
+    }
 }

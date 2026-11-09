@@ -64,6 +64,8 @@ public partial class MainWindow : Window
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
+            var desktop = DesktopReturnMonitor.ForegroundDesktop();
+            if (desktop != 0) RecoverOnDesktop(desktop);
             if (!desktopRequested || host.IsAlive) return;
             host.Detach();
             if (++recoveryAttempts <= 3 && host.TryAttach(this)) return;
@@ -274,6 +276,17 @@ public partial class MainWindow : Window
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         { MessageBox.Show(this, "无法打开此项目，请检查路径和默认程序。", "DeskIsle"); }
+    }
+    internal void RecoverOnDesktop(nint desktop)
+    {
+        if (closing || !IsLoaded) return;
+        var attached = host.Attached;
+        host.RecoverOnDesktop(this, desktop);
+        if (attached && !host.Attached)
+        {
+            desktopRequested = false;
+            UpdateMode("桌面宿主暂不可用，已恢复为浮动模式。");
+        }
     }
     private void ModeClick(object sender, RoutedEventArgs e) => SetDesktopMode(!host.Attached);
     private void SetDesktopMode(bool enabled)

@@ -11,7 +11,7 @@ public sealed class DesktopHost
     private nint originalStyle;
     private nint handle;
     public bool Attached => parent != 0;
-    public bool IsAlive => !Attached || IsWindow(parent);
+    public bool IsAlive => !Attached || IsWindow(parent) && GetParent(handle) == parent;
 
     public bool TryAttach(Window window)
     {
@@ -61,6 +61,29 @@ public sealed class DesktopHost
         SetWindowPos(handle, 0, point.X, point.Y, 0, 0, 0x0015);
     }
 
+    public void RecoverOnDesktop(Window window, nint desktop)
+    {
+        // Never recreate closed windows, activate cards, or show cards on a different virtual desktop.
+        if (desktop == 0 || handle == 0 || !IsWindow(handle) || window.Visibility != Visibility.Visible) return;
+        if (DwmGetWindowAttribute(handle, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return;
+        if (Attached && (!IsAlive || !IsWindowVisible(parent))) Detach();
+        if (IsIconic(handle) || !IsWindowVisible(handle)) ShowWindow(handle, 4); // SW_SHOWNOACTIVATE
+        if (Attached)
+        {
+            SetWindowPos(handle, 0, 0, 0, 0, 0, 0x0013); // child only; NOMOVE | NOSIZE | NOACTIVATE
+        }
+        else
+        {
+            // Insert immediately above Explorer's foreground desktop, below ordinary applications.
+            // HWND_TOPMOST and foreground activation are intentionally never used.
+            var previous = GetWindow(desktop, 3); // GW_HWNDPREV
+            if (previous != 0 && (GetWindowLongPtr(previous, -20).ToInt64() & 0x8) != 0) previous = 0;
+            if (previous != handle) SetWindowPos(handle, previous, 0, 0, 0, 0, 0x0213);
+        }
+        window.InvalidateVisual();
+        RedrawWindow(handle, 0, 0, 0x0081); // invalidate this window and its children, asynchronously
+    }
+
     public void SetHandle(Window window) => handle = new WindowInteropHelper(window).EnsureHandle();
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
@@ -78,4 +101,10 @@ public sealed class DesktopHost
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] private static extern bool IsWindow(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
+    [DllImport("user32.dll")] private static extern nint GetWindow(nint hwnd, uint command);
+    [DllImport("user32.dll")] private static extern bool RedrawWindow(nint hwnd, nint rect, nint region, uint flags);
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint hwnd, uint attribute, out int value, int size);
 }
