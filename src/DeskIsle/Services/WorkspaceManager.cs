@@ -11,6 +11,24 @@ public sealed class WorkspaceManager : IDisposable
     public string? Warning { get; private set; }
     public bool Exiting { get; private set; }
     private DesktopReturnMonitor? desktopReturn;
+    private readonly System.Windows.Threading.DispatcherTimer startupHide = new() { Interval = TimeSpan.FromSeconds(1) };
+    private int startupHideAttempts;
+    private bool startupHidePending;
+    public void CancelStartupHide() { startupHidePending = false; startupHide.Stop(); }
+    private void TryStartupHide()
+    {
+        if (!startupHidePending || Exiting) return;
+        try
+        {
+            if (DesktopIcons.Hide()) { CancelStartupHide(); return; }
+            if (++startupHideAttempts < 30) { startupHide.Start(); return; }
+            Warning = "启动时未找到桌面图标，请使用卡片菜单手动隐藏。";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { Warning = "无法保存桌面图标恢复标记，未自动隐藏；请使用卡片菜单重试。"; }
+        CancelStartupHide();
+        foreach (var window in windows.Values) window.ShowStartupWarning(Warning!);
+    }
     public bool DesktopIntegration { get; }
     public WorkspaceManager(string? dataDirectory = null, bool desktopIntegration = true)
     {
@@ -30,6 +48,12 @@ public sealed class WorkspaceManager : IDisposable
         }
         if (DesktopIntegration) desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
         foreach (var card in state.Cards.ToArray()) Open(card);
+        if (DesktopIntegration)
+        {
+            startupHidePending = true;
+            startupHide.Tick += (_, _) => TryStartupHide();
+            TryStartupHide();
+        }
     }
     private void RecoverDesktopCards()
     {
@@ -86,6 +110,7 @@ public sealed class WorkspaceManager : IDisposable
         if (Exiting) return;
         if (windows.Values.Any(w => w.HasPendingCreation)) { MessageBox.Show("正在处理文件，请完成后再退出。", "DeskIsle"); return; }
         Exiting = true;
+        CancelStartupHide();
         desktopReturn?.Dispose();
         foreach (var window in windows.Values.ToArray()) window.Close();
         try { Save(); }
@@ -95,6 +120,7 @@ public sealed class WorkspaceManager : IDisposable
     }
     public void Dispose()
     {
+        CancelStartupHide();
         desktopReturn?.Dispose();
         if (DesktopIntegration) DesktopIcons.Dispose();
     }
