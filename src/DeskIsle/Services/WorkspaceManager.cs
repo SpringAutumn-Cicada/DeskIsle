@@ -67,7 +67,7 @@ public sealed class WorkspaceManager : IDisposable
     }
     public void Remove(MainWindow window, CardState card)
     {
-        if (window.HasPendingCreation) { MessageBox.Show(window, "正在创建项目，请完成后再移除卡片。", "DeskIsle"); return; }
+        if (window.HasPendingCreation) { MessageBox.Show(window, "正在处理文件，请完成后再移除卡片。", "DeskIsle"); return; }
         if (store.ReadOnly) { MessageBox.Show(window, "配置处于保护模式，不能移除卡片。", "DeskIsle"); return; }
         if (MessageBox.Show(window, "移除此卡片及其收藏记录？真实文件不会删除。移除最后一张卡片后程序退出。", "移除卡片", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         var index = state.Cards.IndexOf(card);
@@ -84,7 +84,7 @@ public sealed class WorkspaceManager : IDisposable
     public void Exit()
     {
         if (Exiting) return;
-        if (windows.Values.Any(w => w.HasPendingCreation)) { MessageBox.Show("正在创建项目，请完成后再退出。", "DeskIsle"); return; }
+        if (windows.Values.Any(w => w.HasPendingCreation)) { MessageBox.Show("正在处理文件，请完成后再退出。", "DeskIsle"); return; }
         Exiting = true;
         desktopReturn?.Dispose();
         foreach (var window in windows.Values.ToArray()) window.Close();
