@@ -1,3 +1,5 @@
+using System.IO;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -42,6 +44,12 @@ public partial class MainWindow
         var current = e.GetPosition(Files);
         if (Math.Abs(current.X - tilePressPoint.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(current.Y - tilePressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         e.Handled = true;
+        if (!File.Exists(tile.FullPath) && !Directory.Exists(tile.FullPath))
+        {
+            pressedTile = null;
+            Status.Text = "路径不可用，无法拖出文件。";
+            return;
+        }
         pressedTile = null;
         reorderSource = tile;
         IsReordering = true;
@@ -51,7 +59,10 @@ public partial class MainWindow
         {
             var data = new DataObject();
             data.SetData(ReorderFormat, new ReorderPayload(state.Id, tile.FullPath));
-            DragDrop.DoDragDrop(button, data, DragDropEffects.Move);
+            // Standard CF_HDROP lets browsers and native upload controls read the
+            // original file. Copy-only prevents Explorer targets from moving it.
+            data.SetFileDropList(new StringCollection { tile.FullPath });
+            DragDrop.DoDragDrop(button, data, DragDropEffects.Copy);
         }
         finally
         {
@@ -72,7 +83,7 @@ public partial class MainWindow
     private void ReorderOver(DragEventArgs e)
     {
         e.Handled = true;
-        e.Effects = AcceptReorder(e) && (e.AllowedEffects & DragDropEffects.Move) != 0 ? DragDropEffects.Move : DragDropEffects.None;
+        e.Effects = AcceptReorder(e) && (e.AllowedEffects & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
         if (e.Effects == DragDropEffects.None) { HideReorderPreview(); return; }
         reorderPointer = e.GetPosition(Files);
         UpdateReorderPreview();
@@ -206,7 +217,7 @@ public partial class MainWindow
             FindScroll(Files)?.ScrollToVerticalOffset(offset);
             SaveCard();
         }
-        e.Effects = DragDropEffects.Move;
+        e.Effects = DragDropEffects.Copy;
     }
     private void ClearReorderPreview()
     {
