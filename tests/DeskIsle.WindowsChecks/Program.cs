@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,6 +15,9 @@ using DeskIsle.Services;
 
 internal static class Program
 {
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
+    [DllImport("user32.dll")] private static extern nint GetWindow(nint window,uint command);
     private static readonly List<object> results=[];
     private const BindingFlags Private=BindingFlags.NonPublic|BindingFlags.Instance;
     private static object? Invoke(object o,string name,params object[] args)=>o.GetType().GetMethod(name,Private)!.Invoke(o,args);
@@ -41,9 +46,12 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        var originalForeground=GetForegroundWindow();
         var root=Path.Combine(Path.GetTempPath(),"DeskIsle-wpf-checks-"+Guid.NewGuid());Directory.CreateDirectory(root);
         var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
         app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("pack://application:,,,/DeskIsle;component/Themes/Dark.xaml")});
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
         WorkspaceManager? manager=null;var failures=0;
         void Check(string name,Action action)
         {
@@ -70,20 +78,20 @@ internal static class Program
             });
             Check("重命名Enter保存",()=>
             {
-                Invoke(window,"RenameClick",window,new RoutedEventArgs());var editor=(TextBox)window.FindName("TitleEditor");editor.Text="已重命名";
+                Invoke(window,"RenameClick",window,new RoutedEventArgs(Button.ClickEvent));var editor=(TextBox)window.FindName("TitleEditor");editor.Text="已重命名";
                 editor.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(window)!,0,Key.Enter){RoutedEvent=Keyboard.KeyDownEvent});
                 Assert(editor.Visibility==Visibility.Collapsed&&cards.Cards[0].Title=="第一张","Editing closed and fixture input unchanged");
                 Assert(new WorkspaceStore(root).Load().Cards[0].Title=="已重命名","Title was not persisted");
             });
             Check("重命名Esc取消和空白保留原名",()=>
             {
-                Invoke(window,"RenameClick",window,new RoutedEventArgs());var editor=(TextBox)window.FindName("TitleEditor");editor.Text="取消";Invoke(window,"FinishRename",false);
-                Invoke(window,"RenameClick",window,new RoutedEventArgs());editor.Text="   ";Invoke(window,"FinishRename",true);
+                Invoke(window,"RenameClick",window,new RoutedEventArgs(Button.ClickEvent));var editor=(TextBox)window.FindName("TitleEditor");editor.Text="取消";Invoke(window,"FinishRename",false);
+                Invoke(window,"RenameClick",window,new RoutedEventArgs(Button.ClickEvent));editor.Text="   ";Invoke(window,"FinishRename",true);
                 Assert(Field<CardState>(window,"state").Title=="已重命名","Title changed unexpectedly");
             });
             Check("点击卡片内部空白退出重命名",()=>
             {
-                Invoke(window,"RenameClick",window,new RoutedEventArgs());var editor=(TextBox)window.FindName("TitleEditor");editor.Text="内部点击保存";
+                Invoke(window,"RenameClick",window,new RoutedEventArgs(Button.ClickEvent));var editor=(TextBox)window.FindName("TitleEditor");editor.Text="内部点击保存";
                 window.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=Mouse.PreviewMouseDownEvent,Source=list});
                 Assert(editor.Visibility==Visibility.Collapsed&&Field<CardState>(window,"state").Title=="内部点击保存","Internal click did not commit");
             });
@@ -107,12 +115,32 @@ internal static class Program
             Check("多卡片独立命名与透明度保存",()=>
             {
                 manager.Add(window);var windows=Field<Dictionary<Guid,MainWindow>>(manager,"windows").Values.ToArray();Assert(windows.Length==2,"Second card missing");var second=windows.Single(w=>w!=window);second.Left=-10000;second.Top=-10000;
-                Invoke(second,"RenameClick",second,new RoutedEventArgs());((TextBox)second.FindName("TitleEditor")).Text="第二张独立名称";Invoke(second,"FinishRename",true);((Slider)second.FindName("OpacitySlider")).Value=.55;Invoke(second,"SaveCard");
+                Invoke(second,"RenameClick",second,new RoutedEventArgs(Button.ClickEvent));((TextBox)second.FindName("TitleEditor")).Text="第二张独立名称";Invoke(second,"FinishRename",true);((Slider)second.FindName("OpacitySlider")).Value=.55;Invoke(second,"SaveCard");
                 var saved=new WorkspaceStore(root).Load();Assert(saved.Cards[0].Title=="内部点击保存"&&saved.Cards[1].Title=="第二张独立名称"&&Math.Abs(saved.Cards[1].BackgroundOpacity-.55)<.001,"State leaked between cards");
+            });
+            Check("普通应用前台时重绘不抢焦点或改变层级",()=>
+            {
+                var host=Field<DesktopHost>(window,"host");var handle=new WindowInteropHelper(window).Handle;var foreground=GetForegroundWindow();var previous=GetWindow(handle,3);
+                host.RecoverOnDesktop(window,0,true);window.UpdateLayout();
+                Assert(GetForegroundWindow()==foreground&&GetWindow(handle,3)==previous,"Redraw affected focus or Z-order");
+            });
+            Check("真实WinEvent挂钩可注册且合并后释放",()=>
+            {
+                var count=0;var monitor=new DesktopReturnMonitor(Dispatcher.CurrentDispatcher,()=>count++);
+                try
+                {
+                    Assert(monitor.Available,"Native hook registration failed");
+                    Invoke(monitor,"OnEvent",(nint)0,(uint)3,(nint)0,0,0,(uint)0,(uint)0);
+                    PumpUntil(()=>count>=2);monitor.Dispose();var stopped=count;
+                    Invoke(monitor,"OnEvent",(nint)0,(uint)3,(nint)0,0,0,(uint)0,(uint)0);
+                    var elapsed=Stopwatch.StartNew();PumpUntil(()=>elapsed.ElapsedMilliseconds>400);
+                    Assert(count==stopped&&!monitor.Available,"Callback continued after disposal");
+                }
+                finally {monitor.Dispose();}
             });
             Check("移出引用不改变临时文件",()=>
             {
-                var tile=Field<IReadOnlyList<FileTile>>(window,"tiles")[0];var before=File.ReadAllBytes(tile.FullPath);var sender=new Button{DataContext=tile};Invoke(window,"RemoveReference",sender,new RoutedEventArgs());PumpUntil(()=>Field<IReadOnlyList<FileTile>>(window,"tiles").Count==999);
+                var tile=Field<IReadOnlyList<FileTile>>(window,"tiles")[0];var before=File.ReadAllBytes(tile.FullPath);var sender=new Button{DataContext=tile};Invoke(window,"RemoveReference",sender,new RoutedEventArgs(Button.ClickEvent));PumpUntil(()=>Field<IReadOnlyList<FileTile>>(window,"tiles").Count==999);
                 Assert(before.SequenceEqual(File.ReadAllBytes(tile.FullPath)),"Real file changed");Assert(!new WorkspaceStore(root).Load().Cards[0].References.Contains(tile.FullPath),"Reference not removed");
             });
         }
@@ -126,6 +154,7 @@ internal static class Program
                 foreach(var w in Field<Dictionary<Guid,MainWindow>>(manager,"windows").Values.ToArray())w.Close();manager.Dispose();
             }
             var path=args.Length>0?args[0]:Path.Combine(root,"results.json");Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);File.WriteAllText(path,JsonSerializer.Serialize(results,new JsonSerializerOptions{WriteIndented=true}));
+            if(GetForegroundWindow()!=originalForeground)SetForegroundWindow(originalForeground);
             app.Shutdown();
             Directory.Delete(root,true);
         }
