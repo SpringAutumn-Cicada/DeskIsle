@@ -6,6 +6,7 @@ public static class FolderReader
 {
     public static IReadOnlyList<FolderEntry> Read(string path, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var entries = new List<FolderEntry>();
         foreach (var item in new DirectoryInfo(path).EnumerateFileSystemInfos())
         {
