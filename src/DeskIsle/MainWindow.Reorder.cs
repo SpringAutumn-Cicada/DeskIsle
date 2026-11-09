@@ -191,10 +191,8 @@ public partial class MainWindow
         var items = tiles.ToList();
         var index = items.FindIndex(x => x.FullPath.Equals(payload.Path, StringComparison.OrdinalIgnoreCase));
         var target = insertionIndex;
-        var moved = items[index];
-        items.RemoveAt(index);
+        items = DeskIsle.Core.ReferenceOrder.Move(items, index, target);
         if (index < target) target--;
-        items.Insert(Math.Clamp(target, 0, items.Count), moved);
         ClearReorderPreview();
         if (target != index)
         {

@@ -11,7 +11,13 @@ public sealed class WorkspaceState
 /// <summary>One atomic workspace document. The legacy single-card document is never overwritten.</summary>
 public sealed class WorkspaceStore
 {
-    private readonly string path = Path.Combine(CardStore.DataDirectory, "cards.json");
+    private readonly string dataDirectory;
+    private readonly string path;
+    public WorkspaceStore(string? dataDirectory = null)
+    {
+        this.dataDirectory = dataDirectory ?? CardStore.DataDirectory;
+        path = Path.Combine(this.dataDirectory, "cards.json");
+    }
     public string? Warning { get; private set; }
     public bool ReadOnly { get; private set; }
     public WorkspaceState Load()
@@ -42,7 +48,7 @@ public sealed class WorkspaceStore
             Warning = "配置和备份都无法读取，本次不覆盖原文件。";
             return new() { Cards = [new()] };
         }
-        var legacy = new CardStore();
+        var legacy = new CardStore(dataDirectory);
         var card = legacy.Load();
         ReadOnly = legacy.ReadOnly;
         Warning = legacy.Warning;
@@ -72,7 +78,7 @@ public sealed class WorkspaceStore
     {
         if (ReadOnly) return;
         Validate(state);
-        Directory.CreateDirectory(CardStore.DataDirectory);
+        Directory.CreateDirectory(dataDirectory);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(state));
         if (File.Exists(path))

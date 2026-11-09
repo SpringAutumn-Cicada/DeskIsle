@@ -19,7 +19,13 @@ public sealed class CardState
 public sealed class CardStore
 {
     public static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeskIsle");
-    private readonly string path = Path.Combine(DataDirectory, "card.json");
+    private readonly string dataDirectory;
+    private readonly string path;
+    public CardStore(string? dataDirectory = null)
+    {
+        this.dataDirectory = dataDirectory ?? DataDirectory;
+        path = Path.Combine(this.dataDirectory, "card.json");
+    }
     public string? Warning { get; private set; }
     public bool ReadOnly { get; private set; }
     public CardState Load()
@@ -44,7 +50,7 @@ public sealed class CardStore
     public void Save(CardState state)
     {
         if (ReadOnly) return;
-        Directory.CreateDirectory(DataDirectory);
+        Directory.CreateDirectory(dataDirectory);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(state));
         if (File.Exists(path))

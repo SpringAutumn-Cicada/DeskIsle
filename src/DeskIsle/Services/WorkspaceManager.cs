@@ -4,15 +4,18 @@ namespace DeskIsle.Services;
 
 public sealed class WorkspaceManager : IDisposable
 {
-    private readonly WorkspaceStore store = new();
+    private readonly WorkspaceStore store;
     private readonly WorkspaceState state;
     private readonly Dictionary<Guid, MainWindow> windows = [];
     public DesktopIcons DesktopIcons { get; } = new();
     public string? Warning { get; private set; }
     public bool Exiting { get; private set; }
     private DesktopReturnMonitor? desktopReturn;
-    public WorkspaceManager()
+    public bool DesktopIntegration { get; }
+    public WorkspaceManager(string? dataDirectory = null, bool desktopIntegration = true)
     {
+        DesktopIntegration = desktopIntegration;
+        store = new WorkspaceStore(dataDirectory);
         state = store.Load();
         Warning = store.Warning;
         if (state.Cards.Count == 0) state.Cards.Add(new());
@@ -20,12 +23,12 @@ public sealed class WorkspaceManager : IDisposable
     public void Start()
     {
         // Recovery is application-wide: creating a second card must never show hidden icons.
-        if (DesktopIcons.RecoveryPending)
+        if (DesktopIntegration && DesktopIcons.RecoveryPending)
         {
             try { if (!DesktopIcons.Restore()) Warning = "上次桌面图标状态未能恢复，请使用菜单恢复入口。"; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
         }
-        desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
+        if (DesktopIntegration) desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
         foreach (var card in state.Cards.ToArray()) Open(card);
     }
     private void RecoverDesktopCards()
@@ -85,12 +88,12 @@ public sealed class WorkspaceManager : IDisposable
         foreach (var window in windows.Values.ToArray()) window.Close();
         try { Save(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { MessageBox.Show("保存布局失败，旧配置保留。", "DeskIsle"); }
-        DesktopIcons.Dispose();
+        if (DesktopIntegration) DesktopIcons.Dispose();
         Application.Current.Shutdown();
     }
     public void Dispose()
     {
         desktopReturn?.Dispose();
-        DesktopIcons.Dispose();
+        if (DesktopIntegration) DesktopIcons.Dispose();
     }
 }
