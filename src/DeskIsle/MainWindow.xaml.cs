@@ -60,7 +60,8 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
-        Loaded += async (_, _) => { await LoadReferences(); if (closing) return; UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { SetDesktopMode(true); monitor.Start(); } };
+        fileSync.Tick += SyncFiles;
+        Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { SetDesktopMode(true); monitor.Start(); } };
         Closing += (_, e) => { if (HasPendingCreation) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
         {
@@ -73,7 +74,7 @@ public partial class MainWindow : Window
             desktopRequested = false;
             UpdateMode("桌面连接中断，已切换为浮动模式；可手动重试。");
         };
-        Closed += (_, _) => { monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
+        Closed += (_, _) => { fileSync.Stop(); monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
     }
 
     private void RenameClick(object sender, RoutedEventArgs e)
@@ -134,7 +135,7 @@ public partial class MainWindow : Window
         TitleText.ToolTip = null;
         TitleText.Text = state.Title;
         var paths = state.References.ToArray();
-        var entries = await Task.Run(() => paths.Select(path => new FileTile(new FolderEntry(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path, path, Directory.Exists(path))) { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "路径失效 · 可右键重新定位" }).ToArray());
+        var entries = await Task.Run(() => ReadReferences(paths));
         if (directory != null || version != viewVersion || closing) return;
         if (closing) return;
         tiles = entries;
