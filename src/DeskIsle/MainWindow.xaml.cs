@@ -65,7 +65,7 @@ public partial class MainWindow : Window
         {
             UpdateDesktopButton();
             var desktop = DesktopReturnMonitor.ForegroundDesktop();
-            if (desktop != 0) RecoverOnDesktop(desktop);
+            if (desktop != 0) RecoverOnDesktop(desktop, false);
             if (!desktopRequested || host.IsAlive) return;
             host.Detach();
             if (++recoveryAttempts <= 3 && host.TryAttach(this)) return;
@@ -277,11 +277,11 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         { MessageBox.Show(this, "无法打开此项目，请检查路径和默认程序。", "DeskIsle"); }
     }
-    internal void RecoverOnDesktop(nint desktop)
+    internal void RecoverOnDesktop(nint desktop, bool repaint = true)
     {
         if (closing || !IsLoaded) return;
         var attached = host.Attached;
-        host.RecoverOnDesktop(this, desktop);
+        host.RecoverOnDesktop(this, desktop, repaint);
         if (attached && !host.Attached)
         {
             desktopRequested = false;

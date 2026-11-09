@@ -61,27 +61,38 @@ public sealed class DesktopHost
         SetWindowPos(handle, 0, point.X, point.Y, 0, 0, 0x0015);
     }
 
-    public void RecoverOnDesktop(Window window, nint desktop)
+    public void RecoverOnDesktop(Window window, nint desktop, bool repaint)
     {
         // Never recreate closed windows, activate cards, or show cards on a different virtual desktop.
         if (desktop == 0 || handle == 0 || !IsWindow(handle) || window.Visibility != Visibility.Visible) return;
         if (DwmGetWindowAttribute(handle, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return;
-        if (Attached && (!IsAlive || !IsWindowVisible(parent))) Detach();
-        if (IsIconic(handle) || !IsWindowVisible(handle)) ShowWindow(handle, 4); // SW_SHOWNOACTIVATE
+        var changed = false;
+        if (Attached && (!IsAlive || !IsWindowVisible(parent))) { Detach(); changed = true; }
+        if (IsIconic(handle) || !IsWindowVisible(handle)) { ShowWindow(handle, 4); changed = true; } // SW_SHOWNOACTIVATE
         if (Attached)
         {
-            SetWindowPos(handle, 0, 0, 0, 0, 0, 0x0013); // child only; NOMOVE | NOSIZE | NOACTIVATE
+            if (repaint || changed) SetWindowPos(handle, 0, 0, 0, 0, 0, 0x0013); // child only; NOMOVE | NOSIZE | NOACTIVATE
         }
-        else
+        else if (!IsAboveDesktop(desktop))
         {
+            changed = true;
             // Insert immediately above Explorer's foreground desktop, below ordinary applications.
             // HWND_TOPMOST and foreground activation are intentionally never used.
             var previous = GetWindow(desktop, 3); // GW_HWNDPREV
             if (previous != 0 && (GetWindowLongPtr(previous, -20).ToInt64() & 0x8) != 0) previous = 0;
             if (previous != handle) SetWindowPos(handle, previous, 0, 0, 0, 0, 0x0213);
         }
+        if (!repaint && !changed) return; // An idle fallback check must not continuously redraw cards.
         window.InvalidateVisual();
         RedrawWindow(handle, 0, 0, 0x0081); // invalidate this window and its children, asynchronously
+    }
+
+    private bool IsAboveDesktop(nint desktop)
+    {
+        // Compare native Z-order without changing an already-correct floating window.
+        for (var next = GetWindow(handle, 2); next != 0; next = GetWindow(next, 2))
+            if (next == desktop) return true;
+        return false;
     }
 
     public void SetHandle(Window window) => handle = new WindowInteropHelper(window).EnsureHandle();
