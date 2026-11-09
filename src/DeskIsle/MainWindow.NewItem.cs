@@ -16,7 +16,7 @@ public partial class MainWindow
     private int newItemVersion;
     internal bool HasPendingCreation => creatingItem || deletingItem;
 
-    private async void BeginNewItemClick(object sender, RoutedEventArgs e)
+    private void BeginNewItemClick(object sender, RoutedEventArgs e)
     {
         if (creatingItem || deletingItem || sender is not MenuItem { Tag: string tag } || !Enum.TryParse<NewItemKind>(tag, out var kind)) return;
         FinishRename(true);
@@ -31,32 +31,40 @@ public partial class MainWindow
         Files.IsHitTestVisible = false;
         NewItemBrowse.IsEnabled = !newItemInFolder;
         SetNewItemBusy(true);
-        try
-        {
-            var target = newItemDirectory;
-            var name = await Task.Run(() => NewItemService.SuggestedName(target, kind));
-            if (closing || version != newItemVersion) return;
-            SetNewItemBusy(false);
-            NewItemName.Text = name;
-            NewItemName.Focus();
-            NewItemName.Select(0, name.Length - NewItemService.Extension(kind).Length);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        { if (version == newItemVersion) NewItemError.Text = "无法读取保存目录，请更换位置。"; }
-        finally { if (version == newItemVersion && !closing) SetNewItemBusy(false); }
-        if (closing || version != newItemVersion || NewItemPanel.Visibility != Visibility.Visible) return;
+        NewItemName.Text = "正在准备名称…";
         if (NewItemPanel.Parent is Panel parent) parent.Children.Remove(NewItemPanel);
         if (newItemDialog != null) newItemDialog.Content = null;
         newItemDialog = new Window
         {
-            Owner = this, Title = NewItemHeading.Text, Width = 400, Height = 360,
+            Owner = this, Title = NewItemHeading.Text, Width = 420, Height = 280,
             MaxWidth = SystemParameters.WorkArea.Width, MaxHeight = SystemParameters.WorkArea.Height,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
             ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None,
             AllowsTransparency = true, Background = System.Windows.Media.Brushes.Transparent,
             Foreground = Foreground, ShowInTaskbar = false, Content = NewItemPanel
         };
-        newItemDialog.ContentRendered += (_, _) => { NewItemName.Focus(); NewItemName.Select(0, Math.Max(0, NewItemName.Text.Length - NewItemService.Extension(newItemKind).Length)); };
+        var dialog = newItemDialog;
+        var target = newItemDirectory;
+        dialog.ContentRendered += async (_, _) =>
+        {
+            try
+            {
+                var name = await Task.Run(() => NewItemService.SuggestedName(target, kind));
+                if (closing || version != newItemVersion || !dialog.IsVisible) return;
+                NewItemName.Text = name;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                if (version != newItemVersion) return;
+                NewItemName.Text = kind == NewItemKind.Folder ? "新建文件夹" : "新建文档" + NewItemService.Extension(kind);
+                NewItemError.Text = "无法读取保存目录，请更换位置。";
+            }
+            finally { if (version == newItemVersion && !closing) SetNewItemBusy(false); }
+            if (!dialog.IsVisible || closing || version != newItemVersion) return;
+            NewItemName.Focus();
+            NewItemName.Select(0, Math.Max(0, NewItemName.Text.Length - NewItemService.Extension(kind).Length));
+        };
+        TrackDialog(dialog);
         newItemDialog.Closing += (_, args) =>
         {
             if (creatingItem) { args.Cancel = true; return; }

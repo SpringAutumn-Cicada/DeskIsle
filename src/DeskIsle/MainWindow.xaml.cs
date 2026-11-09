@@ -296,6 +296,7 @@ public partial class MainWindow : Window
         if (closing || !IsLoaded) return;
         var attached = host.Attached;
         host.RecoverOnDesktop(this, desktop, repaint);
+        foreach (var pair in dialogHosts.ToArray()) pair.Value.RecoverOnDesktop(pair.Key, desktop, repaint);
         if (attached && !host.Attached)
         {
             desktopRequested = false;

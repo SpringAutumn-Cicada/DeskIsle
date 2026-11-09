@@ -17,7 +17,9 @@ public partial class MainWindow
         deletingItem = true;
         try
         {
-            if (new DeleteConfirmation(this, path).ShowDialog() != true) return;
+            var dialog = new DeleteConfirmation(this, path);
+            TrackDialog(dialog);
+            if (dialog.ShowDialog() != true) return;
             // Shell dialogs preserve Windows' recycle/error/cancel behavior. Never
             // retry using File.Delete or recursively delete on a failed recycle.
             if (Directory.Exists(path)) FileSystem.DeleteDirectory(path, UIOption.AllDialogs, RecycleOption.SendToRecycleBin, UICancelOption.ThrowException);

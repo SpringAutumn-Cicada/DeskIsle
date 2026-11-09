@@ -1,6 +1,6 @@
 <Window x:Class="DeskIsle.DeleteConfirmation"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="删除确认" Width="420" SizeToContent="Height" WindowStartupLocation="CenterOwner"
+ Title="删除确认" Width="420" SizeToContent="Height" WindowStartupLocation="CenterScreen"
  WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
  Foreground="#EDF1F8" ShowInTaskbar="False" UseLayoutRounding="True">
 <Border Background="#222936" BorderBrush="#4A566C" BorderThickness="1" CornerRadius="16" Padding="22">
