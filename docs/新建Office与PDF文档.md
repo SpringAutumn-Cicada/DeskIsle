@@ -5,3 +5,5 @@
 模板是应用源码资源，不含宏、用户文件或个人身份信息。运行时无额外第三方依赖。模板生成工具为scripts/create-document-templates.py，依赖Python文档库，仅在维护模板时使用；临时生成依赖放.tools内，不修改全局配置，不随应用发布。模板资源缺失先报错不创建目标；现有CreateNew拒绝覆盖仍有效。
 
 变更：新建菜单、NewItemService、弹窗标题、嵌入资源和四个模板源码资产、生成脚本及版本说明。未运行自动化或Windows Office/PDF打开验收。待用户用临时目录检查四种创建/打开、同名冲突、取消及文件内容为空白。
+
+交付记录：test分支，功能提交ba054f8。项目SDK10.0.403，通过scripts/publish.ps1完成Release/win-x64自包含发布，ZIP CRC、402条目及必需运行库检查通过。已复制`E:\桌面\DeskIsle-0.5.8-win-x64.zip`，源包和副本SHA256一致：`c9e7dc31d3675f444ff4566a217cf402ac16d8575631bdacf910a5b940b34d76`。未运行测试，未执行Windows Office/WPS/PDF打开验收；构建和完整性通过不代表格式兼容性验收通过。未合并、未推送。
