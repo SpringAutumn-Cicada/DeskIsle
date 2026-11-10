@@ -24,7 +24,7 @@ public partial class MainWindow
         newItemKind = kind;
         newItemInFolder = directory != null;
         newItemDirectory = directory ?? state.CreationDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        NewItemHeading.Text = kind switch { NewItemKind.Folder => "新建文件夹", NewItemKind.Text => "新建文本文档", _ => "新建 Markdown 文档" };
+        NewItemHeading.Text = "新建" + NewItemService.Label(kind);
         NewItemLocation.Text = newItemDirectory;
         NewItemError.Text = "";
         NewItemPanel.Visibility = Visibility.Visible;
@@ -56,7 +56,7 @@ public partial class MainWindow
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 if (version != newItemVersion) return;
-                NewItemName.Text = kind == NewItemKind.Folder ? "新建文件夹" : "新建文档" + NewItemService.Extension(kind);
+                NewItemName.Text = "新建" + NewItemService.Label(kind) + NewItemService.Extension(kind);
                 NewItemError.Text = "无法读取保存目录，请更换位置。";
             }
             finally { if (version == newItemVersion && !closing) SetNewItemBusy(false); }

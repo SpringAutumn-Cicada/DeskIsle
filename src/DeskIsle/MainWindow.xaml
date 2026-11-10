@@ -26,7 +26,7 @@
 <AdornerDecorator>
 <Border x:Name="Surface" Background="#D9242935" BorderBrush="#555E6A80" BorderThickness="1" CornerRadius="16" Padding="14">
 <Border.ContextMenu><ContextMenu>
-<MenuItem Header="新建" Icon="＋"><MenuItem Header="文件夹" Tag="Folder" Click="BeginNewItemClick"/><MenuItem Header="文本文档 (.txt)" Tag="Text" Click="BeginNewItemClick"/><MenuItem Header="Markdown 文档 (.md)" Tag="Markdown" Click="BeginNewItemClick"/></MenuItem>
+<MenuItem Header="新建" Icon="＋"><MenuItem Header="文件夹" Tag="Folder" Click="BeginNewItemClick"/><MenuItem Header="文本文档 (.txt)" Tag="Text" Click="BeginNewItemClick"/><MenuItem Header="Markdown 文档 (.md)" Tag="Markdown" Click="BeginNewItemClick"/><Separator/><MenuItem Header="Word 文档 (.docx)" Tag="Word" Click="BeginNewItemClick"/><MenuItem Header="Excel 工作簿 (.xlsx)" Tag="Excel" Click="BeginNewItemClick"/><MenuItem Header="PDF 文档 (.pdf)" Tag="Pdf" Click="BeginNewItemClick"/><MenuItem Header="PowerPoint 演示文稿 (.pptx)" Tag="PowerPoint" Click="BeginNewItemClick"/></MenuItem>
 <Separator/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><MenuItem Header="添加新卡片" Click="AddCardClick"/>
 </ContextMenu></Border.ContextMenu>
 <Grid>

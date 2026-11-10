@@ -3,14 +3,15 @@ using System.IO;
 using System.Runtime.InteropServices;
 namespace DeskIsle.Services;
 
-public enum NewItemKind { Folder, Text, Markdown }
+public enum NewItemKind { Folder, Text, Markdown, Word, Excel, Pdf, PowerPoint }
 
 public static class NewItemService
 {
-    public static string Extension(NewItemKind kind) => kind switch { NewItemKind.Text => ".txt", NewItemKind.Markdown => ".md", _ => "" };
+    public static string Extension(NewItemKind kind) => kind switch { NewItemKind.Text => ".txt", NewItemKind.Markdown => ".md", NewItemKind.Word => ".docx", NewItemKind.Excel => ".xlsx", NewItemKind.Pdf => ".pdf", NewItemKind.PowerPoint => ".pptx", _ => "" };
+    public static string Label(NewItemKind kind) => kind switch { NewItemKind.Folder => "文件夹", NewItemKind.Text => "文本文档", NewItemKind.Markdown => "Markdown 文档", NewItemKind.Word => "Word 文档", NewItemKind.Excel => "Excel 工作簿", NewItemKind.Pdf => "PDF 文档", NewItemKind.PowerPoint => "PowerPoint 演示文稿", _ => throw new ArgumentOutOfRangeException(nameof(kind)) };
     public static string SuggestedName(string directory, NewItemKind kind)
     {
-        var stem = kind switch { NewItemKind.Folder => "新建文件夹", NewItemKind.Text => "新建文本文档", _ => "新建 Markdown 文档" };
+        var stem = "新建" + Label(kind);
         var extension = Extension(kind);
         for (var index = 1; index < 10000; index++)
         {
@@ -49,7 +50,14 @@ public static class NewItemService
         }
         else
         {
+            // Real format templates are embedded source assets, not empty files
+            // renamed with an Office/PDF extension. No Office installation needed.
+            using var template = kind is NewItemKind.Word or NewItemKind.Excel or NewItemKind.Pdf or NewItemKind.PowerPoint
+                ? typeof(NewItemService).Assembly.GetManifestResourceStream("DeskIsle.Templates.Blank" + Extension(kind))
+                    ?? throw new IOException("内置文档模板不可用。")
+                : null;
             using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            template?.CopyTo(file);
         }
         return path;
     }
