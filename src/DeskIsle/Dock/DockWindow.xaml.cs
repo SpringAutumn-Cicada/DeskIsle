@@ -24,6 +24,7 @@ public partial class DockBar : Window
         internal SplitPair? MinimizedPair;
     }
     private readonly DockController controller;
+    private readonly StartMenuPlacement startMenu;
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AppView> views = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim iconSlots = new(2);
@@ -40,10 +41,11 @@ public partial class DockBar : Window
     private readonly DispatcherTimer previewClose = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private WindowPreview? preview;
     private AppView? hoveredView;
-    internal bool Interacting => dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
+    internal bool Interacting => startMenu.IsOpen || dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
     internal DockBar(DockController controller)
     {
         this.controller = controller;
+        startMenu = new StartMenuPlacement(this);
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
         previewDelay.Tick += (_, _) =>
@@ -80,7 +82,7 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; startMenu.Dispose(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();
@@ -324,6 +326,7 @@ public partial class DockBar : Window
     private void StartClick(object sender, RoutedEventArgs e)
     {
         ClosePreview();
+        startMenu.Begin();
         if (!DockNative.OpenStartMenu()) MessageBox.Show("系统未接受开始菜单快捷键，请按Windows键打开。", "DeskIsle");
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
