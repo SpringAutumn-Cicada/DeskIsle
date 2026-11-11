@@ -25,6 +25,17 @@ internal sealed class WindowThumbnail : IDisposable
     private readonly nint owner;
     private readonly HwndSource surface;
     private DockNative.Rect? last;
+    private bool hovered;
+    internal double AspectRatio
+    {
+        get { return handle != 0 && DwmQueryThumbnailSourceSize(handle, out var size) >= 0 && size.Height > 0 ? (double)size.Width / size.Height : 0; }
+    }
+    internal void Feedback(bool value)
+    {
+        if (hovered == value) return;
+        hovered = value; last = null;
+        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(118, 215, 198) : Color.FromRgb(53, 69, 88);
+    }
     private readonly Action click;
     private readonly Action? close;
     private bool pressed;
@@ -33,10 +44,10 @@ internal sealed class WindowThumbnail : IDisposable
     private nint Input(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message == 0x21) { handled = true; return 3; }
-        if (message == 0x201) { pressed = true; handled = true; }
+        if (message == 0x201) { pressed = true; last = null; handled = true; }
         if (message == 0x202 && pressed)
         {
-            pressed = false; handled = true;
+            pressed = false; last = null; handled = true;
             surface.Dispatcher.BeginInvoke(click);
         }
         return 0;
@@ -64,14 +75,14 @@ internal sealed class WindowThumbnail : IDisposable
         if (!ClientToScreen(owner, ref origin)) return false;
         var boxWidth = box.Right - box.Left; var boxHeight = box.Bottom - box.Top;
         SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10);
-        box = new DockNative.Rect { Right = boxWidth, Bottom = boxHeight };
+        box = new DockNative.Rect { Left = 2, Top = 2, Right = boxWidth - 2, Bottom = boxHeight - 2 };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));
         var height = Math.Max(1, (int)Math.Round(size.Height * scale));
         box.Left += (box.Right - box.Left - width) / 2; box.Top += (box.Bottom - box.Top - height) / 2;
         box.Right = box.Left + width; box.Bottom = box.Top + height;
         if (last is { } old && old.Equals(box)) { DockNative.ShowWindow(surface.Handle, 4); return true; }
-        var properties = new Properties { Flags = 1 | 4 | 8 | 16, Destination = box, Opacity = 255, Visible = true, ClientOnly = false };
+        var properties = new Properties { Flags = 1 | 4 | 8 | 16, Destination = box, Opacity = pressed ? (byte)190 : (byte)255, Visible = true, ClientOnly = false };
         if (DwmUpdateThumbnailProperties(handle, ref properties) < 0) return false;
         DockNative.ShowWindow(surface.Handle, 4);
         last = box; return true;

@@ -14,6 +14,8 @@ internal sealed class WindowPreview : Window
         internal WindowThumbnail? Thumbnail;
         internal required Action Click;
         internal Action? Close;
+        internal required object Group;
+        internal bool Composite;
     }
     private readonly DockBar bar;
     private readonly Button anchor;
@@ -24,7 +26,7 @@ internal sealed class WindowPreview : Window
     private readonly StackPanel content = new();
     private readonly SplitGroups groups;
     private readonly List<Tile> tiles = [];
-    private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private int page;
     private bool finished;
     private long outsideSince;
@@ -77,13 +79,13 @@ internal sealed class WindowPreview : Window
         page = Math.Clamp(page, 0, pages - 1);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(row);
-        void AddImage(DockWindow window, Panel parent, double width, double height, Action click, Action? close)
+        void AddImage(DockWindow window, Panel parent, double width, double height, Action click, Action? close, object? group = null)
         {
             var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(2) };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, _) => click();
             parent.Children.Add(host);
-            tiles.Add(new Tile { Window = window, Host = host, Click = click, Close = close });
+            tiles.Add(new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null });
         }
         if (page == 0 && groups.Find(windows) is { } pair)
         {
@@ -93,8 +95,8 @@ internal sealed class WindowPreview : Window
             var height = width * unionHeight / Math.Max(1, unionWidth);
             var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
-            AddImage(pair.Left, composite, width / 2, height, restore, null);
-            AddImage(pair.Right, composite, width / 2, height, restore, null);
+            AddImage(pair.Left, composite, width / 2, height, restore, null, composite);
+            AddImage(pair.Right, composite, width / 2, height, restore, null, composite);
             row.Children.Add(composite);
         }
         foreach (var window in windows.Skip(page * perPage).Take(perPage))
@@ -105,7 +107,10 @@ internal sealed class WindowPreview : Window
                 var ratio = (double)(bounds.Right - bounds.Left) / (bounds.Bottom - bounds.Top);
                 width = Math.Min(250, 156 * ratio); height = width / ratio;
             }
-            AddImage(window, row, Math.Max(48, width), Math.Max(40, height),
+            // Equal row height avoids blank areas around windows with different aspect ratios.
+            var ratioAtSize = width / height;
+            height = 140; width = height * ratioAtSize;
+            AddImage(window, row, Math.Max(24, width), height,
                 () => { activate(window); dismiss(); }, () => DockNative.PostMessage(window.Handle, 0x0010, 0, 0));
         }
         if (pages > 1)
@@ -121,13 +126,28 @@ internal sealed class WindowPreview : Window
     {
         if (finished || !IsLoaded || !IsVisible) return;
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+        object? hoverGroup = null;
+        if (DockNative.GetCursorPos(out var mouse))
+            foreach (var tile in tiles)
+            {
+                var start = tile.Host.PointToScreen(new Point());
+                var end = tile.Host.PointToScreen(new Point(tile.Host.ActualWidth, tile.Host.ActualHeight));
+                if (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y) { hoverGroup = tile.Group; break; }
+            }
         foreach (var tile in tiles)
         {
             if (tile.Host.ActualWidth <= 0 || !DockNative.IsWindow(tile.Window.Handle)) continue;
             tile.Thumbnail ??= WindowThumbnail.Create(new WindowInteropHelper(this).Handle, tile.Window.Handle, tile.Click, tile.Close);
             if (tile.Thumbnail == null) continue;
+            tile.Thumbnail.Feedback(ReferenceEquals(hoverGroup, tile.Group));
             var point = tile.Host.TranslatePoint(new Point(), this);
             var a = scale.Transform(point); var b = scale.Transform(point + new Vector(tile.Host.ActualWidth, tile.Host.ActualHeight));
+            var aspect = tile.Thumbnail.AspectRatio;
+            if (!tile.Composite && aspect > 0)
+            {
+                var desired = Math.Clamp(140 * aspect, 24, Math.Max(250, SystemParameters.WorkArea.Width / 3 - 12));
+                if (Math.Abs(tile.Host.Width - desired) > 1) tile.Host.Width = desired;
+            }
             tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) });
         }
     }

@@ -165,7 +165,7 @@ public partial class DockBar : Window
             previewClose.Stop(); previewDelay.Stop();
             if (!ReferenceEquals(hoveredView, view)) ClosePreview();
             hoveredView = view;
-            if (view.Windows.Length > 0) previewDelay.Start();
+            if (view.Windows.Length > 0 && preview?.IsVisible != true) previewDelay.Start();
         };
         button.MouseLeave += (_, _) =>
         {
