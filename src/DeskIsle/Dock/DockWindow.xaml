@@ -2,6 +2,8 @@
 <Border x:Name="Surface" CornerRadius="22" Background="#EF202632" BorderBrush="#665D718A" BorderThickness="1" Padding="10,6" Margin="8">
 <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity=".25"/></Border.Effect>
 <StackPanel Orientation="Horizontal">
+<Button Width="44" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="开始菜单" AutomationProperties.Name="打开Windows开始菜单" Click="StartClick"><Path Data="M1,1 L10,1 L10,10 L1,10 Z M13,1 L22,1 L22,10 L13,10 Z M1,13 L10,13 L10,22 L1,22 Z M13,13 L22,13 L22,22 L13,22 Z" Fill="#89C6F3" Width="22" Height="22" Stretch="Uniform"/></Button>
+<Border Width="1" Background="#506077" Margin="6,8"/>
 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="Apps" Orientation="Horizontal"/></ScrollViewer>
 <Border Width="1" Background="#506077" Margin="8,8"/>
 <Button Width="46" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="显示原生任务栏" Click="NativeClick"><Path Data="M2,4 L22,4 L22,20 L2,20 Z M2,15 L22,15 M6,18 L9,18 M12,18 L15,18" Stroke="#CED9EA" StrokeThickness="1.7" Width="23" Height="23" Stretch="Uniform"/></Button>

@@ -37,6 +37,21 @@ internal static class DockNative
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] internal static extern int GetWindowLong(nint window, int index);
     [DllImport("user32.dll")] internal static extern bool RegisterHotKey(nint window, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(nint window, int id);
+    [StructLayout(LayoutKind.Explicit, Size = 40)] private struct Input
+    {
+        [FieldOffset(0)] public uint Type;
+        [FieldOffset(8)] public ushort Key;
+        [FieldOffset(12)] public uint Flags;
+    }
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+    internal static bool OpenStartMenu()
+    {
+        // Windows x64 INPUT layout. Send a complete Win press/release without changing Shell settings.
+        var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = 0x5B, Flags = 2 } };
+        var sent = SendInput(2, inputs, Marshal.SizeOf<Input>());
+        if (sent == 1) SendInput(1, [inputs[1]], Marshal.SizeOf<Input>());
+        return sent == 2;
+    }
     internal static string Class(nint window) { var s = new StringBuilder(256); GetClassName(window, s, s.Capacity); return s.ToString(); }
     internal static MonitorInfo Primary()
     {
