@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 namespace DeskIsle.Dock;
 
 internal sealed record SplitPair(DockWindow Left, DockWindow Right, DockNative.Rect LeftRect, DockNative.Rect RightRect);
@@ -30,14 +31,31 @@ internal sealed class SplitGroups
         }
         return null;
     }
+    [DllImport("user32.dll")] private static extern nint BeginDeferWindowPos(int count);
+    [DllImport("user32.dll")] private static extern nint DeferWindowPos(nint batch, nint window, nint after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] private static extern bool EndDeferWindowPos(nint batch);
     internal static void Restore(SplitPair pair)
     {
         if (!DockNative.IsWindow(pair.Left.Handle) || !DockNative.IsWindow(pair.Right.Handle)) return;
-        foreach (var item in new[] { (pair.Left, pair.LeftRect), (pair.Right, pair.RightRect) })
+        var items = new[] { (pair.Left, pair.LeftRect), (pair.Right, pair.RightRect) };
+        // Dispatch both restore requests without waiting on the other application's UI thread.
+        foreach (var item in items)
+            if (DockNative.IsIconic(item.Item1.Handle)) DockNative.ShowWindowAsync(item.Item1.Handle, 9);
+        var batch = BeginDeferWindowPos(2);
+        if (batch != 0)
         {
-            if (DockNative.IsIconic(item.Item1.Handle)) DockNative.ShowWindow(item.Item1.Handle, 9);
+            foreach (var item in items)
+            {
+                var r = item.Item2;
+                batch = DeferWindowPos(batch, item.Item1.Handle, 0, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, 0x10 | 0x4000);
+                if (batch == 0) break;
+            }
+            if (batch != 0 && EndDeferWindowPos(batch)) { DockNative.SetForegroundWindow(pair.Left.Handle); return; }
+        }
+        foreach (var item in items)
+        {
             var r = item.Item2;
-            DockNative.SetWindowPos(item.Item1.Handle, 0, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, 0x10);
+            DockNative.SetWindowPos(item.Item1.Handle, 0, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, 0x10 | 0x4000);
         }
         DockNative.SetForegroundWindow(pair.Left.Handle);
     }

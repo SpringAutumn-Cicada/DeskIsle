@@ -21,6 +21,7 @@ public partial class DockBar : Window
         internal string? IconPath, IconKey;
         internal long IconVersion;
         internal nint RecentWindow;
+        internal SplitPair? MinimizedPair;
     }
     private readonly DockController controller;
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
@@ -188,9 +189,18 @@ public partial class DockBar : Window
             pressedForeground = 0;
             if (active != null)
             {
+                splitGroups.Observe(view.Windows);
+                view.MinimizedPair = splitGroups.Find(view.Windows);
                 // Snapshot the whole app group before minimizing its foreground window.
                 foreach (var handle in view.Windows.Select(w => w.Handle).Distinct().Where(handle => DockNative.IsWindow(handle) && !DockNative.IsIconic(handle)).ToArray())
                     DockNative.PostMessage(handle, 0x0112, 0xF020, 0);
+            }
+            else if (view.MinimizedPair is { } pair &&
+                DockNative.IsWindow(pair.Left.Handle) && DockNative.IsWindow(pair.Right.Handle) &&
+                DockNative.IsIconic(pair.Left.Handle) && DockNative.IsIconic(pair.Right.Handle))
+            {
+                view.MinimizedPair = null;
+                SplitGroups.Restore(pair);
             }
             else if (view.Windows.Length == 1) Activate(view.Windows[0]);
             else if (view.Windows.Length > 1)
