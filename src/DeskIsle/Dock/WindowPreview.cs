@@ -133,7 +133,8 @@ internal sealed class WindowPreview : Window
         header.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
         var layout = new StackPanel(); layout.Children.Add(header); layout.Children.Add(images);
         var surface = new Border { Child = layout, Padding = new Thickness(4), BorderThickness = new Thickness(1),
-            BorderBrush = Brush("#344252"), CornerRadius = new CornerRadius(8), Background = Brush("#202936"), Margin = new Thickness(3) };
+            BorderBrush = Brush("#344252"), CornerRadius = new CornerRadius(8), Background = Brush("#202936"),
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3) };
         var card = new Card { Surface = surface, Images = images, Title = title, Close = close, Windows = members };
         cards.Add(card);
         return card;
