@@ -136,9 +136,11 @@ internal sealed class WindowPreview : Window
         if (finished || (present && (!IsLoaded || !IsVisible))) return;
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
         object? hoverGroup = null;
-        if (DockNative.GetCursorPos(out var mouse))
+        // Before Show(), descendants have no PresentationSource even when the HWND exists.
+        if (present && IsLoaded && DockNative.GetCursorPos(out var mouse))
             foreach (var tile in tiles)
             {
+                if (PresentationSource.FromVisual(tile.Host) == null) continue;
                 var start = tile.Host.PointToScreen(new Point());
                 var end = tile.Host.PointToScreen(new Point(tile.Host.ActualWidth, tile.Host.ActualHeight));
                 if (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y) { hoverGroup = tile.Group; break; }
@@ -161,7 +163,7 @@ internal sealed class WindowPreview : Window
     }
     private void Place()
     {
-        if (!anchor.IsLoaded) return;
+        if (!anchor.IsLoaded || PresentationSource.FromVisual(anchor) == null) return;
         var point = anchor.PointToScreen(new Point(anchor.ActualWidth / 2, 0));
         var transform = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var center = transform.Transform(point);
