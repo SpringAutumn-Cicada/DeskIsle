@@ -20,6 +20,8 @@ internal sealed class WindowThumbnail : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmUnregisterThumbnail(nint thumbnail);
     [DllImport("dwmapi.dll")] private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size size);
     [DllImport("dwmapi.dll")] private static extern int DwmUpdateThumbnailProperties(nint thumbnail, ref Properties properties);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
+    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(nint window, uint color, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(nint window, ref DockNative.Point point);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     private nint handle;
@@ -42,12 +44,19 @@ internal sealed class WindowThumbnail : IDisposable
     }
     internal void Feedback(bool value)
     {
+        var changed = hovered != value;
+        hovered = value;
         if (closeSurface != null && DockNative.GetCursorPos(out var pointer) && DockNative.GetWindowRect(closeSurface.Handle, out var closeRect))
             DrawClose(closePressed || (pointer.X >= closeRect.Left && pointer.X < closeRect.Right && pointer.Y >= closeRect.Top && pointer.Y < closeRect.Bottom));
-        if (hovered == value) return;
-        hovered = value;
-        drawnScale = double.NaN; DrawClose(closeActive);
-        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79);
+        if (changed && surface.CompositionTarget != null)
+            surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(86, 107, 132) : Color.FromRgb(41, 53, 70);
+        SyncCloseVisibility();
+    }
+    private void SyncCloseVisibility()
+    {
+        if (closeSurface == null || handle == 0) return;
+        var show = (hovered || closePressed) && DockNative.IsWindowVisible(surface.Handle);
+        if (show != DockNative.IsWindowVisible(closeSurface.Handle)) DockNative.ShowWindow(closeSurface.Handle, show ? 4 : 0);
     }
     private readonly Action click;
     private readonly Action? close;
@@ -68,8 +77,11 @@ internal sealed class WindowThumbnail : IDisposable
             closeSurface = new HwndSource(new HwndSourceParameters("DeskIsle preview close")
             {
                 ParentWindow = surface.Handle, Width = 1, Height = 1,
-                WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
+                WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08080080
             });
+            var disableTransitions = 1;
+            DwmSetWindowAttribute(closeSurface.Handle, 3, ref disableTransitions, sizeof(int));
+            SetLayeredWindowAttributes(closeSurface.Handle, 0, 225, 2);
             closeSurface.RootVisual = closeVisual;
             closeSurface.AddHook(CloseInput);
             DrawClose(false);
@@ -81,11 +93,11 @@ internal sealed class WindowThumbnail : IDisposable
         closeActive = active; drawnScale = closeScale;
         using var drawing = closeVisual.RenderOpen();
         drawing.PushTransform(new ScaleTransform(closeScale, closeScale));
-        drawing.DrawRectangle(new SolidColorBrush(active ? Color.FromRgb(176, 64, 75) :
-            (hovered ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79))), null, new Rect(0, 0, 22, 22));
+        if (closeSurface != null) SetLayeredWindowAttributes(closeSurface.Handle, 0, active ? (byte)255 : (byte)225, 2);
+        drawing.DrawRectangle(new SolidColorBrush(active ? Color.FromRgb(176, 64, 75) : Color.FromRgb(27, 35, 47)), null, new Rect(0, 0, 22, 22));
         var pen = new Pen(new SolidColorBrush(Color.FromRgb(240, 244, 250)), 1.5);
-        drawing.DrawLine(pen, new Point(7.5, 7.5), new Point(14.5, 14.5));
-        drawing.DrawLine(pen, new Point(14.5, 7.5), new Point(7.5, 14.5));
+        drawing.DrawLine(pen, new Point(6, 6), new Point(16, 16));
+        drawing.DrawLine(pen, new Point(16, 6), new Point(6, 16));
         drawing.Pop();
     }
     private nint CloseInput(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
@@ -108,7 +120,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (message == 0x84) { handled = true; return 1; } // HTCLIENT
         if (message == 0x21) { handled = true; return 3; }
         if (message == 0x201) { pressed = true; SetCapture(hwnd); handled = true;
-            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(148, 166, 190); }
+            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(101, 121, 145); }
         if (message == 0x215) { pressed = false; }
         if (message == 0x202 && pressed)
         {
@@ -128,7 +140,9 @@ internal sealed class WindowThumbnail : IDisposable
             ParentWindow = destination, Width = 1, Height = 1,
             WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
         });
-        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(48, 61, 79);
+        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(41, 53, 70);
+        var disableTransitions = 1;
+        DwmSetWindowAttribute(surface.Handle, 3, ref disableTransitions, sizeof(int));
         if (DwmRegisterThumbnail(surface.Handle, source, out var thumbnail) < 0) { surface.Dispose(); return null; }
         return new(thumbnail, destination, surface, click, close);
     }
@@ -149,7 +163,7 @@ internal sealed class WindowThumbnail : IDisposable
         {
             var dpi = HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1;
             var side = Math.Min(Math.Min(boxWidth, boxHeight), (int)Math.Round(22 * dpi));
-            var offset = 0;
+            var offset = (int)Math.Round(4 * dpi);
             // DrawingVisual coordinates are DIPs; HwndSource supplies the monitor scale.
             closeScale = side / (22 * (closeSurface.CompositionTarget?.TransformToDevice.M11 ?? 1));
             DrawClose(closeActive);
@@ -163,10 +177,7 @@ internal sealed class WindowThumbnail : IDisposable
             }
         }
         var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
-        // A narrow integrated top edge keeps the close glyph off the preview content.
-        var header = closeSurface == null ? inset : Math.Min(boxHeight - inset - 1,
-            (int)Math.Round(22 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)));
-        box = new DockNative.Rect { Left = inset, Top = Math.Max(inset, header), Right = boxWidth - inset, Bottom = boxHeight - inset };
+        box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));
         var height = Math.Max(1, (int)Math.Round(size.Height * scale));
@@ -182,7 +193,7 @@ internal sealed class WindowThumbnail : IDisposable
     {
         if (handle == 0) return;
         if (!DockNative.IsWindowVisible(surface.Handle)) DockNative.ShowWindow(surface.Handle, 4);
-        if (closeSurface != null && !DockNative.IsWindowVisible(closeSurface.Handle)) DockNative.ShowWindow(closeSurface.Handle, 4);
+        SyncCloseVisibility();
     }
     public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; closeSurface?.RemoveHook(CloseInput); closeSurface?.Dispose(); surface.RemoveHook(Input); surface.Dispose(); } }
 }

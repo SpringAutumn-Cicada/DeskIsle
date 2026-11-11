@@ -31,7 +31,7 @@ internal sealed class WindowPreview : Window
     private readonly List<Tile> tiles = [];
     private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private int page;
-    private bool finished;
+    private bool finished, preparing, ready;
     private long outsideSince;
     private HwndSource? source;
     internal WindowPreview(DockBar bar, Button anchor, DockWindow[] windows, ImageSource? icon, Action<DockWindow> activate, Action dismiss, SplitGroups groups)
@@ -41,7 +41,8 @@ internal sealed class WindowPreview : Window
         ShowInTaskbar = false; ShowActivated = false; Topmost = true; Owner = bar;
         // Non-layered destination so DWM can compose its thumbnails directly into the client area.
         Background = Brush("#202936"); Foreground = Brush("#EAF0F8");
-        SizeToContent = SizeToContent.WidthAndHeight; UseLayoutRounding = true; SnapsToDevicePixels = true;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        SizeToContent = SizeToContent.Manual; UseLayoutRounding = true; SnapsToDevicePixels = true;
         Content = new Border { Padding = new Thickness(3), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), BorderBrush = Brush("#52647C"), Background = Brush("#202936"), Child = content };
         SourceInitialized += (_, _) =>
         {
@@ -50,10 +51,20 @@ internal sealed class WindowPreview : Window
             source = HwndSource.FromHwnd(hwnd); source?.AddHook(NoActivate);
             var corner = 2;
             DwmSetWindowAttribute(hwnd, 33, ref corner, sizeof(int));
+            var disableTransitions = 1;
+            DwmSetWindowAttribute(hwnd, 3, ref disableTransitions, sizeof(int));
         };
-        Loaded += (_, _) => { UpdateThumbnails(); check.Start(); };
-        LayoutUpdated += (_, _) => UpdateThumbnails();
-        SizeChanged += (_, _) => Place();
+        Loaded += (_, _) =>
+        {
+            PrepareLayout();
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                if (finished) return;
+                ready = true; UpdateThumbnails(); check.Start();
+            }));
+        };
+        LayoutUpdated += (_, _) => { if (ready && !preparing) UpdateThumbnails(); };
+        SizeChanged += (_, _) => { if (!preparing) Place(); };
         check.Tick += (_, _) =>
         {
             if (ContainsInteractionPointer()) outsideSince = 0;
@@ -67,10 +78,6 @@ internal sealed class WindowPreview : Window
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
         new WindowInteropHelper(this).EnsureHandle();
         RenderPage();
-        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Arrange(new Rect(new Point(), DesiredSize));
-        UpdateLayout(); Place();
-        UpdateThumbnails(false);
     }
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
@@ -101,7 +108,7 @@ internal sealed class WindowPreview : Window
             {
                 var ratio = thumbnail.AspectRatio;
                 host.Width = Math.Clamp(160 * ratio, 32, 320);
-                host.Height = host.Width / ratio + 22;
+                host.Height = host.Width / ratio;
             }
             parent.Children.Add(host);
             tiles.Add(tile);
@@ -111,7 +118,7 @@ internal sealed class WindowPreview : Window
             var width = 300.0;
             var unionHeight = Math.Max(pair.LeftRect.Bottom, pair.RightRect.Bottom) - Math.Min(pair.LeftRect.Top, pair.RightRect.Top);
             var unionWidth = pair.RightRect.Right - pair.LeftRect.Left;
-            var height = width * unionHeight / Math.Max(1, unionWidth) + 22;
+            var height = width * unionHeight / Math.Max(1, unionWidth);
             var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
             AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Left.Handle)) DockNative.PostMessage(pair.Left.Handle, 0x0010, 0, 0); }, composite);
@@ -148,6 +155,25 @@ internal sealed class WindowPreview : Window
             previous.Click += (_, _) => { page--; RenderPage(); }; next.Click += (_, _) => { page++; RenderPage(); };
             footer.Children.Add(previous); footer.Children.Add(next); content.Children.Add(footer);
         }
+        PrepareLayout();
+    }
+    private void PrepareLayout()
+    {
+        if (finished || preparing) return;
+        preparing = true;
+        try
+        {
+            // Measure the content independently of the previous window's fixed dimensions.
+            var root = (FrameworkElement)Content;
+            root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Width = Math.Ceiling(root.DesiredSize.Width); Height = Math.Ceiling(root.DesiredSize.Height);
+            Measure(new Size(Width, Height));
+            Arrange(new Rect(0, 0, Width, Height));
+            UpdateLayout(); Place();
+            UpdateThumbnails(false);
+        }
+        finally { preparing = false; }
+        if (ready) UpdateThumbnails();
     }
     private void UpdateThumbnails(bool present = true)
     {
@@ -221,8 +247,8 @@ internal sealed class WindowPreview : Window
         var transform = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var center = transform.Transform(point);
         var area = SystemParameters.WorkArea;
-        Left = Math.Clamp(center.X - ActualWidth / 2, area.Left + 4, Math.Max(area.Left + 4, area.Right - ActualWidth - 4));
-        Top = Math.Max(area.Top + 4, bar.Top - ActualHeight - 6);
+        Left = Math.Clamp(center.X - Width / 2, area.Left + 4, Math.Max(area.Left + 4, area.Right - Width - 4));
+        Top = Math.Max(area.Top + 4, bar.Top - Height - 6);
     }
     internal void SetWindows(DockWindow[] latest)
     {
