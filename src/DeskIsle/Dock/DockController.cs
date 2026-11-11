@@ -81,7 +81,7 @@ internal sealed class DockController : IDisposable
     private void CreateWindows()
     {
         bar = new(this); bar.Show(); bar.Place(); bar.Hide();
-        var button = new Button { Content = "返回 Dock", Padding = new Thickness(12, 7), ToolTip = "返回悬浮 Dock；右键可关闭 Dock" };
+        var button = new Button { Content = "返回 Dock", Padding = new Thickness(12, 7, 12, 7), ToolTip = "返回悬浮 Dock；右键可关闭 Dock" };
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
         button.Click += (_, _) => ToggleNative();
         var menu = new ContextMenu(); DockBar.Add(menu, "关闭 Dock 并恢复任务栏", () => Apply(false)); button.ContextMenu = menu;
