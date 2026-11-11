@@ -49,7 +49,11 @@ public partial class DockBar : Window
             previewDelay.Stop();
             if (hoveredView is { } view && view.Button.IsMouseOver && !dragging && !menuOpen) ShowPreview(view);
         };
-        previewClose.Tick += (_, _) => { previewClose.Stop(); ClosePreview(); };
+        previewClose.Tick += (_, _) =>
+        {
+            previewClose.Stop();
+            if (preview?.ContainsPointer() != true && hoveredView?.Button.IsMouseOver != true) ClosePreview();
+        };
         IsVisibleChanged += (_, _) => { if (!IsVisible) ClosePreview(); };
         SizeChanged += (_, _) => Place();
         DpiChanged += (_, _) =>

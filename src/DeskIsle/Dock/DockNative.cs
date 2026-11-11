@@ -68,7 +68,7 @@ internal static class DockNative
     internal static bool FullScreen()
     {
         var w = GetForegroundWindow();
-        if (w == 0 || IsIconic(w) || IsZoomed(w) || Class(w) is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
+        if (w == 0 || IsIconic(w) || (IsZoomed(w) && (GetWindowLong(w, -16) & 0x00C00000) != 0) || Class(w) is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
         GetWindowThreadProcessId(w, out var pid);
         if (pid == Environment.ProcessId) return false;
         var monitor = MonitorFromWindow(w, 2);

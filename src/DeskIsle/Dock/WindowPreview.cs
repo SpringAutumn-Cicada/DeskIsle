@@ -24,6 +24,7 @@ internal sealed class WindowPreview : Window
     private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private int page;
     private bool finished;
+    private long outsideSince;
     private HwndSource? source;
     internal WindowPreview(DockBar bar, Button anchor, DockWindow[] windows, ImageSource? icon, Action<DockWindow> activate, Action dismiss)
     {
@@ -47,6 +48,9 @@ internal sealed class WindowPreview : Window
         SizeChanged += (_, _) => Place();
         check.Tick += (_, _) =>
         {
+            if (ContainsPointer() || anchor.IsMouseOver) outsideSince = 0;
+            else if (outsideSince == 0) outsideSince = Environment.TickCount64;
+            else if (Environment.TickCount64 - outsideSince >= 300) { dismiss(); return; }
             var live = windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
             if (live.Length == 0) { dismiss(); return; }
             if (live.Length != windows.Length) { windows = live; RenderPage(); }
@@ -117,6 +121,11 @@ internal sealed class WindowPreview : Window
             var a = scale.Transform(point); var b = scale.Transform(point + new Vector(tile.Host.ActualWidth, tile.Host.ActualHeight));
             tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) });
         }
+    }
+    internal bool ContainsPointer()
+    {
+        if (!IsVisible || !DockNative.GetCursorPos(out var point) || !DockNative.GetWindowRect(new WindowInteropHelper(this).Handle, out var box)) return false;
+        return point.X >= box.Left && point.X < box.Right && point.Y >= box.Top && point.Y < box.Bottom;
     }
     private void Place()
     {
