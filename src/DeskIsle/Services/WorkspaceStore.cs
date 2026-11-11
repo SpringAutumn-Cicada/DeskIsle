@@ -4,7 +4,9 @@ namespace DeskIsle.Services;
 
 public sealed class WorkspaceState
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
+    public bool DesktopMigrationPrompted { get; set; }
+    public Dictionary<string, string> ImportedPaths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<CardState> Cards { get; set; } = [];
 }
 
@@ -30,12 +32,13 @@ public sealed class WorkspaceStore
             try
             {
                 var state = JsonSerializer.Deserialize<WorkspaceState>(File.ReadAllText(candidate)) ?? throw new JsonException();
-                if (state.SchemaVersion != 2)
+                if (state.SchemaVersion is not (2 or 3))
                 {
                     ReadOnly = true; Warning = "配置版本不受支持，本次只读，不覆盖原配置。";
                     return new() { Cards = [new()] };
                 }
                 Validate(state);
+                state.SchemaVersion = 3;
                 if (candidate != path) Warning = "已从有效备份恢复多卡片配置。";
                 return state;
             }
@@ -64,6 +67,7 @@ public sealed class WorkspaceStore
     private static void Validate(WorkspaceState state)
     {
         if (state.Cards == null) throw new JsonException();
+        state.ImportedPaths = new Dictionary<string, string>((state.ImportedPaths ?? []).Where(pair => Path.IsPathFullyQualified(pair.Key) && Path.IsPathFullyQualified(pair.Value)), StringComparer.OrdinalIgnoreCase);
         var ids = new HashSet<Guid>();
         foreach (var card in state.Cards)
         {
@@ -73,6 +77,14 @@ public sealed class WorkspaceStore
             if (!double.IsFinite(card.BackgroundOpacity)) card.BackgroundOpacity = .85;
             card.BackgroundOpacity = Math.Clamp(card.BackgroundOpacity, .3, 1);
         }
+    }
+    public string BackupForDesktopMigration(WorkspaceState state)
+    {
+        Directory.CreateDirectory(dataDirectory);
+        var backup = Path.Combine(dataDirectory, "cards.before-desktop-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N") + ".json");
+        if (File.Exists(path)) File.Copy(path, backup, overwrite: false);
+        else File.WriteAllText(backup, JsonSerializer.Serialize(state));
+        return backup;
     }
     public void Save(WorkspaceState state)
     {
@@ -87,7 +99,7 @@ public sealed class WorkspaceStore
             {
                 var previous = JsonSerializer.Deserialize<WorkspaceState>(File.ReadAllText(path)) ?? throw new JsonException();
                 Validate(previous);
-                if (previous.SchemaVersion == 2) File.Copy(path, path + ".bak", true);
+                if (previous.SchemaVersion is 2 or 3) File.Copy(path, path + ".bak", true);
             }
             catch (Exception ex) when (ex is JsonException or ArgumentException) { }
             File.Replace(temp, path, null);

@@ -12,6 +12,9 @@ public partial class MainWindow
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
         if (tile == null) return;
         var path = tile.FullPath;
+        try { await Task.Run(() => DesktopFiles.Require(path)); }
+        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; return; }
+        if (HasPendingCreation) return;
         if (!File.Exists(path) && !Directory.Exists(path))
         { MessageBox.Show(this, "项目已不存在或路径不可用，可刷新或移出引用。", "无法删除"); return; }
         deletingItem = true;
@@ -20,6 +23,7 @@ public partial class MainWindow
             var dialog = new DeleteConfirmation(this, path);
             TrackDialog(dialog);
             if (dialog.ShowDialog() != true) return;
+            DesktopFiles.Require(path);
             // Shell dialogs preserve Windows' recycle/error/cancel behavior. Never
             // retry using File.Delete or recursively delete on a failed recycle.
             if (Directory.Exists(path)) FileSystem.DeleteDirectory(path, UIOption.AllDialogs, RecycleOption.SendToRecycleBin, UICancelOption.ThrowException);

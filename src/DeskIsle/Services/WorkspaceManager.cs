@@ -47,7 +47,14 @@ public sealed class WorkspaceManager : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
         }
         if (DesktopIntegration) desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
+        if (DesktopIntegration && PendingDesktopPaths.Length > 0)
+        {
+            try { EnsureMigrationBackup(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "旧配置备份未完成，请先修复权限再导入旧记录。"; }
+        }
         foreach (var card in state.Cards.ToArray()) Open(card);
+        if (DesktopIntegration && PendingDesktopPaths.Length > 0 && !state.DesktopMigrationPrompted)
+            Application.Current.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => windows.Values.FirstOrDefault()?.OfferDesktopMigration()));
         if (DesktopIntegration)
         {
             startupHidePending = true;
@@ -104,22 +111,74 @@ public sealed class WorkspaceManager : IDisposable
     public bool BeginFileMove()
     {
         if (Exiting || FileMoveInProgress || windows.Values.Any(w => w.HasPendingCreation || w.IsReordering || w.HasOpenFileDialog)) return false;
-        if (store.ReadOnly) throw new IOException("配置处于保护模式，不能移动文件并保存引用。");
+        if (store.ReadOnly) throw new IOException("配置处于保护模式，不能执行文件导入或移动。");
         FileMoveInProgress = true;
         return true;
     }
     public void EndFileMove() => FileMoveInProgress = false;
-    public void ApplyFileMove(Guid sourceCard, string source, string destination)
+    private string? migrationBackup;
+    public string[] PendingDesktopPaths => state.Cards.SelectMany(card => card.References).Where(path => !DesktopFiles.IsCardPath(path)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path.Length).ToArray();
+    public IReadOnlyDictionary<string, string> ImportedPaths => new Dictionary<string, string>(state.ImportedPaths, StringComparer.OrdinalIgnoreCase);
+    public void EnsureMigrationBackup()
+    {
+        if (store.ReadOnly) throw new IOException("配置处于保护模式，不能导入或迁移。");
+        migrationBackup ??= store.BackupForDesktopMigration(state);
+    }
+    public void MarkDesktopMigrationPrompted()
+    {
+        EnsureMigrationBackup();
+        state.DesktopMigrationPrompted = true;
+        Save();
+    }
+    public void PublishMigrationRoots(TransferReport report)
     {
         foreach (var card in state.Cards)
+            foreach (var root in report.Roots.Where(root => root.Published && card.References.Contains(root.Source, StringComparer.OrdinalIgnoreCase)))
+                if (!card.References.Contains(root.Target, StringComparer.OrdinalIgnoreCase)) card.References.Add(root.Target);
+        Save();
+    }
+    public void RemovePendingDesktopPaths()
+    {
+        EnsureMigrationBackup();
+        foreach (var card in state.Cards) card.References.RemoveAll(path => !DesktopFiles.IsCardPath(path));
+        Save();
+    }
+    public void RecordTransfer(Guid sourceCard, TransferCompletion completion)
+    {
+        DesktopFiles.Require(completion.Target);
+        if (!completion.Moved)
         {
-            card.References = card.References
-                .Where(path => card.Id != sourceCard || !FileMoveService.Same(path, source))
-                .Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (card.CreationDirectory != null) card.CreationDirectory = FileMoveService.Remap(card.CreationDirectory, source, destination);
+            if (!DesktopFiles.Private(completion.Source)) state.ImportedPaths[completion.Source] = completion.Target;
+            foreach (var card in state.Cards)
+            {
+                card.References = card.References.Select(path => FileMoveService.Same(path, completion.Source) ? completion.Target : path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                card.CreationDirectory = null;
+            }
+        }
+        else
+        {
+            foreach (var card in state.Cards)
+            {
+                card.References = card.References.Where(path => card.Id != sourceCard || !FileMoveService.Same(path, completion.Source))
+                    .Select(path => FileMoveService.Remap(path, completion.Source, completion.Target)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                card.CreationDirectory = null;
+                card.FolderOrders = card.FolderOrders.GroupBy(pair => FileMoveService.Remap(pair.Key, completion.Source, completion.Target), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.SelectMany(pair => pair.Value).Select(path => FileMoveService.Remap(path, completion.Source, completion.Target)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+            }
+            foreach (var key in state.ImportedPaths.Keys.ToArray()) state.ImportedPaths[key] = FileMoveService.Remap(state.ImportedPaths[key], completion.Source, completion.Target);
+        }
+        Save();
+    }
+    public void RecordDesktopRename(string source, string destination)
+    {
+        if (!DesktopFiles.IsCardPath(source) || !DesktopFiles.IsCardPath(destination)) return;
+        foreach (var card in state.Cards)
+        {
+            card.References = card.References.Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             card.FolderOrders = card.FolderOrders.GroupBy(pair => FileMoveService.Remap(pair.Key, source, destination), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.SelectMany(pair => pair.Value).Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
         }
+        foreach (var key in state.ImportedPaths.Keys.ToArray()) state.ImportedPaths[key] = FileMoveService.Remap(state.ImportedPaths[key], source, destination);
         Save();
     }
     public async Task RefreshAfterFileMove(string source, string destination)

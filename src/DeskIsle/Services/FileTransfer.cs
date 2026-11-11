@@ -41,26 +41,42 @@ public sealed class FileTransfer(
     IReadOnlyDictionary<string, string>? imported = null)
 {
     private readonly TransferReport report = new();
+    private readonly Dictionary<string, string> completedPaths = imported == null ? new(StringComparer.OrdinalIgnoreCase) : new(imported, StringComparer.OrdinalIgnoreCase);
     private string? work;
     private string Work => work ??= DesktopFiles.WorkDirectory();
 
     public async Task<TransferReport> Run(IEnumerable<string> sources, string targetFolder, bool move, string? name = null, bool draft = false)
     {
         DesktopFiles.Require(targetFolder);
+        _ = Work; // Allocate owned recovery storage before any filesystem mutation.
         foreach (var source in sources.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (cancellation.IsCancellationRequested) { report.Cancelled = true; break; }
+            var normalized = source;
+            string? pendingTarget = null;
+            var before = report.Completed;
             try
             {
-                var normalized = FileMoveService.Normalize(source);
+                normalized = FileMoveService.Normalize(source);
                 var itemName = name ?? Path.GetFileName(normalized);
                 NewItemService.ValidateName(itemName, NewItemKind.Folder);
+                if (!move && completedPaths.TryGetValue(normalized, out var mapped) && DesktopFiles.IsCardPath(mapped) && EntryStamp.Read(mapped) != null)
+                { DesktopFiles.Require(mapped); report.Roots.Add(new(normalized, mapped, true, true)); continue; }
                 var target = Path.Combine(targetFolder, itemName);
+                pendingTarget = target;
                 var result = await Item(normalized, target, move, draft);
                 report.Roots.Add(new(normalized, target, result.Complete, result.Published));
             }
-            catch (OperationCanceledException) { report.Cancelled = true; break; }
-            catch (Exception ex) when (Recoverable(ex)) { report.Errors.Add(source + "：" + ex.Message); }
+            catch (OperationCanceledException)
+            {
+                if (pendingTarget != null && report.Completed > before && (File.Exists(pendingTarget) || Directory.Exists(pendingTarget))) report.Roots.Add(new(normalized, pendingTarget, false, true));
+                report.Cancelled = true; break;
+            }
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                if (pendingTarget != null && report.Completed > before && (File.Exists(pendingTarget) || Directory.Exists(pendingTarget))) report.Roots.Add(new(normalized, pendingTarget, false, true));
+                report.Errors.Add(source + "：" + ex.Message);
+            }
         }
         return report;
     }
@@ -74,7 +90,7 @@ public sealed class FileTransfer(
         else if (!DesktopFiles.Private(source)) throw new IOException("无效的新建暂存路径。");
         if (FileMoveService.Same(source, target)) return (true, true);
         if (FileMoveService.Under(target, source)) throw new IOException("不能把目录导入到自身或子目录。");
-        if (!move && imported != null && imported.TryGetValue(source, out var previous) && FileMoveService.Same(previous, target) && EntryStamp.Read(target) != null)
+        if (!move && completedPaths.TryGetValue(source, out var previous) && FileMoveService.Same(previous, target) && EntryStamp.Read(target) != null)
             return (true, true);
         var incoming = EntryStamp.Read(source) ?? throw new FileNotFoundException("来源已不存在。", source);
         if (incoming.Directory)
@@ -119,11 +135,25 @@ public sealed class FileTransfer(
         // Persist the operation result before changing card references. Recovery records remain local.
         var record = Path.Combine(Work, Guid.NewGuid().ToString("N") + ".json");
         File.WriteAllText(record, JsonSerializer.Serialize(completion));
+        completedPaths[completion.Source] = completion.Target;
         await committed(completion);
     }
     private async Task<bool> CopyFile(string source, string target, EntryStamp incoming, bool move)
     {
         // Lock the source against writes/deletion while preparing its complete desktop copy.
+        if (move && EntryStamp.Read(target) == null)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            DesktopFiles.Require(source); DesktopFiles.Require(target, missingAllowed: true);
+            try
+            {
+                File.Move(source, target, overwrite: false);
+            }
+            catch (IOException) when (EntryStamp.Read(target) != null && File.Exists(source)) { return await CopyFile(source, target, incoming, move); }
+            report.Completed++;
+            await Completed(new(source, target, true, false));
+            return true;
+        }
         var temp = Path.Combine(Work, Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
@@ -146,6 +176,7 @@ public sealed class FileTransfer(
                 output.Flush(flushToDisk: true);
             }
             cancellation.ThrowIfCancellationRequested();
+            File.SetLastWriteTimeUtc(temp, incoming.Modified);
             while (true)
             {
                 DesktopFiles.Require(target, missingAllowed: true);

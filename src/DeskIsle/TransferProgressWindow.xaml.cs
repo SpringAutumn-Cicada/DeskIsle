@@ -71,6 +71,7 @@ public partial class TransferProgressWindow : Window
     private void Cancel(object sender, RoutedEventArgs e) { if (finished) Close(); else RequestCancel(); }
     private void OpenRecovery(object sender, RoutedEventArgs e)
     {
-        if (Directory.Exists(DesktopFiles.PrivateRoot)) Process.Start(new ProcessStartInfo(DesktopFiles.PrivateRoot) { UseShellExecute = true });
+        try { if (Directory.Exists(DesktopFiles.PrivateRoot)) Process.Start(new ProcessStartInfo(DesktopFiles.PrivateRoot) { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException) { Details.Text = "无法打开恢复目录：" + ex.Message; }
     }
 }

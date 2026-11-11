@@ -7,7 +7,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DeskIsle.Core;
 using DeskIsle.Services;
-using Microsoft.Win32;
 
 namespace DeskIsle;
 
@@ -139,7 +138,8 @@ public partial class MainWindow : Window
         RebuildFileWatchers();
         TitleText.ToolTip = null;
         TitleText.Text = state.Title;
-        var paths = state.References.ToArray();
+        UpdateMigrationNotice();
+        var paths = state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var entries = await Task.Run(() => ReadReferences(paths));
         if (directory != null || version != viewVersion || closing) return;
         if (closing) return;
@@ -157,10 +157,11 @@ public partial class MainWindow : Window
     {
         if (HasPendingCreation || NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderOver(e); return; }
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
         Surface.BorderBrush = e.Effects == DragDropEffects.None ? new SolidColorBrush(Color.FromRgb(94, 106, 128)) : new SolidColorBrush(Color.FromRgb(114, 201, 193));
-        Status.Text = e.Effects == DragDropEffects.None ? "不支持此拖入内容" : "添加到卡片 · 原文件位置不变";
+        var folder = ExternalFolderTarget(e);
+        Status.Text = e.Effects == DragDropEffects.None ? "来源不允许复制，无法导入" : folder == null ? "导入桌面后加入分组 · 原件保留" : $"复制到桌面文件夹「{folder.Name}」 · 原件保留";
     }
     private void FileDragLeave(object sender, DragEventArgs e)
     {
@@ -168,39 +169,17 @@ public partial class MainWindow : Window
         Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
         Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
     }
-    private async void FileDrop(object sender, DragEventArgs e)
+    private void FileDrop(object sender, DragEventArgs e)
     {
         if (HasPendingCreation || NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderDrop(e); return; }
+        var folder = ExternalFolderTarget(e)?.FullPath;
         FileDragLeave(sender, e);
         e.Handled = true;
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
-        e.Effects = (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : DragDropEffects.Copy;
-        var skipped = 0;
-        var normalized = await Task.Run(() => paths.Select(raw =>
-        {
-            try
-            {
-                var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(raw));
-                return File.Exists(path) || Directory.Exists(path) ? path : null;
-            }
-            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { return null; }
-        }).ToArray());
-        if (closing) return;
-        foreach (var raw in normalized)
-        {
-            try
-            {
-                if (raw == null) { skipped++; continue; }
-                var path = raw;
-                if (state.References.Contains(path, StringComparer.OrdinalIgnoreCase)) { skipped++; continue; }
-                state.References.Add(path);
-            }
-            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException) { skipped++; }
-        }
-        SaveCard();
-        await LoadReferences();
-        if (skipped > 0) Status.Text += $" · 跳过{skipped}项重复或无效路径";
+        if ((e.AllowedEffects & DragDropEffects.Copy) == 0 || e.Data.GetData(DataFormats.FileDrop) is not string[] paths) { e.Effects = DragDropEffects.None; return; }
+        e.Effects = DragDropEffects.Copy;
+        var captured = paths.ToArray();
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ImportDesktopFiles(captured, folder)));
     }
     private async void CollectionClick(object sender, RoutedEventArgs e)
     {
@@ -215,32 +194,7 @@ public partial class MainWindow : Window
         state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
         await LoadReferences(); SaveCard();
     }
-    private async void RelocateReference(object sender, RoutedEventArgs e)
-    {
-        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
-        if (tile == null || directory != null) return;
-        string? replacement = null;
-        if (MessageBox.Show(this, "重新定位文件夹？选择“否”定位文件。", "重新定位", MessageBoxButton.YesNoCancel) is var choice && choice != MessageBoxResult.Cancel)
-        {
-            if (choice == MessageBoxResult.Yes) { var picker = new OpenFolderDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FolderName; }
-            else { var picker = new OpenFileDialog(); if (picker.ShowDialog(this) == true) replacement = picker.FileName; }
-        }
-        if (replacement == null || closing) return;
-        state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
-        if (!state.References.Contains(replacement, StringComparer.OrdinalIgnoreCase)) state.References.Add(replacement);
-        await LoadReferences(); SaveCard();
-    }
-    private async void ChooseClick(object sender, RoutedEventArgs e)
-    {
-        if (HasPendingCreation) return;
-        CancelNewItem(sender, e);
-        var picker = new OpenFolderDialog { Title = "选择要展示的文件夹" };
-        if (picker.ShowDialog(this) != true) return;
-        directory = picker.FolderName;
-        TitleText.Text = state.Title;
-        TitleText.ToolTip = directory;
-        await LoadFolder();
-    }
+    private void OpenDesktopClick(object sender, RoutedEventArgs e) => ShellOpen(DesktopFiles.Root);
 
     private async Task LoadFolder()
     {
@@ -256,7 +210,7 @@ public partial class MainWindow : Window
         try
         {
             var path = directory;
-            var entries = await Task.Run(() => FolderReader.Read(path, request.Token), request.Token);
+            var entries = await Task.Run(() => { DesktopFiles.Require(path); return FolderReader.Read(path, request.Token).Where(item => DesktopFiles.Displayable(item.FullPath)).ToArray(); }, request.Token);
             if (request.IsCancellationRequested || version != viewVersion || closing) return;
             IEnumerable<DeskIsle.Core.FolderEntry> ordered = entries;
             if (state.FolderOrders.TryGetValue(path, out var savedOrder))
@@ -266,7 +220,7 @@ public partial class MainWindow : Window
             }
             tiles = ordered.Select(x => new FileTile(x)).ToArray();
             RebuildRows();
-            Status.Text = entries.Count == 0 ? "目录为空。" : "";
+            Status.Text = entries.Length == 0 ? "目录为空。" : "";
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -281,12 +235,20 @@ public partial class MainWindow : Window
     {
         if (DateTime.UtcNow < suppressOpenUntil) return;
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
-        if (tile != null) ShellOpen(tile.FullPath);
+        if (tile != null)
+        {
+            try { DesktopFiles.Require(tile.FullPath); ShellOpen(tile.FullPath); }
+            catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
+        }
     }
     private void RevealClick(object sender, RoutedEventArgs e)
     {
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
-        if (tile != null) ShellOpen(Path.GetDirectoryName(tile.FullPath)!);
+        if (tile != null)
+        {
+            try { var parent = Path.GetDirectoryName(tile.FullPath)!; DesktopFiles.Require(parent); ShellOpen(parent); }
+            catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
+        }
     }
     private void ShellOpen(string path)
     {

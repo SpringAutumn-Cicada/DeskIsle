@@ -9,6 +9,7 @@ public partial class MainWindow
     private readonly DispatcherTimer fileSync = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(30) };
     private bool syncingFiles;
     private bool syncPending;
+    private readonly List<(string Old, string New)> renamedFiles = [];
     private int watcherGeneration;
     private int eventQueued;
     private readonly List<FileSystemWatcher> fileWatchers = [];
@@ -20,7 +21,12 @@ public partial class MainWindow
         syncPending = true;
         if (!eventSync.IsEnabled) eventSync.Start();
     }
-    private void OnFileEvent(object sender, FileSystemEventArgs e) => QueueFileEvent();
+    private void OnFileEvent(object sender, FileSystemEventArgs e)
+    {
+        if (e is RenamedEventArgs renamed && DesktopFiles.IsCardPath(renamed.OldFullPath) && DesktopFiles.IsCardPath(renamed.FullPath) && !Dispatcher.HasShutdownStarted)
+            Dispatcher.BeginInvoke(new Action(() => { renamedFiles.Add((renamed.OldFullPath, renamed.FullPath)); ScheduleFileSync(); }));
+        QueueFileEvent();
+    }
     private void OnWatcherError(object sender, ErrorEventArgs e) => QueueFileEvent();
     private void QueueFileEvent()
     {
@@ -36,7 +42,7 @@ public partial class MainWindow
     private async void RebuildFileWatchers()
     {
         var generation = ++watcherGeneration;
-        var folders = (directory == null ? state.References.Select(Path.GetDirectoryName) : new[] { directory })
+        var folders = (directory == null ? state.References.Where(DesktopFiles.IsCardPath).Select(Path.GetDirectoryName).Append(DesktopFiles.Root) : new[] { directory })
             .Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var replacements = await Task.Run(() =>
         {
@@ -81,7 +87,7 @@ public partial class MainWindow
         // Only a successfully enumerated parent proves a referenced item disappeared.
         // An unavailable drive/share must not be treated as a deletion.
         var parents = new Dictionary<string, HashSet<string>?>(StringComparer.OrdinalIgnoreCase);
-        return paths.Where(path =>
+        return paths.Where(DesktopFiles.Displayable).Where(path =>
         {
             var parent = Path.GetDirectoryName(path);
             if (string.IsNullOrEmpty(parent)) return true;
@@ -95,7 +101,7 @@ public partial class MainWindow
         }).Select(path => new FileTile(new FolderEntry(
             Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : path,
             path, Directory.Exists(path)))
-        { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "路径不可用 · 可右键重新定位" }).ToArray();
+        { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "桌面路径暂不可用" }).ToArray();
     }
 
     private async void SyncFiles(object? sender, EventArgs e)
@@ -107,15 +113,28 @@ public partial class MainWindow
         syncingFiles = true;
         var version = viewVersion;
         var folder = directory;
-        var paths = state.References.ToArray();
+        UpdateMigrationNotice();
+        var paths = state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         try
         {
-            var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Select(x => new FileTile(x)).ToArray());
+            if (renamedFiles.Count > 0)
+            {
+                var changes = renamedFiles.ToArray(); renamedFiles.Clear();
+                var verified = await Task.Run(() => changes.Where(change =>
+                {
+                    try { DesktopFiles.Require(change.New); return !File.Exists(change.Old) && !Directory.Exists(change.Old); }
+                    catch (Exception ex) when (FileTransfer.Recoverable(ex)) { return false; }
+                }).ToArray());
+                if (HasPendingCreation) { renamedFiles.AddRange(verified); ScheduleFileSync(); return; }
+                foreach (var change in verified) workspace.RecordDesktopRename(change.Old, change.New);
+                if (verified.Length > 0) { ScheduleFileSync(); return; }
+            }
+            var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Where(item => DesktopFiles.Displayable(item.FullPath)).Select(x => new FileTile(x)).ToArray());
             if (closing) return;
-            if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References, StringComparer.OrdinalIgnoreCase))
+            if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
             { ScheduleFileSync(); return; }
             // Retain the user's custom order and avoid rebuilding unchanged controls.
-            var byPath = updated.ToDictionary(x => x.FullPath, StringComparer.OrdinalIgnoreCase);
+            var byPath = updated.GroupBy(x => x.FullPath, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
             var existing = tiles.Select(x => x.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var ordered = tiles.Where(x => byPath.ContainsKey(x.FullPath)).Select(x => byPath[x.FullPath])
                 .Concat(updated.Where(x => !existing.Contains(x.FullPath))).ToArray();

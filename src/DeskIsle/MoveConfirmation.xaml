@@ -14,11 +14,11 @@
 <TextBlock Text="移入到" Foreground="#94A3BA" FontSize="10"/>
 <TextBlock x:Name="TargetPath" TextWrapping="Wrap" Foreground="#B9DBE8" FontSize="11" Margin="0,3,0,0"/>
 </StackPanel></Border>
-<TextBlock Text="保存名称（同名时可修改）" FontSize="11" Foreground="#A9B7CD" Margin="0,12,0,5"/>
+<TextBlock Text="保存名称" FontSize="11" Foreground="#A9B7CD" Margin="0,12,0,5"/>
 <TextBox x:Name="DestinationName" FontSize="12" Padding="8,6" MaxLength="200" Background="#1B222E" Foreground="#EDF1F8" CaretBrush="#A8C8FA" BorderBrush="#657EAA" BorderThickness="1" AutomationProperties.Name="移入后的名称">
 <TextBox.Template><ControlTemplate TargetType="TextBox"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost"/></Border></ControlTemplate></TextBox.Template>
 </TextBox>
-<TextBlock Text="将改变真实文件位置；不会覆盖或合并已有项目。" TextWrapping="Wrap" FontSize="10" Foreground="#94A3BA" Margin="0,8,0,4"/>
+<TextBlock Text="将改变桌面文件位置；同名项目会另行询问覆盖、合并或跳过。" TextWrapping="Wrap" FontSize="10" Foreground="#94A3BA" Margin="0,8,0,4"/>
 <TextBlock x:Name="ErrorText" Foreground="#E9ADAD" TextWrapping="Wrap" FontSize="11"/>
 </StackPanel></ScrollViewer>
 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">

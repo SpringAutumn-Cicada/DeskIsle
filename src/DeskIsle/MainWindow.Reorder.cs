@@ -46,7 +46,7 @@ public partial class MainWindow
         var current = e.GetPosition(Files);
         if (Math.Abs(current.X - tilePressPoint.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(current.Y - tilePressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         e.Handled = true;
-        if (!File.Exists(tile.FullPath) && !Directory.Exists(tile.FullPath))
+        if (!DesktopFiles.IsCardPath(tile.FullPath) || !DesktopFiles.Displayable(tile.FullPath) || !File.Exists(tile.FullPath) && !Directory.Exists(tile.FullPath))
         {
             pressedTile = null;
             Status.Text = "路径不可用，无法拖出文件。";
@@ -75,7 +75,7 @@ public partial class MainWindow
             ClearReorderPreview();
         }
     }
-    private bool IsReorder(DragEventArgs e) => e.Data.GetDataPresent(ReorderFormat);
+    private bool IsReorder(DragEventArgs e) => e.Data.GetDataPresent(ReorderFormat) && e.Data.GetData(ReorderFormat) is ReorderPayload payload && payload.CardId == state.Id;
     private bool PointerInFiles(DragEventArgs e)
     {
         var point = e.GetPosition(Files);
@@ -237,7 +237,12 @@ public partial class MainWindow
         {
             ++viewVersion; // Any earlier asynchronous refresh must not overwrite this order.
             tiles = items;
-            if (directory == null) state.References = items.Select(x => x.FullPath).ToList();
+            if (directory == null)
+            {
+                // Hidden/deleted desktop and pending external records are not discarded by sorting visible tiles.
+                var visible = items.Select(x => x.FullPath).ToList();
+                state.References = visible.Concat(state.References.Where(path => !visible.Contains(path, StringComparer.OrdinalIgnoreCase))).ToList();
+            }
             else state.FolderOrders[directory] = items.Select(x => x.FullPath).ToList();
             var offset = FindScroll(Files)?.VerticalOffset ?? 0;
             RebuildRows();

@@ -34,6 +34,17 @@ public static class NewItemService
     }
     public static string Create(string directory, string name, NewItemKind kind)
     {
+        DesktopFiles.Require(directory);
+        return CreateCore(directory, name, kind);
+    }
+    public static (string Path, string Work) CreateDraft(string name, NewItemKind kind)
+    {
+        ValidateName(name, kind);
+        var work = DesktopFiles.WorkDirectory();
+        return (CreateCore(work, name, kind), work);
+    }
+    private static string CreateCore(string directory, string name, NewItemKind kind)
+    {
         ValidateName(name, kind);
         if (!Path.IsPathFullyQualified(directory) || !Directory.Exists(directory)) throw new DirectoryNotFoundException("保存目录不可用，请重新选择。");
         var path = Path.Combine(Path.GetFullPath(directory), name);

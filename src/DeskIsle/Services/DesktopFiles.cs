@@ -4,7 +4,15 @@ namespace DeskIsle.Services;
 /// <summary>All card business files must physically live below the actual Windows desktop.</summary>
 public static class DesktopFiles
 {
-    public static string Root => FileMoveService.Normalize(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+    public static string Root
+    {
+        get
+        {
+            var path = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            if (string.IsNullOrWhiteSpace(path)) throw new DirectoryNotFoundException("未能获取Windows实际桌面目录。");
+            return FileMoveService.Normalize(path);
+        }
+    }
     public const string PrivateName = ".DeskIsle-data";
     public static string PrivateRoot => Path.Combine(Root, PrivateName);
     public static bool Within(string path) => FileMoveService.Same(path, Root) || FileMoveService.Under(path, Root);
@@ -45,9 +53,19 @@ public static class DesktopFiles
     public static string WorkDirectory()
     {
         var marker = Path.Combine(PrivateRoot, "owner.txt");
-        if (Directory.Exists(PrivateRoot))
+        var exists = false;
+        try
         {
-            if (!File.Exists(marker) || File.ReadAllText(marker) != "DeskIsle private transfer storage v1")
+            var attributes = File.GetAttributes(PrivateRoot);
+            if ((attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("内部恢复目录不能是链接。");
+            if ((attributes & FileAttributes.Directory) == 0) throw new IOException("桌面内部工作目录名称被文件占用。");
+            exists = true;
+        }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
+        if (exists)
+        {
+            if (!File.Exists(marker) || (File.GetAttributes(marker) & FileAttributes.ReparsePoint) != 0 || File.ReadAllText(marker) != "DeskIsle private transfer storage v1")
                 throw new IOException("桌面上的.DeskIsle-data目录已被占用；未改动该目录。");
             if ((File.GetAttributes(PrivateRoot) & FileAttributes.ReparsePoint) != 0) throw new IOException("内部恢复目录不能是链接。");
         }
