@@ -16,6 +16,8 @@ internal sealed class WindowPreview : Window
         internal Action? Close;
         internal required object Group;
         internal bool Composite;
+        internal int Attempts, Failures;
+        internal long RetryAt;
     }
     private readonly DockBar bar;
     private readonly Button anchor;
@@ -53,10 +55,10 @@ internal sealed class WindowPreview : Window
         SizeChanged += (_, _) => Place();
         check.Tick += (_, _) =>
         {
-            if (ContainsPointer() || anchor.IsMouseOver) outsideSince = 0;
+            if (ContainsInteractionPointer()) outsideSince = 0;
             else if (outsideSince == 0) outsideSince = Environment.TickCount64;
-            else if (Environment.TickCount64 - outsideSince >= 300) { dismiss(); return; }
-            var live = windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
+            else if (Environment.TickCount64 - outsideSince >= 350) { dismiss(); return; }
+            var live = windows.Where(w => DockNative.IsWindow(w.Handle)).ToArray();
             if (live.Length == 0) { dismiss(); return; }
             if (live.Length != windows.Length) { windows = live; RenderPage(); }
             else UpdateThumbnails();
@@ -78,7 +80,8 @@ internal sealed class WindowPreview : Window
     private void RenderPage()
     {
         if (finished) return;
-        Release(); content.Children.Clear();
+        var previousTiles = tiles.ToDictionary(tile => (tile.Window.Handle, tile.Composite));
+        tiles.Clear(); content.Children.Clear();
         var perPage = PerPage;
         var pages = Math.Max(1, (windows.Length + perPage - 1) / perPage);
         page = Math.Clamp(page, 0, pages - 1);
@@ -89,8 +92,10 @@ internal sealed class WindowPreview : Window
             var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(3), VerticalAlignment = VerticalAlignment.Center };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, _) => click();
-            var tile = new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null };
-            tile.Thumbnail = WindowThumbnail.Create(new WindowInteropHelper(this).Handle, window.Handle, click, close);
+            if (!previousTiles.Remove((window.Handle, group != null), out var tile))
+                tile = new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null };
+            tile.Window = window; tile.Host = host; tile.Click = click; tile.Close = close; tile.Group = group ?? host;
+            EnsureThumbnail(tile);
             if (group == null && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
             {
                 var ratio = thumbnail.AspectRatio;
@@ -126,6 +131,7 @@ internal sealed class WindowPreview : Window
             AddImage(window, row, Math.Max(24, width), height,
                 () => { activate(window); dismiss(); }, () => { if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0); });
         }
+        foreach (var obsolete in previousTiles.Values) obsolete.Thumbnail?.Dispose();
         // Fit the whole row as a unit; no tile becomes disproportionately large on small screens.
         var rowWidth = tiles.Sum(tile => tile.Host.Width + 6) + 12;
         var rowHeight = tiles.Count == 0 ? 160 : tiles.Max(tile => tile.Host.Height);
@@ -159,13 +165,40 @@ internal sealed class WindowPreview : Window
         foreach (var tile in tiles)
         {
             if (tile.Host.ActualWidth <= 0 || !DockNative.IsWindow(tile.Window.Handle)) continue;
-            tile.Thumbnail ??= WindowThumbnail.Create(new WindowInteropHelper(this).Handle, tile.Window.Handle, tile.Click, tile.Close);
+            EnsureThumbnail(tile);
             if (tile.Thumbnail == null) continue;
             tile.Thumbnail.Feedback(ReferenceEquals(hoverGroup, tile.Group));
             var point = tile.Host.TranslatePoint(new Point(), this);
             var a = scale.Transform(point); var b = scale.Transform(point + new Vector(tile.Host.ActualWidth, tile.Host.ActualHeight));
-            tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) }, present);
+            if (tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) }, present))
+                tile.Failures = 0;
+            else if (++tile.Failures >= 3)
+            {
+                tile.Thumbnail.Dispose(); tile.Thumbnail = null; tile.Failures = 0;
+                tile.RetryAt = Environment.TickCount64 + 500;
+            }
         }
+    }
+    private void EnsureThumbnail(Tile tile)
+    {
+        if (tile.Thumbnail != null || tile.Attempts >= 3 || Environment.TickCount64 < tile.RetryAt) return;
+        tile.Attempts++;
+        tile.RetryAt = Environment.TickCount64 + 500;
+        // Indirection keeps retained native surfaces bound to the latest layout/click action.
+        tile.Thumbnail = WindowThumbnail.Create(new WindowInteropHelper(this).Handle, tile.Window.Handle,
+            () => tile.Click(), () => tile.Close?.Invoke());
+    }
+    private bool ContainsInteractionPointer()
+    {
+        if (ContainsPointer()) return true;
+        if (!anchor.IsLoaded || PresentationSource.FromVisual(anchor) == null || !DockNative.GetCursorPos(out var mouse)) return false;
+        var a = anchor.PointToScreen(new Point());
+        var b = anchor.PointToScreen(new Point(anchor.ActualWidth, anchor.ActualHeight));
+        if (mouse.X >= a.X && mouse.X < b.X && mouse.Y >= a.Y && mouse.Y < b.Y) return true;
+        // Preserve the preview while crossing the gap between its native surface and its icon.
+        if (!DockNative.GetWindowRect(new WindowInteropHelper(this).Handle, out var box)) return false;
+        return mouse.X >= Math.Min(box.Left, a.X) && mouse.X < Math.Max(box.Right, b.X)
+            && mouse.Y >= box.Bottom && mouse.Y <= a.Y;
     }
     internal bool ContainsPointer()
     {
@@ -186,9 +219,10 @@ internal sealed class WindowPreview : Window
     internal void SetWindows(DockWindow[] latest)
     {
         if (finished) return;
-        var priorGroup = groups.Find(windows);
-        var nextGroup = groups.Find(latest);
-        var changed = (priorGroup?.Left.Handle != nextGroup?.Left.Handle || priorGroup?.Right.Handle != nextGroup?.Right.Handle) || !windows.Select(w => w.Handle).SequenceEqual(latest.Select(w => w.Handle));
+        var compositeHandles = tiles.Where(tile => tile.Composite).Select(tile => tile.Window.Handle).ToArray();
+        var nextGroup = page == 0 ? groups.Find(latest) : null;
+        var nextHandles = nextGroup == null ? Array.Empty<nint>() : new[] { nextGroup.Left.Handle, nextGroup.Right.Handle };
+        var changed = !compositeHandles.SequenceEqual(nextHandles) || !windows.Select(w => w.Handle).SequenceEqual(latest.Select(w => w.Handle));
         windows = latest;
         if (windows.Length == 0) { dismiss(); return; }
         if (changed) RenderPage();

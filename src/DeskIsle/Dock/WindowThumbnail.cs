@@ -27,6 +27,7 @@ internal sealed class WindowThumbnail : IDisposable
     private readonly HwndSource surface;
     private DockNative.Rect? last;
     private DockNative.Rect? placement;
+    private DockNative.Rect? closePlacement;
     [DllImport("user32.dll")] private static extern nint SetCapture(nint window);
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
     internal bool ContainsPointer()
@@ -107,6 +108,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (message == 0x21) { handled = true; return 3; }
         if (message == 0x201) { pressed = true; SetCapture(hwnd); handled = true;
             if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(148, 166, 190); }
+        if (message == 0x215) { pressed = false; }
         if (message == 0x202 && pressed)
         {
             pressed = false; ReleaseCapture(); handled = true;
@@ -139,7 +141,7 @@ internal sealed class WindowThumbnail : IDisposable
         var position = new DockNative.Rect { Left = origin.X, Top = origin.Y, Right = origin.X + boxWidth, Bottom = origin.Y + boxHeight };
         if (placement is not { } previous || !previous.Equals(position))
         {
-            SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10);
+            if (!SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10)) return false;
             placement = position;
         }
         if (closeSurface != null)
@@ -150,8 +152,14 @@ internal sealed class WindowThumbnail : IDisposable
             // DrawingVisual coordinates are DIPs; HwndSource supplies the monitor scale.
             closeScale = side / (22 * (closeSurface.CompositionTarget?.TransformToDevice.M11 ?? 1));
             DrawClose(closeActive);
-            SetWindowPos(closeSurface.Handle, -1, origin.X + Math.Max(0, boxWidth - side - offset),
-                origin.Y + Math.Min(offset, Math.Max(0, boxHeight - side)), side, side, 0x10);
+            var x = origin.X + Math.Max(0, boxWidth - side - offset);
+            var y = origin.Y + Math.Min(offset, Math.Max(0, boxHeight - side));
+            var closeBox = new DockNative.Rect { Left = x, Top = y, Right = x + side, Bottom = y + side };
+            if (closePlacement is not { } priorClose || !priorClose.Equals(closeBox))
+            {
+                if (!SetWindowPos(closeSurface.Handle, -1, x, y, side, side, 0x10)) return false;
+                closePlacement = closeBox;
+            }
         }
         var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
         box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };

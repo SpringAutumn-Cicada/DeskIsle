@@ -38,7 +38,6 @@ public partial class DockBar : Window
     private bool dragging, menuOpen, closed;
     private HwndSource? source;
     private readonly DispatcherTimer previewDelay = new() { Interval = TimeSpan.FromMilliseconds(250) };
-    private readonly DispatcherTimer previewClose = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private WindowPreview? preview;
     private AppView? hoveredView;
     internal bool Interacting => startMenu.IsOpen || dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
@@ -52,11 +51,6 @@ public partial class DockBar : Window
         {
             previewDelay.Stop();
             if (hoveredView is { } view && view.Button.IsMouseOver && !dragging && !menuOpen) ShowPreview(view);
-        };
-        previewClose.Tick += (_, _) =>
-        {
-            previewClose.Stop();
-            if (preview?.ContainsPointer() != true && hoveredView?.Button.IsMouseOver != true) ClosePreview();
         };
         IsVisibleChanged += (_, _) => { if (!IsVisible) ClosePreview(); };
         SizeChanged += (_, _) => Place();
@@ -165,7 +159,7 @@ public partial class DockBar : Window
         button.MouseEnter += (_, _) =>
         {
             if (!hovered) { hovered = true; Animate(1.12); }
-            previewClose.Stop(); previewDelay.Stop();
+            previewDelay.Stop();
             if (!ReferenceEquals(hoveredView, view)) ClosePreview();
             hoveredView = view;
             if (view.Windows.Length > 0 && preview?.IsVisible != true) previewDelay.Start();
@@ -173,7 +167,7 @@ public partial class DockBar : Window
         button.MouseLeave += (_, _) =>
         {
             if (hovered) { hovered = false; Animate(1); }
-            previewDelay.Stop(); previewClose.Stop(); previewClose.Start();
+            previewDelay.Stop();
         };
         void Animate(double value)
         {
@@ -304,13 +298,11 @@ public partial class DockBar : Window
         hoveredView = view;
         preview = new WindowPreview(this, view.Button, live, view.Image.Source,
             window => { view.RecentWindow = window.Handle; ClosePreview(); Activate(window); }, ClosePreview, splitGroups);
-        preview.MouseEnter += (_, _) => previewClose.Stop();
-        preview.MouseLeave += (_, _) => { previewClose.Stop(); previewClose.Start(); };
         preview.Show();
     }
     private void ClosePreview()
     {
-        previewDelay.Stop(); previewClose.Stop();
+        previewDelay.Stop();
         var previous = preview; preview = null; previous?.Close();
     }
     private static void Activate(DockWindow window)
