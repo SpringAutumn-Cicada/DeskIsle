@@ -15,6 +15,7 @@ public partial class MainWindow
         if (tile == null || !BeginDesktopOperation()) return;
         var source = tile.FullPath;
         string? destination = null;
+        string? warning = null;
         try
         {
             DesktopFiles.Require(source);
@@ -33,9 +34,10 @@ public partial class MainWindow
             });
             workspace.RecordDesktopRename(source, destination);
         }
-        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = "重命名未完成：" + ex.Message; }
+        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { warning = "重命名未完成：" + ex.Message; }
         finally { workspace.EndFileMove(); }
         if (destination != null && !closing) await workspace.RefreshAfterFileMove(source, destination);
+        if (warning != null && !closing) Status.Text = warning;
     }
     private void ClipboardFileClick(object sender, RoutedEventArgs e)
     {
