@@ -37,9 +37,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (message == 0x202 && pressed)
         {
             pressed = false; handled = true;
-            var x = (short)(lParam.ToInt64() & 0xFFFF); var y = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
-            var closing = close != null && x >= GetWidth() - 28 && y >= 0 && y < 28;
-            surface.Dispatcher.BeginInvoke(new Action(() => { if (closing) close!(); else click(); }));
+            surface.Dispatcher.BeginInvoke(click);
         }
         return 0;
     }
@@ -48,7 +46,7 @@ internal sealed class WindowThumbnail : IDisposable
     {
         if (!DockNative.IsWindow(source)) return null;
         // A native owned surface avoids WPF's opaque scene obscuring the DWM image.
-        // Disabled/transparent hit testing lets clicks reach the WPF preview card below.
+        // The native surface handles its own clicks instead of relying on cross-window hit testing.
         var surface = new HwndSource(new HwndSourceParameters("DeskIsle thumbnail")
         {
             ParentWindow = destination, Width = 1, Height = 1,
