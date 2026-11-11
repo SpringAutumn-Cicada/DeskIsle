@@ -25,6 +25,14 @@ internal sealed class DockController : IDisposable
     private DockNative.WinEventProc? changeCallback;
     private readonly DispatcherTimer settle = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
     private long edgeSince, awaySince;
+    private nint lastExternalForeground;
+    internal nint ForegroundForClick()
+    {
+        var foreground = DockNative.GetForegroundWindow();
+        DockNative.GetWindowThreadProcessId(foreground, out var pid);
+        if (foreground != 0 && pid != Environment.ProcessId) lastExternalForeground = foreground;
+        return DockNative.IsWindow(lastExternalForeground) ? lastExternalForeground : 0;
+    }
     private DockPin[] pins = [];
     private DockWindow[] windows = [];
     private string[] resolvedPaths = [];
@@ -81,6 +89,7 @@ internal sealed class DockController : IDisposable
     }
     private void CreateWindows()
     {
+        lastExternalForeground = DockNative.GetForegroundWindow();
         bar = new(this); bar.Show(); bar.Place(); bar.Hide();
         var button = new Button { Content = "返回 Dock", Padding = new Thickness(12, 7, 12, 7), ToolTip = "返回悬浮 Dock；右键可关闭 Dock" };
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
@@ -97,8 +106,9 @@ internal sealed class DockController : IDisposable
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
         messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
         messages.AddHook(WindowMessage);
-        changeCallback = (_, eventId, _, objectId, childId, _, _) =>
+        changeCallback = (_, eventId, window, objectId, childId, _, _) =>
         {
+            if (eventId == 3 && window != 0) lastExternalForeground = window;
             if (eventId != 3 && (objectId != 0 || childId != 0 || eventId is not (0x8000 or 0x8001 or 0x8002 or 0x8003 or 0x800C))) return;
             if (disposed || lease == null || settle.IsEnabled) return;
             settle.Start();

@@ -4,7 +4,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 namespace DeskIsle.Dock;
 
 public partial class DockBar : Window
@@ -29,6 +28,7 @@ public partial class DockBar : Window
     private readonly TextBlock emptyHint = new() { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) };
     private Point down;
     private string? dragPin;
+    private nint pressedForeground;
     private bool dragging, menuOpen, closed;
     private HwndSource? source;
     internal bool Interacting => dragging || menuOpen;
@@ -49,12 +49,14 @@ public partial class DockBar : Window
     {
         base.OnSourceInitialized(e);
         source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        DockNative.SetWindowLong(hwnd, -20, DockNative.GetWindowLong(hwnd, -20) | 0x08000000 | 0x80);
         source?.AddHook(MouseActivation);
     }
     private nint MouseActivation(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         // MA_NOACTIVATE: preserve the application's foreground state through a Dock click.
-        if (message == 0x21) { handled = true; return 3; }
+        if (message == 0x21) { pressedForeground = controller.ForegroundForClick(); handled = true; return 3; }
         return 0;
     }
     protected override void OnClosed(EventArgs e)
@@ -120,26 +122,20 @@ public partial class DockBar : Window
         var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator };
         var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        var transform = new ScaleTransform(1, 1);
-        image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);
-        var hovered = false;
-        button.MouseEnter += (_, _) => { if (hovered) return; hovered = true; Animate(1.12); };
-        button.MouseLeave += (_, _) => { if (!hovered) return; hovered = false; Animate(1); };
-        void Animate(double value)
-        {
-            var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100));
-            transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
-            transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
-        }
+        // Keep icon pixels untransformed. Hover feedback comes from the button background.
+        button.Focusable = false;
         button.Click += (_, _) =>
         {
-            var active = view.Windows.FirstOrDefault(w => w.Handle == DockNative.GetForegroundWindow() && !DockNative.IsIconic(w.Handle));
-            if (active != null) DockNative.ShowWindowAsync(active.Handle, 6);
+            var foreground = pressedForeground != 0 ? pressedForeground : controller.ForegroundForClick();
+            var root = DockNative.GetAncestor(foreground, 3);
+            var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && !DockNative.IsIconic(w.Handle));
+            pressedForeground = 0;
+            if (active != null) DockNative.PostMessage(active.Handle, 0x0112, 0xF020, 0);
             else if (view.Windows.Length == 1) Activate(view.Windows[0]);
             else if (view.Windows.Length > 1) OpenWindows(button, view.Windows);
             else if (view.Pin != null) controller.Launch(view.Pin.Path);
         };
-        button.PreviewMouseLeftButtonDown += (_, e) => { down = e.GetPosition(this); dragPin = view.Pin?.Path; };
+        button.PreviewMouseLeftButtonDown += (_, e) => { pressedForeground = controller.ForegroundForClick(); down = e.GetPosition(this); dragPin = view.Pin?.Path; };
         button.PreviewMouseMove += (_, e) =>
         {
             var pin = view.Pin;
@@ -196,7 +192,7 @@ public partial class DockBar : Window
         var windows = view.Windows;
         var path = view.IconPath;
         if (path == null && windows.Length == 0) return;
-        var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
+        var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX), 256, 512);
         var key = (path ?? $"window:{windows[0].Handle}") + "|" + pixels;
         if (view.IconKey == key) return;
         view.IconKey = key;
