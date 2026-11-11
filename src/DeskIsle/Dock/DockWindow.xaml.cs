@@ -84,7 +84,7 @@ public partial class DockBar : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 284);
+        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 324);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
@@ -360,6 +360,11 @@ public partial class DockBar : Window
         if (!DockNative.OpenStartMenu()) MessageBox.Show("系统未接受开始菜单快捷键，请按Windows键打开。", "DeskIsle");
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
+    private void TaskManagerClick(object sender, RoutedEventArgs e)
+    {
+        ClosePreview();
+        controller.Launch(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "Taskmgr.exe"));
+    }
     private void SettingsClick(object sender, RoutedEventArgs e) => controller.Configure();
     private void DropPins(object sender, DragEventArgs e)
     { if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) controller.Pin(paths); e.Handled = true; }

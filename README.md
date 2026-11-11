@@ -158,3 +158,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.5.3：采用提醒方案 A，右上角珊瑚红提示点与底部细灯替代琥珀外框；前五秒底灯呼吸，随后常亮，激活应用后清除。详见 [Dock 珊瑚提示点方案 A](docs/Dock珊瑚提示点方案A.md)。
 
 1.5.4：按用户选择改用提醒方案 C，以底部暖色柔光圆点替代方案 A 的右上角提示点和短线，保留提醒与自动弹出逻辑。详见 [Dock 暖色柔光点方案 C](docs/Dock暖色柔光点方案C.md)。
+
+1.5.5：在 Dock 设置按钮左侧新增任务管理器入口，并为工具按钮扩展预留滚动区宽度。详见 [Dock 任务管理器入口](docs/Dock任务管理器入口.md)。
