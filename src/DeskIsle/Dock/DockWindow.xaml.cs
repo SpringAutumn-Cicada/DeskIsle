@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 namespace DeskIsle.Dock;
@@ -27,6 +28,21 @@ public partial class DockBar : Window
         SizeChanged += (_, _) => Place();
         DpiChanged += (_, _) => { icons.Clear(); signature = ""; Place(); };
     }
+    private HwndSource? source;
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        source?.AddHook(MouseActivation);
+    }
+    private nint MouseActivation(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        // MA_NOACTIVATE lets the click see the actual application's foreground status.
+        if (message == 0x21) { handled = true; return 3; }
+        return 0;
+    }
+    protected override void OnClosed(EventArgs e)
+    { source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var area = SystemParameters.WorkArea;
@@ -81,7 +97,9 @@ public partial class DockBar : Window
         void Animate(double value) { var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100)); transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation); transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation); }
         button.Click += (_, _) =>
         {
-            if (windows.Length == 1) Activate(windows[0]);
+            var active = windows.FirstOrDefault(w => w.Handle == DockNative.GetForegroundWindow() && !DockNative.IsIconic(w.Handle));
+            if (active != null) DockNative.ShowWindowAsync(active.Handle, 6);
+            else if (windows.Length == 1) Activate(windows[0]);
             else if (windows.Length > 1) OpenWindows(button, windows);
             else if (pin != null) controller.Launch(pin.Path);
         };

@@ -150,6 +150,14 @@ internal sealed class DockController : IDisposable
         if (DockNative.FullScreen()) { bar.Hide(); returnButton?.Hide(); edgeSince = 0; return; }
         if (lease.NativeMode) { if (returnButton != null && (!returnButton.IsVisible || DockNative.IsIconic(new WindowInteropHelper(returnButton).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(returnButton).Handle)))
             { PlaceReturn(); returnButton.WindowState = WindowState.Normal; returnButton.Show(); DockNative.ShowWindowAsync(new WindowInteropHelper(returnButton).Handle, 4); } return; }
+        // A desktop with no unminimized application windows keeps its launcher visible.
+        if (windows.All(w => !DockNative.IsWindowVisible(w.Handle) || DockNative.IsIconic(w.Handle)))
+        {
+            if (!bar.IsVisible || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle)) Reveal();
+            awaySince = Environment.TickCount64;
+            edgeSince = 0;
+            return;
+        }
         if (!DockNative.GetCursorPos(out var mouse)) return;
         var monitor = DockNative.Primary().Monitor;
         var now = Environment.TickCount64;
