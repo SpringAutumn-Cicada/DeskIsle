@@ -52,6 +52,7 @@ public static class DesktopFiles
     }
     public static string WorkDirectory()
     {
+        Require(Root);
         var marker = Path.Combine(PrivateRoot, "owner.txt");
         var exists = false;
         try

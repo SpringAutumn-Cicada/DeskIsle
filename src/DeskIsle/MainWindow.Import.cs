@@ -10,7 +10,7 @@ public partial class MainWindow
         var dialog = new TransferProgressWindow(this, move ? "正在移入桌面文件夹" : "正在导入到桌面",
             engine => engine.Run(sources.OrderBy(path => path.Length), target, move, name, draft),
             completion => Dispatcher.InvokeAsync(() => workspace.RecordTransfer(state.Id, completion)).Task,
-            migration ? workspace.ImportedPaths : null);
+            migration ? workspace.ImportedPaths : null, moving: move);
         TrackDialog(dialog);
         dialog.ShowDialog();
         return dialog.Report;

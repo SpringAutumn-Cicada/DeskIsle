@@ -12,9 +12,10 @@ public partial class TransferProgressWindow : Window
     private CollisionAction? foldersDecision;
     public TransferReport Report { get; private set; } = new();
     public TransferProgressWindow(Window owner, string heading, Func<FileTransfer, Task<TransferReport>> operation,
-        Func<TransferCompletion, Task> committed, IReadOnlyDictionary<string, string>? imported = null)
+        Func<TransferCompletion, Task> committed, IReadOnlyDictionary<string, string>? imported = null, bool moving = false)
     {
         InitializeComponent(); Owner = owner; Heading.Text = heading;
+        Summary.Text = moving ? "确认后移动桌面文件；同名项目会询问。" : "复制到桌面，原件保留；同名项目会询问。";
         MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
         Closing += (_, e) => { if (!finished) { e.Cancel = true; RequestCancel(); } };
         Closed += (_, _) => cancellation.Dispose();
@@ -34,6 +35,7 @@ public partial class TransferProgressWindow : Window
             Summary.Text = Report.Summary;
             Details.Text = string.Join(Environment.NewLine, Report.Errors);
             CancelAction.IsEnabled = true; CancelAction.Content = "完成";
+            if (Report.Errors.Count == 0 && !Report.Cancelled) Close();
         };
     }
     private async Task<CollisionAction> Ask(Collision collision)

@@ -141,12 +141,22 @@ public sealed class FileTransfer(
     private async Task<bool> CopyFile(string source, string target, EntryStamp incoming, bool move)
     {
         // Lock the source against writes/deletion while preparing its complete desktop copy.
+        EntryStamp? approved = null;
+        var firstTarget = EntryStamp.Read(target);
+        if (firstTarget != null)
+        {
+            var firstChoice = await conflict(new(source, target, incoming, firstTarget));
+            if (firstChoice == CollisionAction.Cancel) throw new OperationCanceledException();
+            if (firstChoice == CollisionAction.Skip || firstTarget.Directory) { report.Skipped++; return false; }
+            approved = firstTarget;
+        }
         if (move && EntryStamp.Read(target) == null)
         {
             cancellation.ThrowIfCancellationRequested();
             DesktopFiles.Require(source); DesktopFiles.Require(target, missingAllowed: true);
             try
             {
+                if (EntryStamp.Read(source) != incoming) throw new IOException("来源已变化，请重试。");
                 File.Move(source, target, overwrite: false);
             }
             catch (IOException) when (EntryStamp.Read(target) != null && File.Exists(source)) { return await CopyFile(source, target, incoming, move); }
@@ -160,6 +170,7 @@ public sealed class FileTransfer(
             await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 131072, FileOptions.Asynchronous | FileOptions.SequentialScan))
             await using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, FileOptions.Asynchronous))
             {
+                if (EntryStamp.Read(source) != incoming) throw new IOException("来源在确认后发生变化，未提交目标，请重试。");
                 var total = input.Length; var done = 0L; var buffer = new byte[131072];
                 var lastProgress = Environment.TickCount64;
                 progress(new(source, 0, total));
@@ -186,7 +197,7 @@ public sealed class FileTransfer(
                     try { File.Move(temp, target, overwrite: false); break; }
                     catch (IOException) when (EntryStamp.Read(target) != null) { continue; }
                 }
-                var decision = await conflict(new(source, target, incoming, existing));
+                var decision = approved == existing ? CollisionAction.Replace : await conflict(new(source, target, incoming, existing));
                 if (decision == CollisionAction.Cancel) throw new OperationCanceledException();
                 if (decision == CollisionAction.Skip || existing.Directory) { report.Skipped++; return false; }
                 cancellation.ThrowIfCancellationRequested();
