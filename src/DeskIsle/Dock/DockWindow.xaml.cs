@@ -84,14 +84,11 @@ public partial class DockBar : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        // Equal side widths keep the clock at the screen and Dock center even with unequal app counts.
-        var side = Math.Min(Math.Max(PinnedApps.Children.Count, RunningApps.Children.Count) * 50,
-            Math.Max(0, (b.X - a.X - 350) / 2));
-        if (PinnedScroller.Width != side) PinnedScroller.Width = side;
-        if (RunningScroller.Width != side) RunningScroller.Width = side;
+        Scroller.MaxWidth = Math.Max(0, b.X - a.X - 350);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
+    private readonly Border appSeparator = new() { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) };
     private DockPin[]? pendingPins;
     private DockWindow[]? pendingWindows;
     private void FlushApps()
@@ -136,7 +133,10 @@ public partial class DockBar : Window
         if (runningOrder.Count > 256) runningOrder.RemoveAll(id => !extra.ContainsKey(id));
         foreach (var id in runningOrder.Where(extra.ContainsKey))
         { var group = extra[id]; Use("running:" + id, group[0].Title, group[0].Executable, null, group); }
-        // Retain existing controls and hover state; each app belongs to exactly one side.
+        var desired = new List<UIElement>(pinned);
+        if (pinned.Count > 0 && running.Count > 0) desired.Add(appSeparator);
+        desired.AddRange(running);
+        // Retain existing controls and hover state while restoring the single application row.
         static void Reconcile(StackPanel panel, List<UIElement> desired)
         {
             for (var i = panel.Children.Count - 1; i >= 0; i--)
@@ -148,7 +148,7 @@ public partial class DockBar : Window
                 panel.Children.Insert(i, desired[i]);
             }
         }
-        Reconcile(PinnedApps, pinned); Reconcile(RunningApps, running);
+        Reconcile(Apps, desired);
         Place();
         preview?.SetWindows(hoveredView?.Windows ?? []);
         if (preview == null && hoveredView is { Windows.Length: > 0 } hovered
