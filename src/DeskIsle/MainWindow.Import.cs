@@ -45,6 +45,8 @@ public partial class MainWindow
                     var path = FileMoveService.Normalize(raw);
                     if (explicitFolder == null && DesktopFiles.IsCardPath(path))
                     {
+                        // Existing files inside desktop folders are not desktop icons.
+                        if (!DesktopFiles.IsDesktopItem(path)) { report.Skipped++; continue; }
                         await Task.Run(() => DesktopFiles.Require(path));
                         if (!state.References.Contains(path, StringComparer.OrdinalIgnoreCase)) state.References.Add(path);
                         report.Completed++;
@@ -58,7 +60,7 @@ public partial class MainWindow
                 var transferred = await RunTransfer(copies.ToArray(), target);
                 transferred.Completed += report.Completed; transferred.Errors.AddRange(report.Errors);
                 report = transferred;
-                foreach (var item in report.Roots.Where(item => item.Published))
+                foreach (var item in report.Roots.Where(item => item.Published && DesktopFiles.IsDesktopItem(item.Target)))
                     if (!state.References.Contains(item.Target, StringComparer.OrdinalIgnoreCase)) state.References.Add(item.Target);
             }
             workspace.Save();

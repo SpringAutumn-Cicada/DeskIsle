@@ -43,7 +43,7 @@ public partial class MainWindow
     private async void RebuildFileWatchers()
     {
         var generation = ++watcherGeneration;
-        var folders = (directory == null ? state.References.Where(DesktopFiles.IsCardPath).Select(Path.GetDirectoryName).Append(DesktopFiles.Root) : new[] { directory })
+        var folders = (directory == null ? state.References.Where(DesktopFiles.IsDesktopItem).Select(Path.GetDirectoryName).Append(DesktopFiles.Root) : new[] { directory })
             .Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var replacements = await Task.Run(() =>
         {
@@ -88,7 +88,7 @@ public partial class MainWindow
         // Only a successfully enumerated parent proves a referenced item disappeared.
         // An unavailable drive/share must not be treated as a deletion.
         var parents = new Dictionary<string, HashSet<string>?>(StringComparer.OrdinalIgnoreCase);
-        return paths.Where(DesktopFiles.Displayable).Where(path =>
+        return paths.Where(DesktopFiles.VisibleDesktopItem).Where(path =>
         {
             var parent = Path.GetDirectoryName(path);
             if (string.IsNullOrEmpty(parent)) return true;
@@ -115,7 +115,7 @@ public partial class MainWindow
         var version = viewVersion;
         var folder = directory;
         UpdateMigrationNotice();
-        var paths = state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         try
         {
             if (renamedFiles.Count > 0)
@@ -132,7 +132,7 @@ public partial class MainWindow
             }
             var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Where(item => DesktopFiles.Displayable(item.FullPath)).Select(x => new FileTile(x)).ToArray());
             if (closing) return;
-            if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
+            if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
             { ScheduleFileSync(); return; }
             // Retain the user's custom order and avoid rebuilding unchanged controls.
             var byPath = updated.GroupBy(x => x.FullPath, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);

@@ -188,6 +188,9 @@ public sealed class WorkspaceManager : IDisposable
     public void Save()
     {
         if (store.ReadOnly) throw new IOException("配置处于只读保护模式，未覆盖原文件。");
+        // Drop grouping references only, never the files. External pending migration records stay intact.
+        foreach (var card in state.Cards)
+            card.References.RemoveAll(path => DesktopFiles.IsCardPath(path) && !DesktopFiles.IsDesktopItem(path));
         store.Save(state);
     }
     public void Exit()

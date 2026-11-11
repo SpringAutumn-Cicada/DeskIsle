@@ -139,7 +139,7 @@ public partial class MainWindow : Window
         TitleText.ToolTip = null;
         TitleText.Text = state.Title;
         UpdateMigrationNotice();
-        var paths = state.References.Where(DesktopFiles.IsCardPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var entries = await Task.Run(() => ReadReferences(paths));
         if (directory != null || version != viewVersion || closing) return;
         if (closing) return;

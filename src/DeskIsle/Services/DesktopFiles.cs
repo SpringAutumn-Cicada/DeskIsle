@@ -22,6 +22,18 @@ public static class DesktopFiles
         try { return Within(path) && !Private(path) && !FileMoveService.Same(path, Root); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException) { return false; }
     }
+    // Card groups contain only direct desktop children; transfers may still use subdirectories.
+    public static bool IsDesktopItem(string path)
+    {
+        if (!IsCardPath(path)) return false;
+        return Path.GetDirectoryName(FileMoveService.Normalize(path)) is { } parent && FileMoveService.Same(parent, Root);
+    }
+    public static bool VisibleDesktopItem(string path)
+    {
+        if (!IsDesktopItem(path) || !Displayable(path)) return false;
+        try { return (File.GetAttributes(path) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return true; }
+    }
     public static void Require(string path, bool missingAllowed = false)
     {
         path = FileMoveService.Normalize(path);
