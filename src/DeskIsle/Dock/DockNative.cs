@@ -44,14 +44,6 @@ internal static class DockNative
         [FieldOffset(12)] public uint Flags;
     }
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
-    internal static bool OpenStartMenu()
-    {
-        // Windows x64 INPUT layout. Send a complete Win press/release without changing Shell settings.
-        var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = 0x5B, Flags = 2 } };
-        var sent = SendInput(2, inputs, Marshal.SizeOf<Input>());
-        if (sent == 1) SendInput(1, [inputs[1]], Marshal.SizeOf<Input>());
-        return sent == 2;
-    }
     internal static bool ShowDesktop()
     {
         var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = 0x44 },

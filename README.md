@@ -162,3 +162,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.5.5：在 Dock 设置按钮左侧新增任务管理器入口，并为工具按钮扩展预留滚动区宽度。详见 [Dock 任务管理器入口](docs/Dock任务管理器入口.md)。
 
 1.6.0：Dock 增加轻微上浮淡入与下沉淡出，支持中途反转、重复唤出不重播及系统减少动画偏好；保持开始菜单与预览逻辑。详见 [Dock 显隐过渡动画](docs/Dock显隐过渡动画.md)。
+
+1.7.0：删除 Dock 开始菜单按钮和全部菜单定位逻辑，左侧替换为冷蓝等宽 HH:mm 时钟，仅显示时间；隐藏时暂停更新，显示时立即校准。详见 [Dock 时间显示替换开始菜单](docs/Dock时间显示替换开始菜单.md)。

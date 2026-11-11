@@ -2,7 +2,11 @@
 <Border x:Name="Surface" CornerRadius="22" Background="#EF202632" BorderBrush="#665D718A" BorderThickness="1" Padding="10,6" Margin="8">
 <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity=".25"/></Border.Effect>
 <StackPanel Orientation="Horizontal">
-<Button Width="44" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="开始菜单" AutomationProperties.Name="打开Windows开始菜单" Click="StartClick"><Path Data="M1,1 L10,1 L10,10 L1,10 Z M13,1 L22,1 L22,10 L13,10 Z M1,13 L10,13 L10,22 L1,22 Z M13,13 L22,13 L22,22 L13,22 Z" Fill="#89C6F3" Width="22" Height="22" Stretch="Uniform"/></Button>
+<Grid Width="80" Height="48" Margin="2,0" AutomationProperties.Name="当前时间">
+<Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="3"/></Grid.RowDefinitions>
+<TextBlock x:Name="ClockText" Text="00:00" FontFamily="Cascadia Mono, Consolas" FontSize="23" FontWeight="SemiBold" Foreground="#C2E8FA" HorizontalAlignment="Center" VerticalAlignment="Center" TextOptions.TextFormattingMode="Display"/>
+<Border Grid.Row="1" Width="26" Height="1" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0.65"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#0068BDE8" Offset="0"/><GradientStop Color="#91DBF3" Offset="0.5"/><GradientStop Color="#0068BDE8" Offset="1"/></LinearGradientBrush></Border.Background></Border>
+</Grid>
 <Border Width="1" Background="#506077" Margin="6,8"/>
 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="Apps" Orientation="Horizontal"/></ScrollViewer>
 <Border Width="1" Background="#506077" Margin="8,8"/>

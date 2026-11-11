@@ -25,7 +25,7 @@ public partial class DockBar : Window
         internal SplitPair? MinimizedPair;
     }
     private readonly DockController controller;
-    private readonly StartMenuPlacement startMenu;
+    private readonly DispatcherTimer clockTick = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AppView> views = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim iconSlots = new(2);
@@ -41,13 +41,15 @@ public partial class DockBar : Window
     private readonly DispatcherTimer previewDelay = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private WindowPreview? preview;
     private AppView? hoveredView;
-    internal bool Interacting => startMenu.IsOpen || dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
+    internal bool Interacting => dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
     internal DockBar(DockController controller)
     {
         this.controller = controller;
-        startMenu = new StartMenuPlacement(this);
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
+        UpdateClock();
+        clockTick.Tick += (_, _) => UpdateClock();
+        IsVisibleChanged += (_, _) => { if (IsVisible) { UpdateClock(); clockTick.Start(); } else clockTick.Stop(); };
         previewDelay.Tick += (_, _) =>
         {
             previewDelay.Stop();
@@ -77,14 +79,14 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); startMenu.Dispose(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); clockTick.Stop(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 324);
+        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 364);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
@@ -353,11 +355,10 @@ public partial class DockBar : Window
         ClosePreview();
         if (!DockNative.ShowDesktop()) MessageBox.Show("系统未接受显示桌面快捷键，请按 Win+D。", "DeskIsle");
     }
-    private void StartClick(object sender, RoutedEventArgs e)
+    private void UpdateClock()
     {
-        ClosePreview();
-        startMenu.Begin();
-        if (!DockNative.OpenStartMenu()) MessageBox.Show("系统未接受开始菜单快捷键，请按Windows键打开。", "DeskIsle");
+        var text = DateTime.Now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        if (ClockText.Text != text) ClockText.Text = text;
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
     private void TaskManagerClick(object sender, RoutedEventArgs e)
