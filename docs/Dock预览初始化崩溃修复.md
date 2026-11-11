@@ -9,3 +9,7 @@ Windows Application日志事件1026确认1.2.2未处理异常：InvalidOperation
 修改WindowPreview.cs、项目版本和README；未直接修改用户配置、文件或系统状态。
 
 本轮实际读取现有错误日志、检视代码；不运行自动化测试或Windows交互验收。需用户验证悬停、点击预览、关闭/翻页、组合恢复不再退出。构建与包校验不等于功能验收通过。
+
+## 实际发布
+
+分支test，实现d82588d。项目专用SDK10.0.403，发布脚本最终退出码0。桌面包`E:\桌面\DeskIsle-1.2.3-win-x64.zip`，63367244字节，共403项，ZIP CRC正常，源包与桌面副本SHA256一致：`c8800fc6cdfec27f384d287beebea1271f21e34062f38bc1fd44664544acd841`。`git diff --check`无格式错误。未执行自动化测试或Windows点击验收。
