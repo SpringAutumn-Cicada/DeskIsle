@@ -16,6 +16,8 @@ public partial class DockBar : Window
         internal required Image Image;
         internal required TextBlock Placeholder;
         internal required Border Indicator;
+        internal required Border Attention;
+        internal bool Alerting;
         internal DockWindow[] Windows = [];
         internal DockPin? Pin;
         internal string? IconPath, IconKey;
@@ -76,7 +78,7 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; startMenu.Dispose(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; foreach (var view in views.Values) view.Attention.BeginAnimation(OpacityProperty, null); startMenu.Dispose(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();
@@ -116,6 +118,7 @@ public partial class DockBar : Window
             view.Button.Opacity = pin != null && !File.Exists(pin.Path) ? .45 : 1;
             view.Indicator.Visibility = group.Length > 0 ? Visibility.Visible : Visibility.Hidden;
             view.Indicator.Background = group.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
+            ApplyAttention(view);
             LoadIcon(view);
             desired.Add(view.Button);
         }
@@ -144,7 +147,28 @@ public partial class DockBar : Window
         if (preview == null && hoveredView is { Windows.Length: > 0 } hovered
             && hovered.Button.IsMouseOver && !previewDelay.IsEnabled) previewDelay.Start();
         foreach (var id in views.Keys.Where(id => !alive.Contains(id)).ToArray())
-        { views[id].IconVersion++; views.Remove(id); }
+        { views[id].IconVersion++; views[id].Attention.BeginAnimation(OpacityProperty, null); views.Remove(id); }
+    }
+    private readonly HashSet<nint> attentionHandles = [];
+    internal void SetAttention(IEnumerable<nint> handles)
+    {
+        attentionHandles.Clear(); attentionHandles.UnionWith(handles);
+        foreach (var view in views.Values) ApplyAttention(view);
+    }
+    private void ApplyAttention(AppView view)
+    {
+        var alerting = view.Windows.Any(w => attentionHandles.Contains(w.Handle));
+        if (view.Alerting != alerting)
+        {
+            view.Alerting = alerting;
+            view.Attention.BeginAnimation(OpacityProperty, null);
+            if (alerting)
+                view.Attention.BeginAnimation(OpacityProperty, new DoubleAnimation(.25, .8, TimeSpan.FromMilliseconds(850))
+                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            else view.Attention.Opacity = 0;
+        }
+        view.Indicator.Background = alerting ? Brushes.Orange :
+            view.Windows.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
     }
     private AppView CreateView()
     {
@@ -152,8 +176,10 @@ public partial class DockBar : Window
         var image = new Image { Width = 36, Height = 36, Margin = new Thickness(0, 0, 0, 5), Stretch = Stretch.Uniform };
         var placeholder = new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var indicator = new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center };
-        var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator };
-        var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
+        var attention = new Border { Background = new SolidColorBrush(Color.FromArgb(100, 239, 156, 66)),
+            CornerRadius = new CornerRadius(9), Opacity = 0, IsHitTestVisible = false };
+        var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator, Attention = attention };
+        var panel = new Grid(); panel.Children.Add(attention); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
         var transform = new ScaleTransform(1, 1);
         image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);

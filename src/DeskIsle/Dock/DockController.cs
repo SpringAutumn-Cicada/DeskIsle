@@ -9,7 +9,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 namespace DeskIsle.Dock;
 
-internal sealed class DockController : IDisposable
+internal sealed partial class DockController : IDisposable
 {
     private readonly DockStore store = new();
     internal DockSettings Settings { get; }
@@ -106,6 +106,7 @@ internal sealed class DockController : IDisposable
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
         messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
         messages.AddHook(WindowMessage);
+        RegisterAttention();
         changeCallback = (_, eventId, window, objectId, childId, _, _) =>
         {
             if (eventId == 3 && window != 0) lastExternalForeground = window;
@@ -125,6 +126,7 @@ internal sealed class DockController : IDisposable
     }
     private nint WindowMessage(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        HandleAttentionMessage(message, wParam, lParam);
         if (message == 0x0312 && wParam == 1) { ToggleNative(); handled = true; }
         if (message is 0x007E or 0x02E0) { bar?.Place(); PlaceReturn(); }
         return 0;
@@ -158,6 +160,13 @@ internal sealed class DockController : IDisposable
     private void PointerTick(object? sender, EventArgs e)
     {
         if (lease == null || bar == null) return;
+        UpdateAttention();
+        if (Environment.TickCount64 < attentionUntil && !lease.NativeMode)
+        {
+            if (!bar.IsVisible) Reveal();
+            awaySince = Environment.TickCount64;
+            return;
+        }
         if (DockNative.FullScreen() && !bar.Interacting && !bar.IsMouseOver) { bar.Hide(); returnButton?.Hide(); edgeSince = 0; return; }
         if (lease.NativeMode) { if (returnButton != null && (!returnButton.IsVisible || DockNative.IsIconic(new WindowInteropHelper(returnButton).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(returnButton).Handle)))
             { PlaceReturn(); returnButton.WindowState = WindowState.Normal; returnButton.Show(); DockNative.ShowWindowAsync(new WindowInteropHelper(returnButton).Handle, 4); } return; }
@@ -252,6 +261,7 @@ internal sealed class DockController : IDisposable
     private void Stop()
     {
         pointer.Stop(); refresh.Stop(); settle.Stop();
+        StopAttention();
         if (windowHook != 0) { DockNative.UnhookWinEvent(windowHook); windowHook = 0; }
         if (foregroundHook != 0) { DockNative.UnhookWinEvent(foregroundHook); foregroundHook = 0; }
         if (messages != null) { if (hotkey) DockNative.UnregisterHotKey(messages.Handle, 1); hotkey = false; messages.RemoveHook(WindowMessage); messages = null; }
