@@ -11,3 +11,7 @@
 修改WindowPreview.cs、WindowThumbnail.cs、版本及README，未修改预览激活/停留、分屏恢复、图标或文件操作逻辑，用户配置与文件未改。
 
 未运行自动化测试、lint、独立类型检查或Windows视觉/交互验收。需用户按参考图检查单窗、组合、窄长窗口、小屏和不同DPI的均衡效果；交付构建与包校验不替代视觉验收。
+
+## 实际发布
+
+分支test，实现0cc7570。项目专用SDK10.0.403，发布脚本退出码0。包`E:\桌面\DeskIsle-1.2.5-win-x64.zip`，63368242字节，共403项，ZIP CRC正常；源包和桌面副本SHA256一致：`97fbd860dcfdaaf1294d2c4f6fe76407179ecccae7c22881c3576c8a8c0f005d`。`git diff --check`无格式错误。Windows视觉效果待用户验收，未执行自动化测试。
