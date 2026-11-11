@@ -138,13 +138,17 @@ internal sealed class DockController : IDisposable
     private void Reveal()
     {
         if (bar == null || lease == null || lease.NativeMode) return;
-        bar.Show(); bar.Place(); awaySince = Environment.TickCount64;
+        if (bar.WindowState == WindowState.Minimized) bar.WindowState = WindowState.Normal;
+        bar.Show(); bar.Place();
+        DockNative.ShowWindowAsync(new WindowInteropHelper(bar).Handle, 4);
+        awaySince = Environment.TickCount64;
     }
     private void PointerTick(object? sender, EventArgs e)
     {
         if (lease == null || bar == null) return;
         if (DockNative.FullScreen()) { bar.Hide(); returnButton?.Hide(); edgeSince = 0; return; }
-        if (lease.NativeMode) { if (returnButton?.IsVisible == false) { PlaceReturn(); returnButton.Show(); } return; }
+        if (lease.NativeMode) { if (returnButton != null && (!returnButton.IsVisible || DockNative.IsIconic(new WindowInteropHelper(returnButton).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(returnButton).Handle)))
+            { PlaceReturn(); returnButton.WindowState = WindowState.Normal; returnButton.Show(); DockNative.ShowWindowAsync(new WindowInteropHelper(returnButton).Handle, 4); } return; }
         if (!DockNative.GetCursorPos(out var mouse)) return;
         var monitor = DockNative.Primary().Monitor;
         var now = Environment.TickCount64;
@@ -152,7 +156,7 @@ internal sealed class DockController : IDisposable
         if (atEdge)
         {
             if (edgeSince == 0) edgeSince = now;
-            if (now - edgeSince >= Settings.RevealMs && !bar.IsVisible) Reveal();
+            if (now - edgeSince >= Settings.RevealMs && (!bar.IsVisible || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle))) Reveal();
             awaySince = now;
         }
         else edgeSince = 0;
@@ -228,5 +232,5 @@ internal sealed class DockController : IDisposable
         bar?.Close(); bar = null; returnButton?.Close(); returnButton = null;
         lease?.Dispose(); lease = null;
     }
-    public void Dispose() { disposed = true; settingsWindow?.Close(); Stop(); }
+    public void Dispose() { if (disposed) return; disposed = true; settingsWindow?.Close(); Stop(); }
 }

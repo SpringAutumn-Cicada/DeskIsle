@@ -80,7 +80,12 @@ internal sealed class TaskbarLease : IDisposable
             if (!File.Exists(Marker)) return;
             var record = JsonSerializer.Deserialize<Recovery>(File.ReadAllText(Marker));
             if (record == null) return;
-            while (File.Exists(Marker) && Alive(record)) Thread.Sleep(1000);
+            while (File.Exists(Marker))
+            {
+                record = JsonSerializer.Deserialize<Recovery>(File.ReadAllText(Marker));
+                if (record == null || !Alive(record)) break;
+                Thread.Sleep(1000);
+            }
             for (var i = 0; i < 30 && File.Exists(Marker); i++)
             { if (Restore(true)) return; Thread.Sleep(1000); }
         }
@@ -92,7 +97,14 @@ internal sealed class TaskbarLease : IDisposable
         if (!active) return;
         // Leave the marker and guard alive if Explorer is not available yet.
         active = false;
-        try { Restore(false); }
+        try
+        {
+            if (!Restore(false) && File.Exists(Marker))
+            {
+                var record = JsonSerializer.Deserialize<Recovery>(File.ReadAllText(Marker));
+                if (record != null) File.WriteAllText(Marker, JsonSerializer.Serialize(record with { Pid = 0, Started = 0 }));
+            }
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
         finally { guard?.Dispose(); }
     }
