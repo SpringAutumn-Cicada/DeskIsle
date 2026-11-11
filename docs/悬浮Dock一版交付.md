@@ -45,3 +45,14 @@
 ## 开发验证
 
 未运行自动化测试、lint、独立类型检查或 Windows 交互验收。仅执行交付构建、静态改动检视和包校验；实际发布结果完成后追加。
+
+## 实际交付记录
+
+- 分支：test；原功能基线 daa6519，最终代码 7b1d151。按恢复模块、应用栏、事件与设置、构建修复、恢复分支及时提交，未合并或推送。
+- SDK：项目专用 .NET 10.0.403，版本 1.0.0。
+- 最终发布命令：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$PWD/scripts/publish.ps1")"`，退出码 0。最初 Thickness 参数编译错误已修复，最终发布成功。
+- 桌面包：`E:\桌面\DeskIsle-1.0.0-win-x64.zip`，63,346,705 字节。
+- ZIP CRC 完整性检查正常，403 项，含 DeskIsle.exe 和 Restore-Taskbar.cmd。
+- 原包与桌面副本 SHA256 一致：`76b56850942cd49df7a8aabbdc05f7fe2c46d46b0362f865b7893746ab5f2b1b`。
+- `git diff --check` 无格式错误。未执行自动化测试、lint、独立类型检查、Windows 启用接管或交互验收；未修改用户实际任务栏状态及用户配置，未关闭旧程序。
+- 主要变更文件：`src/DeskIsle/Dock/` 新增服务与窗口，`App.xaml.cs` 恢复进程入口，`Services/WorkspaceManager.cs` 生命周期，`MainWindow.xaml`/`.xaml.cs` 设置入口，`DeskIsle.csproj` 版本，`scripts/publish.ps1`/`Restore-Taskbar.cmd` 恢复脚本打包，README 与本说明。原卡片传输逻辑、文件模板和用户文件未改。
