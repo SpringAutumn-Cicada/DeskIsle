@@ -15,6 +15,7 @@ public partial class DockBar : Window
     private Point down;
     private string? dragPin;
     private bool dragging;
+    private readonly List<string> runningOrder = [];
     private string signature = "";
     internal bool Interacting => dragging || menuOpen;
     private bool menuOpen;
@@ -24,6 +25,7 @@ public partial class DockBar : Window
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
         SizeChanged += (_, _) => Place();
+        DpiChanged += (_, _) => { icons.Clear(); signature = ""; Place(); };
     }
     internal void Place()
     {
@@ -39,16 +41,26 @@ public partial class DockBar : Window
     }
     internal void SetApps(DockPin[] pins, DockWindow[] windows)
     {
-        var key = DockNative.GetForegroundWindow() + "#" + string.Join("|", pins.Select(x => x.Path)) + "#" + string.Join("|", windows.Select(x => $"{x.Handle}:{x.Title}:{x.Executable}"));
+        // Window enumeration follows Z-order. Canonicalize snapshots before comparing them.
+        windows = windows.OrderBy(w => w.Handle.ToInt64()).ToArray();
+        var key = VisualTreeHelper.GetDpi(this).DpiScaleX + "#" + DockNative.GetForegroundWindow() + "#" + string.Join("|", pins.Select(x => x.Path)) + "#" + string.Join("|", windows.Select(x => $"{x.Handle}:{x.Title}:{x.Executable}"));
         if (key == signature || Interacting) return;
         signature = key;
         Apps.Children.Clear();
         foreach (var pin in pins)
             AddButton(pin.Name, pin.Path, pin, windows.Where(w => pin.Executable != null && string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)).ToArray());
         var extra = windows.Where(w => !pins.Any(p => p.Executable != null && string.Equals(p.Executable, w.Executable, StringComparison.OrdinalIgnoreCase)))
-            .GroupBy(w => w.Executable ?? $"window:{w.Handle}", StringComparer.OrdinalIgnoreCase);
-        if (extra.Any() && pins.Length > 0) Apps.Children.Add(new Border { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) });
-        foreach (var group in extra) AddButton(group.First().Title, group.First().Executable, null, group.ToArray());
+            .GroupBy(w => w.Executable ?? $"window:{w.Handle}", StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        foreach (var id in extra.Keys)
+            if (!runningOrder.Contains(id, StringComparer.OrdinalIgnoreCase)) runningOrder.Add(id);
+        if (runningOrder.Count > 256) runningOrder.RemoveAll(id => !extra.ContainsKey(id));
+        if (extra.Count > 0 && pins.Length > 0) Apps.Children.Add(new Border { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) });
+        foreach (var id in runningOrder.Where(extra.ContainsKey))
+        {
+            var group = extra[id];
+            AddButton(group[0].Title, group[0].Executable, null, group);
+        }
         if (pins.Length == 0 && windows.Length == 0)
             Apps.Children.Add(new TextBlock { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) });
     }
@@ -58,6 +70,7 @@ public partial class DockBar : Window
         var panel = new Grid();
         var image = new Image { Width = 36, Height = 36, Margin = new Thickness(0, 0, 0, 5), Stretch = Stretch.Uniform };
         panel.Children.Add(new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
         panel.Children.Add(image);
         if (windows.Length > 0) panel.Children.Add(new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), Background = windows.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center });
         button.Content = panel;
@@ -116,18 +129,20 @@ public partial class DockBar : Window
         button.ContextMenu = menu;
         Apps.Children.Add(button);
         if (pin != null && !File.Exists(pin.Path)) { button.Opacity = .45; button.ToolTip = title + "（路径不可用，右键重新定位）"; }
-        if (iconPath == null) return;
-        if (!icons.TryGetValue(iconPath, out var icon))
+        if (iconPath == null && windows.Length == 0) return;
+        var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
+        var iconKey = (iconPath ?? $"window:{windows[0].Handle}") + "|" + pixels;
+        if (!icons.TryGetValue(iconKey, out var icon))
         {
             try
             {
                 await iconSlots.WaitAsync();
-                try { icon = await Task.Run(() => DockApps.Icon(iconPath)); }
+                try { icon = await Task.Run(() => iconPath != null ? DockApps.Icon(iconPath, pixels) ?? (windows.Length > 0 ? DockApps.WindowIcon(windows[0].Handle) : null) : DockApps.WindowIcon(windows[0].Handle)); }
                 finally { iconSlots.Release(); }
             }
             catch (Exception ex) when (ex is IOException or ArgumentException or System.Runtime.InteropServices.COMException) { icon = null; }
             if (icons.Count >= 256) icons.Clear();
-            icons[iconPath] = icon;
+            icons[iconKey] = icon;
         }
         image.Source = icon;
         if (icon != null) panel.Children[0].Visibility = Visibility.Hidden;

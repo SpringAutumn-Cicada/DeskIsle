@@ -53,13 +53,59 @@ internal static class DockApps
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct FileInfo { public nint Icon; public int Index; public uint Attributes; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string Type; }
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern nint SHGetFileInfo(string path, uint attributes, ref FileInfo info, uint size, uint flags);
     [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
-    internal static ImageSource? Icon(string path)
+    [StructLayout(LayoutKind.Sequential)] private struct PixelSize { public int Width, Height; }
+    [ComImport, Guid("BCC18B79-BA16-442F-80C4-8A59C30C463B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IImageFactory
     {
+        [PreserveSig] int GetImage(PixelSize size, uint flags, out nint bitmap);
+    }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(string path, nint bindContext, in Guid iid, [MarshalAs(UnmanagedType.Interface)] out IImageFactory factory);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint bitmap);
+    [DllImport("ole32.dll")] private static extern int CoInitializeEx(nint reserved, uint mode);
+    [DllImport("ole32.dll")] private static extern void CoUninitialize();
+    [DllImport("user32.dll")] private static extern nint SendMessageTimeout(nint window, uint message, nint wParam, nint lParam, uint flags, uint timeout, out nint result);
+    [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] private static extern nint GetClassLongPtr(nint window, int index);
+    internal static ImageSource? WindowIcon(nint window)
+    {
+        SendMessageTimeout(window, 0x7F, 1, 0, 2, 100, out var icon);
+        if (icon == 0) icon = GetClassLongPtr(window, -14);
+        if (icon == 0) return null;
+        // The window owns this HICON. Freeze a copy without destroying the borrowed handle.
+        var source = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+        source.Freeze(); return source;
+    }
+    internal static ImageSource? Icon(string path, int pixels)
+    {
+        var initialized = CoInitializeEx(0, 0);
+        try { return ExtractIcon(path, pixels); }
+        finally { if (initialized >= 0) CoUninitialize(); }
+    }
+    private static ImageSource? ExtractIcon(string path, int pixels)
+    {
+        IImageFactory? factory = null;
+        nint bitmap = 0;
+        try
+        {
+            var iid = typeof(IImageFactory).GUID;
+            if (SHCreateItemFromParsingName(path, 0, in iid, out factory) >= 0 &&
+                factory.GetImage(new PixelSize { Width = pixels, Height = pixels }, 0x5, out bitmap) >= 0 && bitmap != 0)
+            {
+                var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze(); return source;
+            }
+        }
+        catch (COMException) { /* Fall back to the original system icon at its native resolution. */ }
+        finally
+        {
+            if (bitmap != 0) DeleteObject(bitmap);
+            if (factory != null) Marshal.FinalReleaseComObject(factory);
+        }
         var info = new FileInfo();
         try
         {
             if (SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<FileInfo>(), 0x100) == 0 || info.Icon == 0) return null;
-            var image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(64, 64));
+            var image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             image.Freeze(); return image;
         }
         finally { if (info.Icon != 0) DestroyIcon(info.Icon); }
