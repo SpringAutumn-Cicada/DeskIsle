@@ -10,6 +10,7 @@ internal sealed partial class DockController
     private bool shellRegistered;
     private long attentionUntil;
     private readonly HashSet<nint> attentionWindows = [];
+    private readonly Dictionary<nint, string> attentionKeys = [];
     private readonly Dictionary<string, long> lastAttention = new(StringComparer.OrdinalIgnoreCase);
 
     private void RegisterAttention()
@@ -27,11 +28,21 @@ internal sealed partial class DockController
         {
             DockNative.GetWindowThreadProcessId(window, out var pid);
             if (pid == Environment.ProcessId || window == DockNative.GetForegroundWindow()) return;
-            attentionWindows.Add(window);
+            UpdateAttention();
             var app = windows.FirstOrDefault(w => w.Handle == window);
-            var key = app?.Executable ?? $"window:{window}";
+            var key = app?.Executable;
+            if (key == null)
+            {
+                try { using var process = System.Diagnostics.Process.GetProcessById((int)pid); key = process.MainModule?.FileName; }
+                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { }
+            }
+            key ??= $"process:{pid}";
+            var foregroundApp = windows.FirstOrDefault(w => w.Handle == DockNative.GetForegroundWindow());
+            if (foregroundApp?.Executable != null && string.Equals(key, foregroundApp.Executable, StringComparison.OrdinalIgnoreCase)) return;
+            attentionWindows.Add(window);
+            attentionKeys[window] = key;
             var now = Environment.TickCount64;
-            if (!lastAttention.TryGetValue(key, out var last) || now - last >= 5000)
+            if (!lastAttention.ContainsKey(key))
             {
                 lastAttention[key] = now;
                 attentionUntil = now + 5000;
@@ -51,13 +62,17 @@ internal sealed partial class DockController
             (active?.Executable != null && windows.Any(w => w.Handle == handle &&
                 string.Equals(w.Executable, active.Executable, StringComparison.OrdinalIgnoreCase))));
         if (attentionWindows.Count == 0) attentionUntil = 0;
-        foreach (var key in lastAttention.Where(pair => Environment.TickCount64 - pair.Value > 60000).Select(pair => pair.Key).ToArray()) lastAttention.Remove(key);
-        bar?.SetAttention(attentionWindows);
+        foreach (var handle in attentionKeys.Keys.Where(handle => !attentionWindows.Contains(handle)).ToArray()) attentionKeys.Remove(handle);
+        var pendingApps = attentionKeys.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in lastAttention.Keys.Where(key => !pendingApps.Contains(key)).ToArray()) lastAttention.Remove(key);
+        var strong = attentionWindows.Where(handle => attentionKeys.TryGetValue(handle, out var key)
+            && lastAttention.TryGetValue(key, out var started) && Environment.TickCount64 - started < 5000).ToArray();
+        bar?.SetAttention(attentionWindows, strong);
     }
     private void StopAttention()
     {
         if (shellRegistered && messages != null) DeregisterShellHookWindow(messages.Handle);
         shellRegistered = false; shellMessage = 0; attentionUntil = 0;
-        attentionWindows.Clear(); lastAttention.Clear();
+        attentionWindows.Clear(); attentionKeys.Clear(); lastAttention.Clear();
     }
 }

@@ -17,7 +17,7 @@ public partial class DockBar : Window
         internal required TextBlock Placeholder;
         internal required Border Indicator;
         internal required Border Attention;
-        internal bool Alerting;
+        internal bool Alerting, StrongAlert;
         internal DockWindow[] Windows = [];
         internal DockPin? Pin;
         internal string? IconPath, IconKey;
@@ -150,24 +150,28 @@ public partial class DockBar : Window
         { views[id].IconVersion++; views[id].Attention.BeginAnimation(OpacityProperty, null); views.Remove(id); }
     }
     private readonly HashSet<nint> attentionHandles = [];
-    internal void SetAttention(IEnumerable<nint> handles)
+    private readonly HashSet<nint> strongAttentionHandles = [];
+    internal void SetAttention(IEnumerable<nint> handles, IEnumerable<nint> strong)
     {
         attentionHandles.Clear(); attentionHandles.UnionWith(handles);
+        strongAttentionHandles.Clear(); strongAttentionHandles.UnionWith(strong);
         foreach (var view in views.Values) ApplyAttention(view);
     }
     private void ApplyAttention(AppView view)
     {
         var alerting = view.Windows.Any(w => attentionHandles.Contains(w.Handle));
-        if (view.Alerting != alerting)
+        var strong = alerting && view.Windows.Any(w => strongAttentionHandles.Contains(w.Handle));
+        if (view.Alerting != alerting || view.StrongAlert != strong)
         {
-            view.Alerting = alerting;
+            view.Alerting = alerting; view.StrongAlert = strong;
             view.Attention.BeginAnimation(OpacityProperty, null);
             if (alerting)
-                view.Attention.BeginAnimation(OpacityProperty, new DoubleAnimation(.25, .8, TimeSpan.FromMilliseconds(850))
+                view.Attention.BeginAnimation(OpacityProperty, new DoubleAnimation(strong ? .4 : .2, strong ? 1 : .5, TimeSpan.FromMilliseconds(strong ? 800 : 1200))
                 { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
             else view.Attention.Opacity = 0;
         }
-        view.Indicator.Background = alerting ? Brushes.Orange :
+        view.Indicator.Width = alerting ? 10 : 5;
+        view.Indicator.Background = alerting ? new SolidColorBrush(Color.FromRgb(255, 185, 80)) :
             view.Windows.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
     }
     private AppView CreateView()
@@ -176,8 +180,10 @@ public partial class DockBar : Window
         var image = new Image { Width = 36, Height = 36, Margin = new Thickness(0, 0, 0, 5), Stretch = Stretch.Uniform };
         var placeholder = new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var indicator = new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center };
-        var attention = new Border { Background = new SolidColorBrush(Color.FromArgb(100, 239, 156, 66)),
-            CornerRadius = new CornerRadius(9), Opacity = 0, IsHitTestVisible = false };
+        var attention = new Border { Background = new SolidColorBrush(Color.FromArgb(30, 255, 181, 70)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(255, 185, 80)), BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(10), Margin = new Thickness(-2, -1, -2, 3), Opacity = 0, IsHitTestVisible = false,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(255, 167, 50), BlurRadius = 7, ShadowDepth = 0, Opacity = .45 } };
         var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator, Attention = attention };
         var panel = new Grid(); panel.Children.Add(attention); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
