@@ -141,6 +141,8 @@ public partial class DockBar : Window
             Apps.Children.Insert(i, desired[i]);
         }
         preview?.SetWindows(hoveredView?.Windows ?? []);
+        if (preview == null && hoveredView is { Windows.Length: > 0 } hovered
+            && hovered.Button.IsMouseOver && !previewDelay.IsEnabled) previewDelay.Start();
         foreach (var id in views.Keys.Where(id => !alive.Contains(id)).ToArray())
         { views[id].IconVersion++; views.Remove(id); }
     }
@@ -292,7 +294,7 @@ public partial class DockBar : Window
     { var item = new MenuItem { Header = header }; item.Click += (_, _) => action(); menu.Items.Add(item); }
     private void ShowPreview(AppView view)
     {
-        var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
+        var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle)).ToArray();
         if (closed || !IsVisible || live.Length == 0) return;
         ClosePreview();
         hoveredView = view;

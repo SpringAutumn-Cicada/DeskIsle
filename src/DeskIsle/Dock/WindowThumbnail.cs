@@ -46,6 +46,7 @@ internal sealed class WindowThumbnail : IDisposable
             DrawClose(closePressed || (pointer.X >= closeRect.Left && pointer.X < closeRect.Right && pointer.Y >= closeRect.Top && pointer.Y < closeRect.Bottom));
         if (hovered == value) return;
         hovered = value;
+        drawnScale = double.NaN; DrawClose(closeActive);
         if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79);
     }
     private readonly Action click;
@@ -80,8 +81,8 @@ internal sealed class WindowThumbnail : IDisposable
         closeActive = active; drawnScale = closeScale;
         using var drawing = closeVisual.RenderOpen();
         drawing.PushTransform(new ScaleTransform(closeScale, closeScale));
-        drawing.DrawRoundedRectangle(new SolidColorBrush(active ? Color.FromRgb(176, 64, 75) : Color.FromRgb(38, 47, 61)),
-            new Pen(new SolidColorBrush(Color.FromRgb(130, 145, 165)), .7), new Rect(.5, .5, 21, 21), 6, 6);
+        drawing.DrawRectangle(new SolidColorBrush(active ? Color.FromRgb(176, 64, 75) :
+            (hovered ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79))), null, new Rect(0, 0, 22, 22));
         var pen = new Pen(new SolidColorBrush(Color.FromRgb(240, 244, 250)), 1.5);
         drawing.DrawLine(pen, new Point(7.5, 7.5), new Point(14.5, 14.5));
         drawing.DrawLine(pen, new Point(14.5, 7.5), new Point(7.5, 14.5));
@@ -127,7 +128,7 @@ internal sealed class WindowThumbnail : IDisposable
             ParentWindow = destination, Width = 1, Height = 1,
             WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
         });
-        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(21, 29, 41);
+        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(48, 61, 79);
         if (DwmRegisterThumbnail(surface.Handle, source, out var thumbnail) < 0) { surface.Dispose(); return null; }
         return new(thumbnail, destination, surface, click, close);
     }
@@ -148,7 +149,7 @@ internal sealed class WindowThumbnail : IDisposable
         {
             var dpi = HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1;
             var side = Math.Min(Math.Min(boxWidth, boxHeight), (int)Math.Round(22 * dpi));
-            var offset = (int)Math.Round(6 * dpi);
+            var offset = 0;
             // DrawingVisual coordinates are DIPs; HwndSource supplies the monitor scale.
             closeScale = side / (22 * (closeSurface.CompositionTarget?.TransformToDevice.M11 ?? 1));
             DrawClose(closeActive);
@@ -162,7 +163,10 @@ internal sealed class WindowThumbnail : IDisposable
             }
         }
         var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
-        box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };
+        // A narrow integrated top edge keeps the close glyph off the preview content.
+        var header = closeSurface == null ? inset : Math.Min(boxHeight - inset - 1,
+            (int)Math.Round(22 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)));
+        box = new DockNative.Rect { Left = inset, Top = Math.Max(inset, header), Right = boxWidth - inset, Bottom = boxHeight - inset };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));
         var height = Math.Max(1, (int)Math.Round(size.Height * scale));

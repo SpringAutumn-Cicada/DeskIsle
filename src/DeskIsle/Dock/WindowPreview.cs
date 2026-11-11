@@ -18,6 +18,7 @@ internal sealed class WindowPreview : Window
         internal bool Composite;
         internal int Attempts, Failures;
         internal long RetryAt;
+        internal long RetryBatchAt;
     }
     private readonly DockBar bar;
     private readonly Button anchor;
@@ -50,7 +51,7 @@ internal sealed class WindowPreview : Window
             var corner = 2;
             DwmSetWindowAttribute(hwnd, 33, ref corner, sizeof(int));
         };
-        ContentRendered += (_, _) => { UpdateThumbnails(); check.Start(); };
+        Loaded += (_, _) => { UpdateThumbnails(); check.Start(); };
         LayoutUpdated += (_, _) => UpdateThumbnails();
         SizeChanged += (_, _) => Place();
         check.Tick += (_, _) =>
@@ -100,7 +101,7 @@ internal sealed class WindowPreview : Window
             {
                 var ratio = thumbnail.AspectRatio;
                 host.Width = Math.Clamp(160 * ratio, 32, 320);
-                host.Height = host.Width / ratio;
+                host.Height = host.Width / ratio + 22;
             }
             parent.Children.Add(host);
             tiles.Add(tile);
@@ -110,7 +111,7 @@ internal sealed class WindowPreview : Window
             var width = 300.0;
             var unionHeight = Math.Max(pair.LeftRect.Bottom, pair.RightRect.Bottom) - Math.Min(pair.LeftRect.Top, pair.RightRect.Top);
             var unionWidth = pair.RightRect.Right - pair.LeftRect.Left;
-            var height = width * unionHeight / Math.Max(1, unionWidth);
+            var height = width * unionHeight / Math.Max(1, unionWidth) + 22;
             var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
             AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Left.Handle)) DockNative.PostMessage(pair.Left.Handle, 0x0010, 0, 0); }, composite);
@@ -181,7 +182,14 @@ internal sealed class WindowPreview : Window
     }
     private void EnsureThumbnail(Tile tile)
     {
-        if (tile.Thumbnail != null || tile.Attempts >= 3 || Environment.TickCount64 < tile.RetryAt) return;
+        var now = Environment.TickCount64;
+        if (tile.Thumbnail != null || now < tile.RetryAt) return;
+        if (tile.Attempts >= 3)
+        {
+            if (tile.RetryBatchAt == 0) tile.RetryBatchAt = now + 3000;
+            if (now < tile.RetryBatchAt) return;
+            tile.Attempts = 0; tile.RetryBatchAt = 0;
+        }
         tile.Attempts++;
         tile.RetryAt = Environment.TickCount64 + 500;
         // Indirection keeps retained native surfaces bound to the latest layout/click action.
@@ -219,6 +227,11 @@ internal sealed class WindowPreview : Window
     internal void SetWindows(DockWindow[] latest)
     {
         if (finished) return;
+        // An enumeration snapshot can omit a window during minimize/activation transitions.
+        // While interacting, retain living handles until the source really closes.
+        if (ContainsInteractionPointer())
+            latest = latest.Concat(windows.Where(w => DockNative.IsWindow(w.Handle)))
+                .DistinctBy(w => w.Handle).OrderBy(w => w.Handle.ToInt64()).ToArray();
         var compositeHandles = tiles.Where(tile => tile.Composite).Select(tile => tile.Window.Handle).ToArray();
         var nextGroup = page == 0 ? groups.Find(latest) : null;
         var nextHandles = nextGroup == null ? Array.Empty<nint>() : new[] { nextGroup.Left.Handle, nextGroup.Right.Handle };

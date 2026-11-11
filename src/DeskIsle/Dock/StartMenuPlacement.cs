@@ -15,6 +15,10 @@ internal sealed class StartMenuPlacement : IDisposable
     private DateTime deadline;
     private bool seen;
     private int adjustments;
+    private long openedAt;
+    private readonly Dictionary<nint, (DockNative.Rect Rect, long Since)> stable = [];
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
     internal bool IsOpen { get; private set; }
 
     internal StartMenuPlacement(DockBar bar)
@@ -29,6 +33,9 @@ internal sealed class StartMenuPlacement : IDisposable
         deadline = DateTime.UtcNow.AddSeconds(3);
         seen = false;
         adjustments = 0;
+        stable.Clear();
+        openedAt = Environment.TickCount64;
+        timer.Interval = TimeSpan.FromMilliseconds(100);
         IsOpen = true;
         timer.Start();
     }
@@ -49,6 +56,7 @@ internal sealed class StartMenuPlacement : IDisposable
         {
             DockNative.GetWindowThreadProcessId(window, out var pid);
             if (hosts.Contains(pid) && DockNative.IsWindowVisible(window)
+                && !(DwmGetWindowAttribute(window, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0)
                 && DockNative.GetWindowRect(window, out var rect)
                 && rect.Right - rect.Left >= 200 && rect.Bottom - rect.Top >= 200)
                 windows.Add((window, rect));
@@ -68,18 +76,32 @@ internal sealed class StartMenuPlacement : IDisposable
         var bottom = dockRect.Top - gap;
         var topLimit = monitor.Top + gap;
         var available = bottom - topLimit;
-        if (available < 200 || adjustments >= 12) return;
+        if (available < 200 || adjustments >= 8 || Environment.TickCount64 - openedAt < 500) return;
         foreach (var (handle, rect) in windows)
         {
             // Ignore a Start menu on another display.
             if (rect.Right <= monitor.Left || rect.Left >= monitor.Right) continue;
+            var now = Environment.TickCount64;
+            if (!stable.TryGetValue(handle, out var state) || !state.Rect.Equals(rect))
+            {
+                stable[handle] = (rect, now);
+                continue;
+            }
+            if (now - state.Since < 250) continue;
             var height = Math.Min(rect.Bottom - rect.Top, available);
+            var width = Math.Min(rect.Right - rect.Left, monitor.Right - monitor.Left - 2 * gap);
             var top = bottom - height;
-            if (Math.Abs(rect.Top - top) <= 1 && Math.Abs(rect.Bottom - bottom) <= 1) continue;
+            var left = Math.Clamp(rect.Left, monitor.Left + gap, Math.Max(monitor.Left + gap, monitor.Right - gap - width));
+            if (Math.Abs(rect.Top - top) <= 1 && Math.Abs(rect.Bottom - bottom) <= 1 && rect.Left == left) continue;
             originals.TryAdd(handle, rect);
-            // Preserve focus and Z order; the Shell continues to own its contents and scrolling.
-            DockNative.SetWindowPos(handle, 0, rect.Left, top, rect.Right - rect.Left, height, 0x0014 | 0x4000);
+            // Wait for stable bounds before requesting placement, and re-read on subsequent ticks.
+            // Keep cross-process positioning asynchronous so a busy Shell cannot block the Dock.
+            var accepted = DockNative.SetWindowPos(handle, 0, left, top, width, height, 0x0014 | 0x4000);
             adjustments++;
+            stable.Remove(handle);
+            if (!accepted) continue;
+            if (DockNative.GetWindowRect(handle, out var actual)) stable[handle] = (actual, now);
+
         }
         timer.Interval = TimeSpan.FromMilliseconds(150);
     }
@@ -93,6 +115,7 @@ internal sealed class StartMenuPlacement : IDisposable
                 DockNative.SetWindowPos(handle, 0, rect.Left, rect.Top, rect.Right - rect.Left,
                     rect.Bottom - rect.Top, 0x0014 | 0x4000);
         originals.Clear();
+        stable.Clear();
     }
 
     public void Dispose() => Stop();
