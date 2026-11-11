@@ -1,0 +1,67 @@
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+namespace DeskIsle.Dock;
+
+internal sealed record DockWindow(nint Handle, string Title, string? Executable);
+internal sealed record DockPin(string Path, string? Executable, string Name);
+internal static class DockApps
+{
+    internal static bool Supported(string path) => Path.GetExtension(path).ToLowerInvariant() is ".exe" or ".lnk" or ".appref-ms";
+    internal static DockPin Resolve(string path)
+    {
+        string? target = Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase) ? path : null;
+        if (Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
+        {
+            object? shell = null, link = null;
+            try
+            {
+                shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!);
+                link = ((dynamic)shell!).CreateShortcut(path);
+                target = ((dynamic)link).TargetPath as string;
+            }
+            catch (Exception ex) when (ex is COMException or System.Reflection.TargetInvocationException) { }
+            finally { if (link != null) Marshal.FinalReleaseComObject(link); if (shell != null) Marshal.FinalReleaseComObject(shell); }
+        }
+        return new(path, string.IsNullOrWhiteSpace(target) ? null : target, System.IO.Path.GetFileNameWithoutExtension(path));
+    }
+    internal static DockWindow[] Windows()
+    {
+        var list = new List<DockWindow>();
+        DockNative.EnumWindows((w, _) =>
+        {
+            if (!DockNative.IsWindowVisible(w) || DockNative.GetWindow(w, 4) != 0 || (DockNative.GetWindowLong(w, -20) & 0x80) != 0) return true;
+            DockNative.GetWindowThreadProcessId(w, out var pid);
+            if (pid == Environment.ProcessId || DockNative.Class(w) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW") return true;
+            var text = new StringBuilder(1024); DockNative.GetWindowText(w, text, text.Capacity);
+            if (text.Length == 0) return true;
+            // Cloaked UWP/virtual-desktop windows must not appear as active applications.
+            if (DwmGetWindowAttribute(w, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
+            string? path = null;
+            try { using var process = Process.GetProcessById((int)pid); path = process.MainModule?.FileName; }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { }
+            list.Add(new(w, text.ToString(), path)); return true;
+        }, 0);
+        return list.ToArray();
+    }
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct FileInfo { public nint Icon; public int Index; public uint Attributes; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string Type; }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern nint SHGetFileInfo(string path, uint attributes, ref FileInfo info, uint size, uint flags);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
+    internal static ImageSource? Icon(string path)
+    {
+        var info = new FileInfo();
+        try
+        {
+            if (SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<FileInfo>(), 0x100) == 0 || info.Icon == 0) return null;
+            var image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(64, 64));
+            image.Freeze(); return image;
+        }
+        finally { if (info.Icon != 0) DestroyIcon(info.Icon); }
+    }
+}

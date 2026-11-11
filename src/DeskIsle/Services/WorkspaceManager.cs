@@ -7,6 +7,8 @@ public sealed class WorkspaceManager : IDisposable
     private readonly WorkspaceStore store;
     private readonly WorkspaceState state;
     private readonly Dictionary<Guid, MainWindow> windows = [];
+    private DeskIsle.Dock.DockController? dock;
+    public void ConfigureDock() { dock?.Configure(); }
     public DesktopIcons DesktopIcons { get; } = new();
     public string? Warning { get; private set; }
     public bool Exiting { get; private set; }
@@ -53,6 +55,7 @@ public sealed class WorkspaceManager : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "旧配置备份未完成，请先修复权限再导入旧记录。"; }
         }
         foreach (var card in state.Cards.ToArray()) Open(card);
+        if (DesktopIntegration) { dock = new DeskIsle.Dock.DockController(); dock.Start(); }
         if (DesktopIntegration && PendingDesktopPaths.Length > 0 && !state.DesktopMigrationPrompted)
             Application.Current.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => windows.Values.FirstOrDefault()?.OfferDesktopMigration()));
         if (DesktopIntegration)
@@ -199,6 +202,7 @@ public sealed class WorkspaceManager : IDisposable
         if (windows.Values.Any(w => w.HasPendingCreation)) { MessageBox.Show("正在处理文件，请完成后再退出。", "DeskIsle"); return; }
         Exiting = true;
         CancelStartupHide();
+        dock?.Dispose();
         desktopReturn?.Dispose();
         foreach (var window in windows.Values.ToArray()) window.Close();
         try { Save(); }
@@ -209,6 +213,7 @@ public sealed class WorkspaceManager : IDisposable
     public void Dispose()
     {
         CancelStartupHide();
+        dock?.Dispose();
         desktopReturn?.Dispose();
         if (DesktopIntegration) DesktopIcons.Dispose();
     }

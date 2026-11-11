@@ -321,6 +321,7 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter) { OpenClick(sender, e); e.Handled = true; }
     }
+    private void DockSettingsClick(object sender, RoutedEventArgs e) => workspace.ConfigureDock();
     private void MoreClick(object sender, RoutedEventArgs e)
     {
         UpdateDesktopButton();
