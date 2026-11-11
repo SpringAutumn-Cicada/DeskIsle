@@ -16,7 +16,6 @@ public partial class DockBar : Window
         internal required Image Image;
         internal required TextBlock Placeholder;
         internal required Border Indicator;
-        internal required Border Attention;
         internal bool Alerting, StrongAlert;
         internal DockWindow[] Windows = [];
         internal DockPin? Pin;
@@ -165,15 +164,16 @@ public partial class DockBar : Window
         {
             view.Alerting = alerting; view.StrongAlert = strong;
             view.Indicator.BeginAnimation(OpacityProperty, null);
-            view.Attention.Visibility = alerting ? Visibility.Visible : Visibility.Hidden;
+            view.Indicator.Effect = alerting ? new System.Windows.Media.Effects.DropShadowEffect
+            { Color = Color.FromRgb(255, 210, 138), BlurRadius = 7, ShadowDepth = 0, Opacity = .55 } : null;
             view.Indicator.Opacity = 1;
             if (strong)
                 view.Indicator.BeginAnimation(OpacityProperty, new DoubleAnimation(.35, 1, TimeSpan.FromMilliseconds(800))
                 { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
         }
-        view.Indicator.Width = alerting ? 8 : 5;
-        view.Indicator.Height = alerting ? 2 : 3;
-        view.Indicator.Background = alerting ? new SolidColorBrush(Color.FromRgb(255, 123, 114)) :
+        view.Indicator.Width = alerting ? 4 : 5;
+        view.Indicator.Height = alerting ? 4 : 3;
+        view.Indicator.Background = alerting ? new SolidColorBrush(Color.FromRgb(255, 210, 138)) :
             view.Windows.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
     }
     private AppView CreateView()
@@ -182,15 +182,8 @@ public partial class DockBar : Window
         var image = new Image { Width = 36, Height = 36, Margin = new Thickness(0, 0, 0, 5), Stretch = Stretch.Uniform };
         var placeholder = new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var indicator = new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center };
-        // Six DIP dot with a one-DIP dark separating rim; it is an overlay, not a badge count.
-        var attention = new Border { Width = 8, Height = 8,
-            Background = new SolidColorBrush(Color.FromRgb(255, 123, 114)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(32, 38, 50)), BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4), HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 0, 0, 0),
-            Visibility = Visibility.Hidden, IsHitTestVisible = false };
-        var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator, Attention = attention };
-        var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); panel.Children.Add(attention); button.Content = panel;
+        var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator };
+        var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
         var transform = new ScaleTransform(1, 1);
         image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);
