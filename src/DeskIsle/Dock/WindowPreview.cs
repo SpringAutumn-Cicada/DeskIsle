@@ -13,7 +13,6 @@ internal sealed class WindowPreview : Window
         internal required FrameworkElement Host;
         internal WindowThumbnail? Thumbnail;
         internal required Action Click;
-        internal Action? Close;
         internal required object Group;
         internal bool Composite;
         internal int Attempts, Failures;
@@ -85,68 +84,129 @@ internal sealed class WindowPreview : Window
     private nint NoActivate(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     { if (message == 0x21) { handled = true; return 3; } return 0; }
     private int PerPage => Math.Clamp((int)((SystemParameters.WorkArea.Width - 300) / 260), 1, 3);
+    private sealed class Card
+    {
+        internal required Border Surface;
+        internal required StackPanel Images;
+        internal required TextBlock Title;
+        internal required Button Close;
+        internal required DockWindow[] Windows;
+        internal bool? Hover;
+    }
+    private readonly List<Card> cards = [];
+    private Card MakeCard(DockWindow[] members, bool composite, Action click)
+    {
+        var images = new StackPanel { Orientation = Orientation.Horizontal };
+        var title = new TextBlock { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0), Foreground = Brush("#DDE5EF") };
+        var close = new Button { Content = "×", FontSize = 18, Width = 22, Height = 22,
+            Focusable = false, Visibility = Visibility.Hidden, ToolTip = composite ? "关闭组合窗口" : "关闭窗口" };
+        var borderFactory = new FrameworkElementFactory(typeof(Border));
+        borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+        borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        borderFactory.AppendChild(presenter);
+        var style = new Style(typeof(Button));
+        style.Setters.Add(new Setter(Control.TemplateProperty, new ControlTemplate(typeof(Button)) { VisualTree = borderFactory }));
+        style.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, Brush("#DDE5EF")));
+        var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(Control.BackgroundProperty, Brush("#B4404B"))); style.Triggers.Add(hover);
+        close.Style = style;
+        close.Click += (_, e) =>
+        {
+            e.Handled = true;
+            foreach (var member in members.DistinctBy(w => w.Handle))
+                if (DockNative.IsWindow(member.Handle)) DockNative.PostMessage(member.Handle, 0x0010, 0, 0);
+        };
+        var icons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        for (var i = 0; i < (composite ? 2 : 1); i++)
+            icons.Children.Add(new Image { Source = icon, Width = 16, Height = 16, Margin = new Thickness(1, 0, 1, 0) });
+        var header = new Grid { Height = 28 };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition());
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        Grid.SetColumn(title, 1); Grid.SetColumn(close, 2);
+        header.Children.Add(icons); header.Children.Add(title); header.Children.Add(close);
+        header.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
+        var layout = new StackPanel(); layout.Children.Add(header); layout.Children.Add(images);
+        var surface = new Border { Child = layout, Padding = new Thickness(4), BorderThickness = new Thickness(1),
+            BorderBrush = Brush("#344252"), CornerRadius = new CornerRadius(8), Background = Brush("#202936"), Margin = new Thickness(3) };
+        var card = new Card { Surface = surface, Images = images, Title = title, Close = close, Windows = members };
+        cards.Add(card);
+        return card;
+    }
+    private void RefreshTitles()
+    {
+        foreach (var card in cards)
+        {
+            var title = windows.FirstOrDefault(w => w.Handle == card.Windows[0].Handle)?.Title ?? card.Windows[0].Title;
+            card.Title.Text = (card.Windows.Length > 1 ? "组 | " : "") + title;
+            card.Title.ToolTip = card.Title.Text;
+        }
+    }
     private void RenderPage()
     {
         if (finished) return;
         var previousTiles = tiles.ToDictionary(tile => (tile.Window.Handle, tile.Composite));
-        tiles.Clear(); content.Children.Clear();
+        tiles.Clear(); cards.Clear(); content.Children.Clear();
         var perPage = PerPage;
         var pages = Math.Max(1, (windows.Length + perPage - 1) / perPage);
         page = Math.Clamp(page, 0, pages - 1);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(row);
-        void AddImage(DockWindow window, Panel parent, double width, double height, Action click, Action? close, object? group = null)
+        void AddImage(DockWindow window, Card card, double width, double height, Action click, bool composite)
         {
-            var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(3), VerticalAlignment = VerticalAlignment.Center };
+            var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), VerticalAlignment = VerticalAlignment.Center };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
-            host.MouseLeftButtonUp += (_, _) => click();
-            if (!previousTiles.Remove((window.Handle, group != null), out var tile))
-                tile = new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null };
-            tile.Window = window; tile.Host = host; tile.Click = click; tile.Close = close; tile.Group = group ?? host;
+            host.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
+            if (!previousTiles.Remove((window.Handle, composite), out var tile))
+                tile = new Tile { Window = window, Host = host, Click = click, Group = card, Composite = composite };
+            tile.Window = window; tile.Host = host; tile.Click = click; tile.Group = card;
             EnsureThumbnail(tile);
-            if (group == null && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
+            if (!composite && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
             {
                 var ratio = thumbnail.AspectRatio;
-                host.Width = Math.Clamp(160 * ratio, 32, 320);
-                host.Height = host.Width / ratio;
+                host.Width = Math.Clamp(160 * ratio, 64, 320);
+                host.Height = Math.Min(160, host.Width / ratio);
             }
-            parent.Children.Add(host);
-            tiles.Add(tile);
+            card.Images.Children.Add(host); tiles.Add(tile);
         }
         if (page == 0 && groups.Find(windows) is { } pair)
         {
-            var width = 300.0;
             var unionHeight = Math.Max(pair.LeftRect.Bottom, pair.RightRect.Bottom) - Math.Min(pair.LeftRect.Top, pair.RightRect.Top);
             var unionWidth = pair.RightRect.Right - pair.LeftRect.Left;
+            var width = Math.Min(400, 160.0 * unionWidth / Math.Max(1, unionHeight));
             var height = width * unionHeight / Math.Max(1, unionWidth);
-            var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
-            AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Left.Handle)) DockNative.PostMessage(pair.Left.Handle, 0x0010, 0, 0); }, composite);
-            AddImage(pair.Right, composite, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Right.Handle)) DockNative.PostMessage(pair.Right.Handle, 0x0010, 0, 0); }, composite);
-            row.Children.Add(composite);
+            var card = MakeCard([pair.Left, pair.Right], true, restore);
+            AddImage(pair.Left, card, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, true);
+            AddImage(pair.Right, card, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, true);
+            row.Children.Add(card.Surface);
         }
         foreach (var window in windows.Skip(page * perPage).Take(perPage))
         {
-            var width = 240.0; var height = 135.0;
+            Action click = () => { activate(window); dismiss(); };
+            var card = MakeCard([window], false, click);
+            var ratio = 16.0 / 9;
             if (DockNative.GetWindowRect(window.Handle, out var bounds) && !DockNative.IsIconic(window.Handle) && bounds.Right > bounds.Left && bounds.Bottom > bounds.Top)
-            {
-                var ratio = (double)(bounds.Right - bounds.Left) / (bounds.Bottom - bounds.Top);
-                width = Math.Min(250, 156 * ratio); height = width / ratio;
-            }
-            // Equal row height avoids blank areas around windows with different aspect ratios.
-            var ratioAtSize = width / height;
-            height = 160; width = height * ratioAtSize;
-            AddImage(window, row, Math.Max(24, width), height,
-                () => { activate(window); dismiss(); }, () => { if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0); });
+                ratio = (double)(bounds.Right - bounds.Left) / (bounds.Bottom - bounds.Top);
+            var width = Math.Clamp(160 * ratio, 64, 320);
+            AddImage(window, card, width, Math.Min(160, width / ratio), click, false);
+            row.Children.Add(card.Surface);
         }
         foreach (var obsolete in previousTiles.Values) obsolete.Thumbnail?.Dispose();
-        // Fit the whole row as a unit; no tile becomes disproportionately large on small screens.
-        var rowWidth = tiles.Sum(tile => tile.Host.Width + 6) + 12;
+        var chrome = cards.Count * 16 + 12;
+        var rowWidth = tiles.Sum(tile => tile.Host.Width);
         var rowHeight = tiles.Count == 0 ? 160 : tiles.Max(tile => tile.Host.Height);
-        var fit = Math.Min(1, Math.Min((SystemParameters.WorkArea.Width - 24) / Math.Max(1, rowWidth),
-            (SystemParameters.WorkArea.Height * .35) / Math.Max(1, rowHeight)));
-        if (fit < 1)
-            foreach (var tile in tiles) { tile.Host.Width *= fit; tile.Host.Height *= fit; }
+        var fit = Math.Clamp(Math.Min((SystemParameters.WorkArea.Width - 24 - chrome) / Math.Max(1, rowWidth),
+            (SystemParameters.WorkArea.Height * .35 - 38) / Math.Max(1, rowHeight)), .1, 1);
+        foreach (var tile in tiles) { tile.Host.Width *= fit; tile.Host.Height *= fit; }
+        foreach (var card in cards)
+            card.Surface.Width = tiles.Where(tile => ReferenceEquals(tile.Group, card)).Sum(tile => tile.Host.Width) + 10;
+        RefreshTitles();
         if (pages > 1)
         {
             var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
@@ -182,6 +242,14 @@ internal sealed class WindowPreview : Window
         object? hoverGroup = null;
         // Before Show(), descendants have no PresentationSource even when the HWND exists.
         if (present && IsLoaded && DockNative.GetCursorPos(out var mouse))
+        {
+            foreach (var card in cards)
+            {
+                if (PresentationSource.FromVisual(card.Surface) == null) continue;
+                var a = card.Surface.PointToScreen(new Point());
+                var b = card.Surface.PointToScreen(new Point(card.Surface.ActualWidth, card.Surface.ActualHeight));
+                if (mouse.X >= a.X && mouse.X < b.X && mouse.Y >= a.Y && mouse.Y < b.Y) { hoverGroup = card; break; }
+            }
             foreach (var tile in tiles)
             {
                 if (PresentationSource.FromVisual(tile.Host) == null) continue;
@@ -189,6 +257,16 @@ internal sealed class WindowPreview : Window
                 var end = tile.Host.PointToScreen(new Point(tile.Host.ActualWidth, tile.Host.ActualHeight));
                 if (tile.Thumbnail?.ContainsPointer() == true || (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y)) { hoverGroup = tile.Group; break; }
             }
+        }
+        foreach (var card in cards)
+        {
+            var hovered = ReferenceEquals(hoverGroup, card);
+            if (card.Hover == hovered) continue;
+            card.Hover = hovered;
+            card.Surface.Background = Brush(hovered ? "#2B3645" : "#202936");
+            card.Surface.BorderBrush = Brush(hovered ? "#61758C" : "#344252");
+            card.Close.Visibility = hovered ? Visibility.Visible : Visibility.Hidden;
+        }
         foreach (var tile in tiles)
         {
             if (tile.Host.ActualWidth <= 0 || !DockNative.IsWindow(tile.Window.Handle)) continue;
@@ -220,7 +298,7 @@ internal sealed class WindowPreview : Window
         tile.RetryAt = Environment.TickCount64 + 500;
         // Indirection keeps retained native surfaces bound to the latest layout/click action.
         tile.Thumbnail = WindowThumbnail.Create(new WindowInteropHelper(this).Handle, tile.Window.Handle,
-            () => tile.Click(), () => tile.Close?.Invoke());
+            () => tile.Click());
     }
     private bool ContainsInteractionPointer()
     {
@@ -265,6 +343,7 @@ internal sealed class WindowPreview : Window
         windows = latest;
         if (windows.Length == 0) { dismiss(); return; }
         if (changed) RenderPage();
+        else RefreshTitles();
     }
-    private void Release() { foreach (var tile in tiles) tile.Thumbnail?.Dispose(); tiles.Clear(); }
+    private void Release() { foreach (var tile in tiles) tile.Thumbnail?.Dispose(); tiles.Clear(); cards.Clear(); }
 }
