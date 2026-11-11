@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 namespace DeskIsle.Dock;
 
 public partial class DockBar : Window
@@ -19,6 +20,7 @@ public partial class DockBar : Window
         internal DockPin? Pin;
         internal string? IconPath, IconKey;
         internal long IconVersion;
+        internal nint RecentWindow;
     }
     private readonly DockController controller;
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
@@ -32,12 +34,23 @@ public partial class DockBar : Window
     private nint pressedForeground;
     private bool dragging, menuOpen, closed;
     private HwndSource? source;
-    internal bool Interacting => dragging || menuOpen;
+    private readonly DispatcherTimer previewDelay = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer previewClose = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private WindowPreview? preview;
+    private AppView? hoveredView;
+    internal bool Interacting => dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
     internal DockBar(DockController controller)
     {
         this.controller = controller;
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
+        previewDelay.Tick += (_, _) =>
+        {
+            previewDelay.Stop();
+            if (hoveredView is { } view && view.Button.IsMouseOver && !dragging && !menuOpen) ShowPreview(view);
+        };
+        previewClose.Tick += (_, _) => { previewClose.Stop(); ClosePreview(); };
+        IsVisibleChanged += (_, _) => { if (!IsVisible) ClosePreview(); };
         SizeChanged += (_, _) => Place();
         DpiChanged += (_, _) =>
         {
@@ -61,7 +74,7 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();
@@ -83,6 +96,9 @@ public partial class DockBar : Window
             alive.Add(id);
             if (!views.TryGetValue(id, out var view)) { view = CreateView(); views.Add(id, view); }
             view.Windows = group; view.Pin = pin; view.IconPath = iconPath;
+            var foreground = controller.ForegroundForClick();
+            if (group.FirstOrDefault(w => w.Handle == foreground) is { } current) view.RecentWindow = current.Handle;
+            ToolTipService.SetIsEnabled(view.Button, group.Length == 0);
             view.Button.ToolTip = pin != null && !File.Exists(pin.Path) ? title + "（路径不可用，右键重新定位）" : title;
             view.Button.Opacity = pin != null && !File.Exists(pin.Path) ? .45 : 1;
             view.Indicator.Visibility = group.Length > 0 ? Visibility.Visible : Visibility.Hidden;
@@ -126,8 +142,19 @@ public partial class DockBar : Window
         var transform = new ScaleTransform(1, 1);
         image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);
         var hovered = false;
-        button.MouseEnter += (_, _) => { if (hovered) return; hovered = true; Animate(1.12); };
-        button.MouseLeave += (_, _) => { if (!hovered) return; hovered = false; Animate(1); };
+        button.MouseEnter += (_, _) =>
+        {
+            if (!hovered) { hovered = true; Animate(1.12); }
+            previewClose.Stop(); previewDelay.Stop();
+            if (!ReferenceEquals(hoveredView, view)) ClosePreview();
+            hoveredView = view;
+            if (view.Windows.Length > 0) previewDelay.Start();
+        };
+        button.MouseLeave += (_, _) =>
+        {
+            if (hovered) { hovered = false; Animate(1); }
+            previewDelay.Stop(); previewClose.Stop(); previewClose.Start();
+        };
         void Animate(double value)
         {
             var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100));
@@ -137,13 +164,18 @@ public partial class DockBar : Window
         button.Focusable = false;
         button.Click += (_, _) =>
         {
+            ClosePreview();
             var foreground = pressedForeground != 0 ? pressedForeground : controller.ForegroundForClick();
             var root = DockNative.GetAncestor(foreground, 3);
             var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
             if (active != null) DockNative.PostMessage(active.Handle, 0x0112, 0xF020, 0);
             else if (view.Windows.Length == 1) Activate(view.Windows[0]);
-            else if (view.Windows.Length > 1) OpenWindows(button, view.Windows);
+            else if (view.Windows.Length > 1)
+            {
+                var recent = view.Windows.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? view.Windows.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? view.Windows[0];
+                view.RecentWindow = recent.Handle; Activate(recent);
+            }
             else if (view.Pin != null) controller.Launch(view.Pin.Path);
         };
         button.PreviewMouseLeftButtonDown += (_, e) => { pressedForeground = controller.ForegroundForClick(); down = e.GetPosition(this); dragPin = view.Pin?.Path; };
@@ -153,6 +185,7 @@ public partial class DockBar : Window
             if (dragging || pin == null || dragPin != pin.Path || e.LeftButton != MouseButtonState.Pressed) return;
             var point = e.GetPosition(this);
             if (Math.Abs(point.X - down.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(point.Y - down.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            ClosePreview();
             dragging = true;
             try { DragDrop.DoDragDrop(button, new DataObject("DeskIsle.Dock.Pin", pin.Path), DragDropEffects.Move); }
             finally { dragging = false; dragPin = null; }
@@ -171,7 +204,7 @@ public partial class DockBar : Window
         };
         var menu = new ContextMenu();
         button.ContextMenu = menu;
-        button.ContextMenuOpening += (_, _) => FillMenu(menu, view);
+        button.ContextMenuOpening += (_, _) => { ClosePreview(); FillMenu(menu, view); };
         menu.Opened += (_, _) => menuOpen = true;
         menu.Closed += (_, _) => menuOpen = false;
         // A nonempty menu is needed for WPF to raise ContextMenuOpening on first use.
@@ -230,12 +263,22 @@ public partial class DockBar : Window
     }
     internal static void Add(ItemsControl menu, string header, Action action)
     { var item = new MenuItem { Header = header }; item.Click += (_, _) => action(); menu.Items.Add(item); }
-    private void OpenWindows(Button button, DockWindow[] windows)
+    private void ShowPreview(AppView view)
     {
-        var menu = new ContextMenu { PlacementTarget = button };
-        foreach (var window in windows) Add(menu, window.Title, () => Activate(window));
-        menu.Opened += (_, _) => menuOpen = true; menu.Closed += (_, _) => menuOpen = false;
-        menu.IsOpen = true;
+        var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
+        if (closed || !IsVisible || live.Length == 0) return;
+        ClosePreview();
+        hoveredView = view;
+        preview = new WindowPreview(this, view.Button, live, view.Image.Source,
+            window => { view.RecentWindow = window.Handle; Activate(window); }, ClosePreview);
+        preview.MouseEnter += (_, _) => previewClose.Stop();
+        preview.MouseLeave += (_, _) => { previewClose.Stop(); previewClose.Start(); };
+        preview.Show();
+    }
+    private void ClosePreview()
+    {
+        previewDelay.Stop(); previewClose.Stop();
+        var previous = preview; preview = null; previous?.Close();
     }
     private static void Activate(DockWindow window)
     {
