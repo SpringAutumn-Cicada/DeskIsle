@@ -66,6 +66,35 @@ internal static class DockApps
     [DllImport("ole32.dll")] private static extern void CoUninitialize();
     [DllImport("user32.dll")] private static extern nint SendMessageTimeout(nint window, uint message, nint wParam, nint lParam, uint flags, uint timeout, out nint result);
     [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] private static extern nint GetClassLongPtr(nint window, int index);
+    [StructLayout(LayoutKind.Sequential)] private struct NativeBitmap
+    { public int Type, Width, Height, Stride; public ushort Planes, BitsPerPixel; public nint Bits; }
+    [StructLayout(LayoutKind.Sequential)] private struct BitmapHeader
+    { public uint Size; public int Width, Height; public ushort Planes, BitCount; public uint Compression, ImageSize; public int XPels, YPels; public uint Colors, Important; }
+    [DllImport("gdi32.dll", EntryPoint = "GetObjectW")] private static extern int GetObject(nint bitmap, int size, out NativeBitmap value);
+    [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint dc);
+    [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint dc);
+    [DllImport("gdi32.dll")] private static extern int GetDIBits(nint dc, nint bitmap, uint start, uint count, byte[] bits, ref BitmapHeader info, uint usage);
+    private static BitmapSource ReadIconBitmap(nint bitmap)
+    {
+        if (GetObject(bitmap, Marshal.SizeOf<NativeBitmap>(), out var native) == 0 || native.Width <= 0 || native.Height <= 0 || native.Width > 4096 || native.Height > 4096)
+            throw new IOException("图标位图尺寸无效。");
+        var stride = checked(native.Width * 4);
+        var data = new byte[checked(stride * native.Height)];
+        var header = new BitmapHeader { Size = (uint)Marshal.SizeOf<BitmapHeader>(), Width = native.Width, Height = -native.Height, Planes = 1, BitCount = 32 };
+        var dc = CreateCompatibleDC(0);
+        if (dc == 0) throw new IOException("无法读取图标像素。");
+        try
+        {
+            if (GetDIBits(dc, bitmap, 0, (uint)native.Height, data, ref header, 0) != native.Height) throw new IOException("图标像素读取不完整。");
+        }
+        finally { DeleteDC(dc); }
+        // Legacy icons can omit alpha entirely. Modern Shell ARGB icons retain their transparency.
+        var hasAlpha = false;
+        for (var i = 3; i < data.Length; i += 4) if (data[i] != 0) { hasAlpha = true; break; }
+        if (!hasAlpha) for (var i = 3; i < data.Length; i += 4) data[i] = 255;
+        var source = BitmapSource.Create(native.Width, native.Height, 96, 96, PixelFormats.Pbgra32, null, data, stride);
+        source.Freeze(); return source;
+    }
     internal static ImageSource? WindowIcon(nint window)
     {
         SendMessageTimeout(window, 0x7F, 1, 0, 2, 100, out var icon);
@@ -91,11 +120,10 @@ internal static class DockApps
             if (SHCreateItemFromParsingName(path, 0, in iid, out factory) >= 0 &&
                 factory.GetImage(new PixelSize { Width = pixels, Height = pixels }, 0x5, out bitmap) >= 0 && bitmap != 0)
             {
-                var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze(); return source;
+                return ReadIconBitmap(bitmap);
             }
         }
-        catch (COMException) { /* Fall back to the original system icon at its native resolution. */ }
+        catch (Exception ex) when (ex is COMException or IOException) { /* Fall back to the original system icon at its native resolution. */ }
         finally
         {
             if (bitmap != 0) DeleteObject(bitmap);
