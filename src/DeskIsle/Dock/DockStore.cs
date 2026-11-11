@@ -6,7 +6,7 @@ namespace DeskIsle.Dock;
 internal sealed class DockSettings
 {
     public int Version { get; set; } = 1;
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
     public int RevealMs { get; set; } = 120;
     public int HideMs { get; set; } = 650;
     public double Opacity { get; set; } = .94;

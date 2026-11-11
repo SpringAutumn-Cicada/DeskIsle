@@ -40,7 +40,8 @@ internal sealed class DockController : IDisposable
     internal void Start()
     {
         if (store.Warning != null) MessageBox.Show(store.Warning, "DeskIsle Dock");
-        if (Settings.Enabled && !store.ReadOnly) Apply(true);
+        // Explicit product behavior: every launch starts Dock, even after a previous session disabled it.
+        if (!store.ReadOnly) Apply(true);
     }
     internal void Configure()
     {

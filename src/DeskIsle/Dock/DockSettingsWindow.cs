@@ -1,37 +1,43 @@
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
+using System.Windows.Input;
 namespace DeskIsle.Dock;
 
-internal sealed class DockSettingsWindow : Window
+internal partial class DockSettingsWindow : Window
 {
+    private readonly DockController controller;
     internal DockSettingsWindow(DockController controller)
     {
-        Title = "悬浮 Dock"; Width = 420; Height = 500;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen; ResizeMode = ResizeMode.NoResize;
-        Background = new SolidColorBrush(Color.FromRgb(32, 38, 50)); Foreground = Brushes.White;
-        var panel = new StackPanel { Margin = new Thickness(24) }; Content = panel;
-        panel.Children.Add(new TextBlock { Text = "悬浮 Dock", FontSize = 24, Margin = new Thickness(0, 0, 0, 15) });
-        var enabled = new CheckBox { Content = "启用主屏 Dock，接管原生任务栏", IsChecked = controller.Settings.Enabled, Foreground = Brushes.White, Margin = new Thickness(0, 0, 0, 16) };
-        panel.Children.Add(enabled);
-        panel.Children.Add(new TextBlock { Text = "底边停留唤出；原生任务栏按钮可随时切换。\n首次启用后请检查返回按钮和快捷键。", Foreground = Brushes.LightSlateGray, Margin = new Thickness(0, 0, 0, 16) });
-        Slider AddSlider(string title, double min, double max, double value)
-        { panel.Children.Add(new TextBlock { Text = title, Margin = new Thickness(0, 5, 0, 3) }); var s = new Slider { Minimum = min, Maximum = max, Value = value }; panel.Children.Add(s); return s; }
-        var reveal = AddSlider("唤出等待（0～1000 毫秒）", 0, 1000, controller.Settings.RevealMs);
-        var hide = AddSlider("移开后收起（200～3000 毫秒）", 200, 3000, controller.Settings.HideMs);
-        var opacity = AddSlider("背景不透明度", .5, 1, controller.Settings.Opacity);
-        panel.Children.Add(new TextBlock { Text = "切换快捷键：Ctrl + Alt +", Margin = new Thickness(0, 12, 0, 4) });
-        var key = new ComboBox { ItemsSource = Enumerable.Range('A', 26).Select(x => ((char)x).ToString()).ToArray(), SelectedItem = ((char)controller.Settings.HotKey).ToString() };
-        panel.Children.Add(key);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
-        var cancel = new Button { Content = "取消", IsCancel = true }; cancel.Click += (_, _) => Close(); buttons.Children.Add(cancel);
-        var save = new Button { Content = "保存" }; buttons.Children.Add(save);
-        save.Click += (_, _) =>
-        {
-            controller.Settings.RevealMs = (int)reveal.Value; controller.Settings.HideMs = (int)hide.Value;
-            controller.Settings.Opacity = opacity.Value; controller.Settings.HotKey = (key.SelectedItem as string ?? "D")[0];
-            if (controller.Apply(enabled.IsChecked == true)) Close();
-        };
-        panel.Children.Add(buttons);
+        this.controller = controller;
+        InitializeComponent();
+        MaxHeight = SystemParameters.WorkArea.Height - 24;
+        EnabledToggle.IsChecked = controller.Settings.Enabled;
+        RevealSlider.Value = controller.Settings.RevealMs;
+        HideSlider.Value = controller.Settings.HideMs;
+        OpacitySlider.Value = controller.Settings.Opacity;
+        HotKeyEditor.Text = ((char)controller.Settings.HotKey).ToString();
+        UpdateValues();
+        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+    }
+    private void ValuesChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdateValues();
+    private void UpdateValues()
+    {
+        if (RevealValue == null || HideValue == null || OpacityValue == null || RevealSlider == null || HideSlider == null || OpacitySlider == null) return;
+        RevealValue.Text = $"{RevealSlider.Value:0} ms";
+        HideValue.Text = $"{HideSlider.Value:0} ms";
+        OpacityValue.Text = $"{OpacitySlider.Value:P0}";
+    }
+    private void DragHeading(object sender, MouseButtonEventArgs e)
+    { if (e.OriginalSource is not System.Windows.Controls.Button && e.LeftButton == MouseButtonState.Pressed) DragMove(); }
+    private void CancelClick(object sender, RoutedEventArgs e) => Close();
+    private void SaveClick(object sender, RoutedEventArgs e)
+    {
+        var text = HotKeyEditor.Text.Trim().ToUpperInvariant();
+        if (text.Length != 1 || text[0] < 'A' || text[0] > 'Z')
+        { ErrorText.Text = "快捷键请输入 A 到 Z 的一个字母。"; ErrorText.Visibility = Visibility.Visible; HotKeyEditor.Focus(); return; }
+        controller.Settings.RevealMs = (int)RevealSlider.Value;
+        controller.Settings.HideMs = (int)HideSlider.Value;
+        controller.Settings.Opacity = OpacitySlider.Value;
+        controller.Settings.HotKey = text[0];
+        if (controller.Apply(EnabledToggle.IsChecked == true)) Close();
     }
 }
