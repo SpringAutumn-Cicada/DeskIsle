@@ -31,8 +31,6 @@ public partial class DockBar : Window
     private static readonly SemaphoreSlim iconSlots = new(2);
     private readonly SplitGroups splitGroups = new();
     private readonly List<string> runningOrder = [];
-    private readonly Border separator = new() { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) };
-    private readonly TextBlock emptyHint = new() { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) };
     private Point down;
     private string? dragPin;
     private nint pressedForeground;
@@ -86,7 +84,11 @@ public partial class DockBar : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 364);
+        // Equal side widths keep the clock at the screen and Dock center even with unequal app counts.
+        var side = Math.Min(Math.Max(PinnedApps.Children.Count, RunningApps.Children.Count) * 50,
+            Math.Max(0, (b.X - a.X - 350) / 2));
+        if (PinnedScroller.Width != side) PinnedScroller.Width = side;
+        if (RunningScroller.Width != side) RunningScroller.Width = side;
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
@@ -105,7 +107,8 @@ public partial class DockBar : Window
         if (dragging || menuOpen) { pendingPins = pins; pendingWindows = windows; return; }
         splitGroups.Observe(windows);
         windows = windows.OrderBy(w => w.Handle.ToInt64()).ToArray();
-        var desired = new List<UIElement>();
+        var pinned = new List<UIElement>();
+        var running = new List<UIElement>();
         var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Use(string id, string title, string? iconPath, DockPin? pin, DockWindow[] group)
         {
@@ -121,7 +124,7 @@ public partial class DockBar : Window
             view.Indicator.Background = group.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
             ApplyAttention(view);
             LoadIcon(view);
-            desired.Add(view.Button);
+            (pin != null ? pinned : running).Add(view.Button);
         }
         foreach (var pin in pins)
             Use("pin:" + pin.Path, pin.Name, pin.Path, pin, windows.Where(w => pin.Executable != null && string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)).ToArray());
@@ -131,19 +134,22 @@ public partial class DockBar : Window
         foreach (var id in extra.Keys)
             if (!runningOrder.Contains(id, StringComparer.OrdinalIgnoreCase)) runningOrder.Add(id);
         if (runningOrder.Count > 256) runningOrder.RemoveAll(id => !extra.ContainsKey(id));
-        if (extra.Count > 0 && pins.Length > 0) desired.Add(separator);
         foreach (var id in runningOrder.Where(extra.ContainsKey))
         { var group = extra[id]; Use("running:" + id, group[0].Title, group[0].Executable, null, group); }
-        if (desired.Count == 0) desired.Add(emptyHint);
-        // Keep existing controls in place: state/title/foreground changes never replace hovered items.
-        for (var i = Apps.Children.Count - 1; i >= 0; i--)
-            if (!desired.Contains(Apps.Children[i])) Apps.Children.RemoveAt(i);
-        for (var i = 0; i < desired.Count; i++)
+        // Retain existing controls and hover state; each app belongs to exactly one side.
+        static void Reconcile(StackPanel panel, List<UIElement> desired)
         {
-            if (i < Apps.Children.Count && ReferenceEquals(Apps.Children[i], desired[i])) continue;
-            if (Apps.Children.Contains(desired[i])) Apps.Children.Remove(desired[i]);
-            Apps.Children.Insert(i, desired[i]);
+            for (var i = panel.Children.Count - 1; i >= 0; i--)
+                if (!desired.Contains(panel.Children[i])) panel.Children.RemoveAt(i);
+            for (var i = 0; i < desired.Count; i++)
+            {
+                if (i < panel.Children.Count && ReferenceEquals(panel.Children[i], desired[i])) continue;
+                if (panel.Children.Contains(desired[i])) panel.Children.Remove(desired[i]);
+                panel.Children.Insert(i, desired[i]);
+            }
         }
+        Reconcile(PinnedApps, pinned); Reconcile(RunningApps, running);
+        Place();
         preview?.SetWindows(hoveredView?.Windows ?? []);
         if (preview == null && hoveredView is { Windows.Length: > 0 } hovered
             && hovered.Button.IsMouseOver && !previewDelay.IsEnabled) previewDelay.Start();
