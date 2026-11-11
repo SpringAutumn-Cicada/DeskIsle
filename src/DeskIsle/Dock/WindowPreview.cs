@@ -48,7 +48,7 @@ internal sealed class WindowPreview : Window
             var corner = 2;
             DwmSetWindowAttribute(hwnd, 33, ref corner, sizeof(int));
         };
-        ContentRendered += (_, _) => { RenderPage(); Place(); check.Start(); };
+        ContentRendered += (_, _) => { UpdateThumbnails(); check.Start(); };
         LayoutUpdated += (_, _) => UpdateThumbnails();
         SizeChanged += (_, _) => Place();
         check.Tick += (_, _) =>
@@ -62,7 +62,12 @@ internal sealed class WindowPreview : Window
             else UpdateThumbnails();
         };
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
+        new WindowInteropHelper(this).EnsureHandle();
         RenderPage();
+        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Arrange(new Rect(new Point(), DesiredSize));
+        UpdateLayout(); Place();
+        UpdateThumbnails(false);
     }
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
@@ -84,8 +89,12 @@ internal sealed class WindowPreview : Window
             var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(2) };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, _) => click();
+            var tile = new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null };
+            tile.Thumbnail = WindowThumbnail.Create(new WindowInteropHelper(this).Handle, window.Handle, click, close);
+            if (group == null && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
+                host.Width = Math.Clamp(140 * thumbnail.AspectRatio, 24, Math.Max(250, SystemParameters.WorkArea.Width / 3 - 12));
             parent.Children.Add(host);
-            tiles.Add(new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null });
+            tiles.Add(tile);
         }
         if (page == 0 && groups.Find(windows) is { } pair)
         {
@@ -122,9 +131,9 @@ internal sealed class WindowPreview : Window
             footer.Children.Add(previous); footer.Children.Add(next); content.Children.Add(footer);
         }
     }
-    private void UpdateThumbnails()
+    private void UpdateThumbnails(bool present = true)
     {
-        if (finished || !IsLoaded || !IsVisible) return;
+        if (finished || (present && (!IsLoaded || !IsVisible))) return;
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
         object? hoverGroup = null;
         if (DockNative.GetCursorPos(out var mouse))
@@ -142,13 +151,7 @@ internal sealed class WindowPreview : Window
             tile.Thumbnail.Feedback(ReferenceEquals(hoverGroup, tile.Group));
             var point = tile.Host.TranslatePoint(new Point(), this);
             var a = scale.Transform(point); var b = scale.Transform(point + new Vector(tile.Host.ActualWidth, tile.Host.ActualHeight));
-            var aspect = tile.Thumbnail.AspectRatio;
-            if (!tile.Composite && aspect > 0)
-            {
-                var desired = Math.Clamp(140 * aspect, 24, Math.Max(250, SystemParameters.WorkArea.Width / 3 - 12));
-                if (Math.Abs(tile.Host.Width - desired) > 1) tile.Host.Width = desired;
-            }
-            tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) });
+            tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) }, present);
         }
     }
     internal bool ContainsPointer()
