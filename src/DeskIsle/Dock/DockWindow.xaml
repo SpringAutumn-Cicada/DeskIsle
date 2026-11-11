@@ -6,6 +6,7 @@
 <Border Width="1" Background="#506077" Margin="6,8"/>
 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="Apps" Orientation="Horizontal"/></ScrollViewer>
 <Border Width="1" Background="#506077" Margin="8,8"/>
+<Button Width="40" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="显示桌面（Win+D）" AutomationProperties.Name="显示桌面" Click="ShowDesktopClick"><Path Data="M2,3 L22,3 L22,17 L2,17 Z M12,17 L12,22 M7,22 L17,22" Stroke="#CED9EA" StrokeThickness="1.7" Width="23" Height="23" Stretch="Uniform"/></Button>
 <Button Width="46" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="显示原生任务栏" Click="NativeClick"><Path Data="M2,4 L22,4 L22,20 L2,20 Z M2,15 L22,15 M6,18 L9,18 M12,18 L15,18" Stroke="#CED9EA" StrokeThickness="1.7" Width="23" Height="23" Stretch="Uniform"/></Button>
 <Button Width="40" Height="48" Padding="0" Background="Transparent" BorderThickness="0" ToolTip="Dock 设置" Click="SettingsClick"><Path Data="M4,2 L4,22 M12,2 L12,22 M20,2 L20,22 M1,7 L7,7 M9,16 L15,16 M17,9 L23,9" Stroke="#CED9EA" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="23" Height="23" Stretch="Uniform"/></Button>
 </StackPanel></Border></Window>

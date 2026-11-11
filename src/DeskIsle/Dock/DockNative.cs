@@ -52,6 +52,14 @@ internal static class DockNative
         if (sent == 1) SendInput(1, [inputs[1]], Marshal.SizeOf<Input>());
         return sent == 2;
     }
+    internal static bool ShowDesktop()
+    {
+        var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = 0x44 },
+            new Input { Type = 1, Key = 0x44, Flags = 2 }, new Input { Type = 1, Key = 0x5B, Flags = 2 } };
+        var sent = SendInput(4, inputs, Marshal.SizeOf<Input>());
+        if (sent != 4) SendInput(2, [inputs[2], inputs[3]], Marshal.SizeOf<Input>());
+        return sent == 4;
+    }
     internal static string Class(nint window) { var s = new StringBuilder(256); GetClassName(window, s, s.Capacity); return s.ToString(); }
     internal static MonitorInfo Primary()
     {

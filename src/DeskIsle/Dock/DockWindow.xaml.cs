@@ -87,7 +87,7 @@ public partial class DockBar : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 240);
+        Scroller.MaxWidth = Math.Max(120, b.X - a.X - 284);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
@@ -256,10 +256,9 @@ public partial class DockBar : Window
         else if (view.IconPath is { } path) Add(menu, "固定到 Dock", () => controller.Pin([path]));
         foreach (var window in view.Windows)
         {
-            var item = new MenuItem { Header = window.Title.Length > 60 ? window.Title[..60] + "…" : window.Title };
-            Add(item, "切换到窗口", () => Activate(window));
-            Add(item, "关闭窗口", () => DockNative.PostMessage(window.Handle, 0x0010, 0, 0));
-            menu.Items.Add(item);
+            if (view.Windows.Length > 1) Add(menu, "切换：" + window.Title, () => Activate(window));
+            Add(menu, view.Windows.Length == 1 ? "关闭窗口" : "关闭：" + window.Title,
+                () => { if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0); });
         }
     }
     private async void LoadIcon(AppView view)
@@ -316,6 +315,11 @@ public partial class DockBar : Window
     {
         if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);
         DockNative.SetForegroundWindow(window.Handle);
+    }
+    private void ShowDesktopClick(object sender, RoutedEventArgs e)
+    {
+        ClosePreview();
+        if (!DockNative.ShowDesktop()) MessageBox.Show("系统未接受显示桌面快捷键，请按 Win+D。", "DeskIsle");
     }
     private void StartClick(object sender, RoutedEventArgs e)
     {
