@@ -21,7 +21,7 @@ public partial class DockBar : Window
         internal DockWindow[] Windows = [];
         internal DockPin? Pin;
         internal string? IconPath, IconKey;
-        internal long IconVersion;
+        internal long IconVersion, IconRetryAt;
         internal nint RecentWindow;
         internal SplitPair? MinimizedPair;
     }
@@ -299,7 +299,7 @@ public partial class DockBar : Window
         if (path == null && windows.Length == 0) return;
         var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
         var key = (path ?? $"window:{windows[0].Handle}") + "|" + pixels;
-        if (view.IconKey == key) return;
+        if (view.IconKey == key || Environment.TickCount64 < view.IconRetryAt) return;
         view.IconKey = key;
         var version = ++view.IconVersion;
         if (!icons.TryGetValue(key, out var icon))
@@ -316,9 +316,15 @@ public partial class DockBar : Window
             }
             catch (Exception ex) when (ex is IOException or ArgumentException or System.Runtime.InteropServices.COMException) { icon = null; }
             if (icons.Count >= 256) icons.Clear();
-            icons[key] = icon;
+            if (icon != null) icons[key] = icon;
         }
         if (closed || version != view.IconVersion) return;
+        if (icon == null)
+        {
+            view.IconKey = null; view.IconRetryAt = Environment.TickCount64 + 3000;
+            if (view.Image.Source != null) return; // Keep the last valid image during a transient Shell failure.
+        }
+        else view.IconRetryAt = 0;
         view.Image.Source = icon;
         view.Placeholder.Visibility = icon != null ? Visibility.Hidden : Visibility.Visible;
     }

@@ -24,7 +24,7 @@ internal sealed partial class DockController : IDisposable
     private nint windowHook, foregroundHook;
     private DockNative.WinEventProc? changeCallback;
     private readonly DispatcherTimer settle = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
-    private long edgeSince, awaySince;
+    private long edgeSince, awaySince, edgeRepairAt;
     private nint lastExternalForeground;
     internal nint ForegroundForClick()
     {
@@ -167,11 +167,10 @@ internal sealed partial class DockController : IDisposable
             awaySince = Environment.TickCount64;
             return;
         }
-        if (DockNative.FullScreen() && !bar.Interacting && !bar.IsMouseOver) { bar.Hide(); returnButton?.Hide(); edgeSince = 0; return; }
         if (lease.NativeMode) { if (returnButton != null && (!returnButton.IsVisible || DockNative.IsIconic(new WindowInteropHelper(returnButton).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(returnButton).Handle)))
             { PlaceReturn(); returnButton.WindowState = WindowState.Normal; returnButton.Show(); DockNative.ShowWindowAsync(new WindowInteropHelper(returnButton).Handle, 4); } return; }
         // A desktop with no unminimized application windows keeps its launcher visible.
-        if (windows.All(w => !DockNative.IsWindowVisible(w.Handle) || DockNative.IsIconic(w.Handle)))
+        if (!DockNative.FullScreen() && windows.All(w => !DockNative.IsWindowVisible(w.Handle) || DockNative.IsIconic(w.Handle)))
         {
             if (!bar.IsVisible || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle)) Reveal();
             awaySince = Environment.TickCount64;
@@ -186,13 +185,21 @@ internal sealed partial class DockController : IDisposable
         if (atEdge)
         {
             if (edgeSince == 0) edgeSince = now;
-            if (edgeSince > 0 && now - edgeSince >= Settings.RevealMs) { Reveal(); edgeSince = -1; }
+            if (edgeSince > 0 && now - edgeSince >= Settings.RevealMs)
+            { Reveal(); edgeSince = -1; edgeRepairAt = now + 500; }
+            else if (edgeSince == -1 && now >= edgeRepairAt)
+            {
+                // Repair an externally minimized/covered Dock without requiring the pointer to leave the edge.
+                Reveal(); edgeRepairAt = now + 500;
+            }
             awaySince = now;
         }
         else edgeSince = 0;
-        if (!bar.IsVisible) return;
         DockNative.GetWindowRect(new WindowInteropHelper(bar).Handle, out var rect);
-        var within = mouse.X >= rect.Left && mouse.X < rect.Right && mouse.Y >= rect.Top && mouse.Y < monitor.Bottom;
+        var within = bar.IsVisible && mouse.X >= rect.Left && mouse.X < rect.Right && mouse.Y >= rect.Top && mouse.Y < monitor.Bottom;
+        if (DockNative.FullScreen() && !atEdge && !within && !bar.Interacting)
+        { bar.Hide(); returnButton?.Hide(); return; }
+        if (!bar.IsVisible) return;
         if (within || bar.Interacting || settingsWindow?.IsVisible == true) awaySince = now;
         else if (now - awaySince >= Settings.HideMs) bar.Hide();
     }

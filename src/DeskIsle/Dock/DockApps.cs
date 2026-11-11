@@ -81,8 +81,31 @@ internal static class DockApps
         try { return ExtractIcon(path, pixels); }
         finally { if (initialized >= 0) CoUninitialize(); }
     }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint PrivateExtractIcons(string path, int index, int width, int height, out nint icon, out uint id, uint count, uint flags);
+    private static ImageSource? ExecutableIcon(string path, int pixels)
+    {
+        nint icon = 0;
+        try
+        {
+            var count = PrivateExtractIcons(path, 0, pixels, pixels, out icon, out _, 1, 0);
+            if (count != 1 || icon == 0) return null;
+            var image = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            image.Freeze(); return image;
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or ArgumentException) { return null; }
+        finally { if (icon != 0) DestroyIcon(icon); }
+    }
     private static ImageSource? ExtractIcon(string path, int pixels)
     {
+        // Weixin's Shell image can temporarily become a generic document during notification changes.
+        // Prefer its stable executable icon resource; leave other applications' extraction unchanged.
+        if (Path.GetFileName(path).Equals("Weixin.exe", StringComparison.OrdinalIgnoreCase)
+            || Path.GetFileName(path).Equals("WeChat.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var executable = ExecutableIcon(path, pixels);
+            if (executable != null) return executable;
+        }
         IImageFactory? factory = null;
         nint bitmap = 0;
         try
