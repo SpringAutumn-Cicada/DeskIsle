@@ -83,8 +83,16 @@ public partial class DockBar : Window
             finally { dragging = false; dragPin = null; }
         };
         button.AllowDrop = true;
+        button.DragEnter += (_, e) =>
+        {
+            button.BorderThickness = new Thickness(0);
+            if (pin != null && e.Data.GetDataPresent("DeskIsle.Dock.Pin"))
+            { button.BorderThickness = new Thickness(2, 0, 0, 0); button.BorderBrush = Brushes.Aquamarine; }
+        };
+        button.DragLeave += (_, _) => button.BorderThickness = new Thickness(0);
         button.Drop += (_, e) =>
         {
+            button.BorderThickness = new Thickness(0);
             if (pin != null && e.Data.GetData("DeskIsle.Dock.Pin") is string source) { controller.Reorder(source, pin.Path); e.Handled = true; }
         };
         var menu = new ContextMenu();

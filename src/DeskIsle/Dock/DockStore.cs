@@ -32,6 +32,7 @@ internal sealed class DockStore
                 settings.Pins = (settings.Pins ?? []).Where(Path.IsPathFullyQualified).Distinct(StringComparer.OrdinalIgnoreCase).Take(100).ToList();
                 settings.RevealMs = Math.Clamp(settings.RevealMs, 0, 1000);
                 settings.HideMs = Math.Clamp(settings.HideMs, 200, 3000);
+                if (settings.HotKey < 'A' || settings.HotKey > 'Z') settings.HotKey = 'D';
                 settings.Opacity = double.IsFinite(settings.Opacity) ? Math.Clamp(settings.Opacity, .5, 1) : .94;
                 if (candidate != path) Warning = "Dock 已从备份恢复。";
                 return settings;

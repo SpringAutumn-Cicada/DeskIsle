@@ -96,8 +96,9 @@ internal sealed class DockController : IDisposable
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
         messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
         messages.AddHook(WindowMessage);
-        changeCallback = (_, _, _, _, _, _, _) =>
+        changeCallback = (_, eventId, _, objectId, childId, _, _) =>
         {
+            if (eventId != 3 && (objectId != 0 || childId != 0 || eventId is not (0x8000 or 0x8001 or 0x8002 or 0x8003 or 0x800C))) return;
             if (disposed || lease == null || settle.IsEnabled) return;
             settle.Start();
         };
