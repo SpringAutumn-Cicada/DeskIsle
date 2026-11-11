@@ -11,6 +11,7 @@ public partial class DockBar : Window
 {
     private readonly DockController controller;
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly SemaphoreSlim iconSlots = new(2);
     private Point down;
     private string? dragPin;
     private bool dragging;
@@ -38,7 +39,7 @@ public partial class DockBar : Window
     }
     internal void SetApps(DockPin[] pins, DockWindow[] windows)
     {
-        var key = string.Join("|", pins.Select(x => x.Path)) + "#" + string.Join("|", windows.Select(x => $"{x.Handle}:{x.Title}:{x.Executable}"));
+        var key = DockNative.GetForegroundWindow() + "#" + string.Join("|", pins.Select(x => x.Path)) + "#" + string.Join("|", windows.Select(x => $"{x.Handle}:{x.Title}:{x.Executable}"));
         if (key == signature || Interacting) return;
         signature = key;
         Apps.Children.Clear();
@@ -110,12 +111,18 @@ public partial class DockBar : Window
         if (iconPath == null) return;
         if (!icons.TryGetValue(iconPath, out var icon))
         {
-            try { icon = await Task.Run(() => DockApps.Icon(iconPath)); }
+            try
+            {
+                await iconSlots.WaitAsync();
+                try { icon = await Task.Run(() => DockApps.Icon(iconPath)); }
+                finally { iconSlots.Release(); }
+            }
             catch (Exception ex) when (ex is IOException or ArgumentException or System.Runtime.InteropServices.COMException) { icon = null; }
             if (icons.Count >= 256) icons.Clear();
             icons[iconPath] = icon;
         }
         image.Source = icon;
+        if (icon != null) panel.Children[0].Visibility = Visibility.Hidden;
     }
     internal static void Add(ItemsControl menu, string header, Action action)
     { var item = new MenuItem { Header = header }; item.Click += (_, _) => action(); menu.Items.Add(item); }

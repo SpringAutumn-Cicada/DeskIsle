@@ -12,6 +12,8 @@ internal sealed class TaskbarLease : IDisposable
     private bool visible;
     private readonly HashSet<nint> hidden = [];
     private Process? guard;
+    private nint showHook;
+    private DockNative.WinEventProc? showCallback;
     internal bool NativeMode { get; private set; }
     internal void Acquire()
     {
@@ -29,6 +31,12 @@ internal sealed class TaskbarLease : IDisposable
             start.ArgumentList.Add("--taskbar-watch");
             guard = Process.Start(start) ?? throw new IOException("任务栏恢复进程未能启动。");
             active = true;
+            showCallback = (_, _, window, objectId, childId, _, _) =>
+            {
+                if (active && !NativeMode && objectId == 0 && childId == 0 && DockNative.Class(window) == "Shell_TrayWnd")
+                    DockNative.ShowWindowAsync(window, 0);
+            };
+            showHook = DockNative.SetWinEventHook(0x8002, 0x8002, 0, showCallback, 0, 0, 2);
             Reconcile();
         }
         catch { Restore(false); throw; }
@@ -80,8 +88,12 @@ internal sealed class TaskbarLease : IDisposable
     }
     public void Dispose()
     {
+        if (showHook != 0) { DockNative.UnhookWinEvent(showHook); showHook = 0; }
         if (!active) return;
-        try { if (!Restore(false)) return; active = false; }
+        // Leave the marker and guard alive if Explorer is not available yet.
+        active = false;
+        try { Restore(false); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
         finally { guard?.Dispose(); }
     }
 }

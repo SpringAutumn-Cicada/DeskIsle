@@ -7,7 +7,7 @@ internal sealed class DockSettingsWindow : Window
 {
     internal DockSettingsWindow(DockController controller)
     {
-        Title = "悬浮 Dock"; Width = 420; Height = 430;
+        Title = "悬浮 Dock"; Width = 420; Height = 500;
         WindowStartupLocation = WindowStartupLocation.CenterScreen; ResizeMode = ResizeMode.NoResize;
         Background = new SolidColorBrush(Color.FromRgb(32, 38, 50)); Foreground = Brushes.White;
         var panel = new StackPanel { Margin = new Thickness(24) }; Content = panel;

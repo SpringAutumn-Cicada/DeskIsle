@@ -8,6 +8,7 @@ Push-Location $root
 try {
     & $dotnet publish src/DeskIsle/DeskIsle.csproj -c Release -r win-x64 --self-contained true -o artifacts/DeskIsle-win-x64
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+    Copy-Item (Join-Path $PSScriptRoot 'Restore-Taskbar.cmd') (Join-Path $root 'artifacts/DeskIsle-win-x64/Restore-Taskbar.cmd') -Force
     [xml]$project = Get-Content src/DeskIsle/DeskIsle.csproj
     $version = $project.Project.PropertyGroup.Version
     Compress-Archive -Path artifacts/DeskIsle-win-x64 -DestinationPath ("artifacts/DeskIsle-$version-win-x64.zip") -Force

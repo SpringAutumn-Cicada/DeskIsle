@@ -14,13 +14,16 @@ internal sealed class DockController : IDisposable
     private readonly DockStore store = new();
     internal DockSettings Settings { get; }
     private readonly DispatcherTimer pointer = new() { Interval = TimeSpan.FromMilliseconds(80) };
-    private readonly DispatcherTimer refresh = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer refresh = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(3) };
     private TaskbarLease? lease;
     private DockBar? bar;
     private Window? returnButton;
     private HwndSource? messages;
     private DockSettingsWindow? settingsWindow;
     private bool scanning, disposed, hotkey;
+    private nint windowHook, foregroundHook;
+    private DockNative.WinEventProc? changeCallback;
+    private readonly DispatcherTimer settle = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
     private long edgeSince, awaySince;
     private DockPin[] pins = [];
     private DockWindow[] windows = [];
@@ -30,6 +33,7 @@ internal sealed class DockController : IDisposable
         Settings = store.Load();
         pointer.Tick += PointerTick;
         refresh.Tick += async (_, _) => await Refresh();
+        settle.Tick += async (_, _) => { settle.Stop(); await Refresh(); };
         try { TaskbarLease.Restore(true); }
         catch (Exception ex) when (Recoverable(ex)) { MessageBox.Show("任务栏恢复失败：" + ex.Message, "DeskIsle"); }
     }
@@ -92,6 +96,13 @@ internal sealed class DockController : IDisposable
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
         messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
         messages.AddHook(WindowMessage);
+        changeCallback = (_, _, _, _, _, _, _) =>
+        {
+            if (disposed || lease == null || settle.IsEnabled) return;
+            settle.Start();
+        };
+        windowHook = DockNative.SetWinEventHook(0x8000, 0x800C, 0, changeCallback, 0, 0, 2);
+        foregroundHook = DockNative.SetWinEventHook(3, 3, 0, changeCallback, 0, 0, 2);
     }
     private void RegisterKey()
     {
@@ -209,7 +220,9 @@ internal sealed class DockController : IDisposable
     private static bool Recoverable(Exception ex) => ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException or System.Text.Json.JsonException;
     private void Stop()
     {
-        pointer.Stop(); refresh.Stop();
+        pointer.Stop(); refresh.Stop(); settle.Stop();
+        if (windowHook != 0) { DockNative.UnhookWinEvent(windowHook); windowHook = 0; }
+        if (foregroundHook != 0) { DockNative.UnhookWinEvent(foregroundHook); foregroundHook = 0; }
         if (messages != null) { if (hotkey) DockNative.UnregisterHotKey(messages.Handle, 1); hotkey = false; messages.RemoveHook(WindowMessage); messages = null; }
         bar?.Close(); bar = null; returnButton?.Close(); returnButton = null;
         lease?.Dispose(); lease = null;
