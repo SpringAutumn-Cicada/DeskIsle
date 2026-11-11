@@ -39,7 +39,7 @@ internal sealed class WindowPreview : Window
         // Non-layered destination so DWM can compose its thumbnails directly into the client area.
         Background = Brush("#202936"); Foreground = Brush("#EAF0F8");
         SizeToContent = SizeToContent.WidthAndHeight; UseLayoutRounding = true; SnapsToDevicePixels = true;
-        Content = new Border { Padding = new Thickness(3), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), BorderBrush = Brush("#43536B"), Background = Brush("#202936"), Child = content };
+        Content = new Border { Padding = new Thickness(3), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), BorderBrush = Brush("#52647C"), Background = Brush("#202936"), Child = content };
         SourceInitialized += (_, _) =>
         {
             var hwnd = new WindowInteropHelper(this).Handle;
@@ -86,26 +86,30 @@ internal sealed class WindowPreview : Window
         content.Children.Add(row);
         void AddImage(DockWindow window, Panel parent, double width, double height, Action click, Action? close, object? group = null)
         {
-            var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(2) };
+            var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), Margin = new Thickness(3), VerticalAlignment = VerticalAlignment.Center };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, _) => click();
             var tile = new Tile { Window = window, Host = host, Click = click, Close = close, Group = group ?? host, Composite = group != null };
             tile.Thumbnail = WindowThumbnail.Create(new WindowInteropHelper(this).Handle, window.Handle, click, close);
             if (group == null && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
-                host.Width = Math.Clamp(140 * thumbnail.AspectRatio, 24, Math.Max(250, SystemParameters.WorkArea.Width / 3 - 12));
+            {
+                var ratio = thumbnail.AspectRatio;
+                host.Width = Math.Clamp(160 * ratio, 32, 320);
+                host.Height = host.Width / ratio;
+            }
             parent.Children.Add(host);
             tiles.Add(tile);
         }
         if (page == 0 && groups.Find(windows) is { } pair)
         {
-            var width = 250.0;
+            var width = 300.0;
             var unionHeight = Math.Max(pair.LeftRect.Bottom, pair.RightRect.Bottom) - Math.Min(pair.LeftRect.Top, pair.RightRect.Top);
             var unionWidth = pair.RightRect.Right - pair.LeftRect.Left;
             var height = width * unionHeight / Math.Max(1, unionWidth);
             var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
-            AddImage(pair.Left, composite, width / 2, height, restore, null, composite);
-            AddImage(pair.Right, composite, width / 2, height, restore, null, composite);
+            AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, null, composite);
+            AddImage(pair.Right, composite, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, null, composite);
             row.Children.Add(composite);
         }
         foreach (var window in windows.Skip(page * perPage).Take(perPage))
@@ -118,10 +122,17 @@ internal sealed class WindowPreview : Window
             }
             // Equal row height avoids blank areas around windows with different aspect ratios.
             var ratioAtSize = width / height;
-            height = 140; width = height * ratioAtSize;
+            height = 160; width = height * ratioAtSize;
             AddImage(window, row, Math.Max(24, width), height,
                 () => { activate(window); dismiss(); }, () => DockNative.PostMessage(window.Handle, 0x0010, 0, 0));
         }
+        // Fit the whole row as a unit; no tile becomes disproportionately large on small screens.
+        var rowWidth = tiles.Sum(tile => tile.Host.Width + 6) + 12;
+        var rowHeight = tiles.Count == 0 ? 160 : tiles.Max(tile => tile.Host.Height);
+        var fit = Math.Min(1, Math.Min((SystemParameters.WorkArea.Width - 24) / Math.Max(1, rowWidth),
+            (SystemParameters.WorkArea.Height * .35) / Math.Max(1, rowHeight)));
+        if (fit < 1)
+            foreach (var tile in tiles) { tile.Host.Width *= fit; tile.Host.Height *= fit; }
         if (pages > 1)
         {
             var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };

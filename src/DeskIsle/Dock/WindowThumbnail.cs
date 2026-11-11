@@ -42,7 +42,7 @@ internal sealed class WindowThumbnail : IDisposable
     {
         if (hovered == value) return;
         hovered = value;
-        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(115, 137, 164) : Color.FromRgb(49, 60, 76);
+        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79);
     }
     private readonly Action click;
     private readonly Action? close;
@@ -90,7 +90,8 @@ internal sealed class WindowThumbnail : IDisposable
             SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10);
             placement = position;
         }
-        box = new DockNative.Rect { Left = 3, Top = 3, Right = boxWidth - 3, Bottom = boxHeight - 3 };
+        var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
+        box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));
         var height = Math.Max(1, (int)Math.Round(size.Height * scale));
