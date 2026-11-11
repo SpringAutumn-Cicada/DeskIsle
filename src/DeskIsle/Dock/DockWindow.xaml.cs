@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 namespace DeskIsle.Dock;
 
 public partial class DockBar : Window
@@ -122,7 +123,17 @@ public partial class DockBar : Window
         var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator };
         var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        // Keep icon pixels untransformed. Hover feedback comes from the button background.
+        var transform = new ScaleTransform(1, 1);
+        image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);
+        var hovered = false;
+        button.MouseEnter += (_, _) => { if (hovered) return; hovered = true; Animate(1.12); };
+        button.MouseLeave += (_, _) => { if (!hovered) return; hovered = false; Animate(1); };
+        void Animate(double value)
+        {
+            var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100));
+            transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
+            transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
+        }
         button.Focusable = false;
         button.Click += (_, _) =>
         {
@@ -192,7 +203,7 @@ public partial class DockBar : Window
         var windows = view.Windows;
         var path = view.IconPath;
         if (path == null && windows.Length == 0) return;
-        var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX), 256, 512);
+        var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
         var key = (path ?? $"window:{windows[0].Handle}") + "|" + pixels;
         if (view.IconKey == key) return;
         view.IconKey = key;
