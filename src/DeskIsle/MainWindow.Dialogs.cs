@@ -6,6 +6,7 @@ public partial class MainWindow
 {
     private readonly Dictionary<Window, DesktopHost> dialogHosts = [];
     internal bool HasOpenFileDialog => dialogHosts.Count > 0;
+    internal void TrackTransferDialog(Window dialog) => TrackDialog(dialog);
     private void TrackDialog(Window dialog)
     {
         var recovery = new DesktopHost();
