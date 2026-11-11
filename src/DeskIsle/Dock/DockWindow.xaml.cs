@@ -186,7 +186,12 @@ public partial class DockBar : Window
             var root = DockNative.GetAncestor(foreground, 3);
             var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
-            if (active != null) DockNative.PostMessage(active.Handle, 0x0112, 0xF020, 0);
+            if (active != null)
+            {
+                // Snapshot the whole app group before minimizing its foreground window.
+                foreach (var handle in view.Windows.Select(w => w.Handle).Distinct().Where(handle => DockNative.IsWindow(handle) && !DockNative.IsIconic(handle)).ToArray())
+                    DockNative.PostMessage(handle, 0x0112, 0xF020, 0);
+            }
             else if (view.Windows.Length == 1) Activate(view.Windows[0]);
             else if (view.Windows.Length > 1)
             {
