@@ -17,6 +17,8 @@ internal static class DockNative
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint window);
     [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window, uint flags);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] internal static extern int SetWindowLong(nint window, int index, int value);
+    [DllImport("user32.dll")] internal static extern bool IsZoomed(nint window);
+    [DllImport("user32.dll")] internal static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] internal static extern bool IsIconic(nint window);
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern bool GetWindowRect(nint window, out Rect rect);
@@ -51,7 +53,7 @@ internal static class DockNative
     internal static bool FullScreen()
     {
         var w = GetForegroundWindow();
-        if (w == 0 || IsIconic(w) || Class(w) is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
+        if (w == 0 || IsIconic(w) || IsZoomed(w) || Class(w) is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
         GetWindowThreadProcessId(w, out var pid);
         if (pid == Environment.ProcessId) return false;
         var monitor = MonitorFromWindow(w, 2);

@@ -152,6 +152,7 @@ internal sealed class DockController : IDisposable
         if (bar.WindowState == WindowState.Minimized) bar.WindowState = WindowState.Normal;
         bar.Show(); bar.Place();
         DockNative.ShowWindowAsync(new WindowInteropHelper(bar).Handle, 4);
+        DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x40);
         awaySince = Environment.TickCount64;
     }
     private void PointerTick(object? sender, EventArgs e)
@@ -171,11 +172,12 @@ internal sealed class DockController : IDisposable
         if (!DockNative.GetCursorPos(out var mouse)) return;
         var monitor = DockNative.Primary().Monitor;
         var now = Environment.TickCount64;
-        var atEdge = mouse.Y >= monitor.Bottom - 2 && mouse.Y < monitor.Bottom && mouse.X >= monitor.Left + (monitor.Right - monitor.Left) * .15 && mouse.X <= monitor.Right - (monitor.Right - monitor.Left) * .15;
+        var edgeHeight = Math.Max(4, (int)Math.Ceiling(6 * VisualTreeHelper.GetDpi(bar).DpiScaleY));
+        var atEdge = mouse.Y >= monitor.Bottom - edgeHeight && mouse.Y < monitor.Bottom && mouse.X >= monitor.Left && mouse.X < monitor.Right;
         if (atEdge)
         {
             if (edgeSince == 0) edgeSince = now;
-            if (now - edgeSince >= Settings.RevealMs && (!bar.IsVisible || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle))) Reveal();
+            if (edgeSince > 0 && now - edgeSince >= Settings.RevealMs) { Reveal(); edgeSince = -1; }
             awaySince = now;
         }
         else edgeSince = 0;
