@@ -144,7 +144,7 @@ public partial class MainWindow
             tiles = ordered;
             selectedTile = null;
             RebuildRows();
-            Status.Text = tiles.Count == 0 ? (folder == null ? "拖入文件或文件夹" : "目录为空。") : "";
+            Status.Text = "";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { /* Preserve the view during temporary access failures; retry on the next tick. */ }

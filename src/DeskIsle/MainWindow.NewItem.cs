@@ -121,7 +121,7 @@ public partial class MainWindow
         string? warning = null;
         try
         {
-            report = RunTransfer([draft.Path], DesktopFiles.Root, draft: true);
+            report = await RunTransfer([draft.Path], DesktopFiles.Root, draft: true);
             foreach (var item in report.Roots.Where(item => item.Published))
                 if (!state.References.Contains(item.Target, StringComparer.OrdinalIgnoreCase)) state.References.Add(item.Target);
             state.CreationDirectory = null;
@@ -136,7 +136,7 @@ public partial class MainWindow
         }
         await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
         if (closing) return;
-        if (report != null) Status.Text = report.Summary;
+        if (report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
         if (warning != null) Status.Text = warning;
         var path = report?.Roots.FirstOrDefault(item => item.Published)?.Target;
         selectedTile = tiles.FirstOrDefault(x => string.Equals(x.FullPath, path, StringComparison.OrdinalIgnoreCase));

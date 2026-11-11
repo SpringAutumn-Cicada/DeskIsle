@@ -145,7 +145,7 @@ public partial class MainWindow : Window
         if (closing) return;
         tiles = entries;
         RebuildRows();
-        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
+        Status.Text = "";
     }
     private void SaveCard()
     {
@@ -160,14 +160,13 @@ public partial class MainWindow : Window
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
         Surface.BorderBrush = e.Effects == DragDropEffects.None ? new SolidColorBrush(Color.FromRgb(94, 106, 128)) : new SolidColorBrush(Color.FromRgb(114, 201, 193));
-        var folder = ExternalFolderTarget(e);
-        Status.Text = e.Effects == DragDropEffects.None ? "来源不允许复制，无法导入" : folder == null ? "导入桌面后加入分组 · 原件保留" : $"复制到桌面文件夹「{folder.Name}」 · 原件保留";
+        Status.Text = "";
     }
     private void FileDragLeave(object sender, DragEventArgs e)
     {
         if (IsReorder(e)) { ReorderLeave(e); return; }
         Surface.BorderBrush = new SolidColorBrush(Color.FromArgb(85, 94, 106, 128));
-        Status.Text = tiles.Count == 0 ? "拖入文件或文件夹" : "";
+        Status.Text = "";
     }
     private void FileDrop(object sender, DragEventArgs e)
     {
@@ -206,7 +205,7 @@ public partial class MainWindow : Window
         loading = request;
         tiles = [];
         Files.ItemsSource = null;
-        Status.Text = "正在读取目录…";
+        Status.Text = "";
         try
         {
             var path = directory;
@@ -220,7 +219,7 @@ public partial class MainWindow : Window
             }
             tiles = ordered.Select(x => new FileTile(x)).ToArray();
             RebuildRows();
-            Status.Text = entries.Length == 0 ? "目录为空。" : "";
+            Status.Text = "";
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -325,6 +324,7 @@ public partial class MainWindow : Window
     private void MoreClick(object sender, RoutedEventArgs e)
     {
         UpdateDesktopButton();
+        CurrentTransferMenu.Visibility = currentTransfer == null ? Visibility.Collapsed : Visibility.Visible;
         if (sender is Button { ContextMenu: { } menu } button)
         { menu.PlacementTarget = button; menu.IsOpen = true; }
     }

@@ -9,17 +9,17 @@ public partial class MainWindow
     {
         if (!BeginDesktopOperation()) return;
         TransferReport? report = null;
+        string? warning = null;
         try
         {
-            var dialog = new MoveConfirmation(this, source, target);
-            TrackDialog(dialog);
-            if (dialog.ShowDialog() != true) return;
-            report = RunTransfer([source], target, move: true, name: dialog.ChosenName);
+            await Task.Run(() => FileMoveService.Validate(source, target, Path.GetFileName(FileMoveService.Normalize(source))));
+            report = await RunTransfer([source], target, move: true);
         }
-        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = "移动未完成：" + ex.Message; }
+        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { warning = "移动未完成：" + ex.Message; }
         finally { workspace.EndFileMove(); }
         await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
-        if (!closing && report != null) Status.Text = report.Summary + (report.Errors.Count > 0 ? " · " + report.Errors[0] : "");
+        if (!closing && report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
+        if (!closing && warning != null) Status.Text = warning;
     }
     internal async Task RefreshAfterFileMove(string source, string destination)
     {
