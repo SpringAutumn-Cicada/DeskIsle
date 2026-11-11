@@ -256,12 +256,12 @@ public partial class DockBar : Window
             Add(menu, "打开所在位置", () => controller.Reveal(pin.Path));
         }
         else if (view.IconPath is { } path) Add(menu, "固定到 Dock", () => controller.Pin([path]));
-        foreach (var window in view.Windows)
-        {
-            if (view.Windows.Length > 1) Add(menu, "切换：" + window.Title, () => Activate(window));
-            Add(menu, view.Windows.Length == 1 ? "关闭窗口" : "关闭：" + window.Title,
-                () => { if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0); });
-        }
+        if (view.Windows.Length > 0)
+            Add(menu, "关闭全部窗口", () =>
+            {
+                foreach (var window in view.Windows.DistinctBy(window => window.Handle))
+                    if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0);
+            });
     }
     private async void LoadIcon(AppView view)
     {

@@ -108,8 +108,8 @@ internal sealed class WindowPreview : Window
             var height = width * unionHeight / Math.Max(1, unionWidth);
             var composite = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2) };
             Action restore = () => { SplitGroups.Restore(pair); dismiss(); };
-            AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, null, composite);
-            AddImage(pair.Right, composite, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, null, composite);
+            AddImage(pair.Left, composite, width * (pair.LeftRect.Right - pair.LeftRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Left.Handle)) DockNative.PostMessage(pair.Left.Handle, 0x0010, 0, 0); }, composite);
+            AddImage(pair.Right, composite, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, () => { if (DockNative.IsWindow(pair.Right.Handle)) DockNative.PostMessage(pair.Right.Handle, 0x0010, 0, 0); }, composite);
             row.Children.Add(composite);
         }
         foreach (var window in windows.Skip(page * perPage).Take(perPage))
@@ -124,7 +124,7 @@ internal sealed class WindowPreview : Window
             var ratioAtSize = width / height;
             height = 160; width = height * ratioAtSize;
             AddImage(window, row, Math.Max(24, width), height,
-                () => { activate(window); dismiss(); }, () => DockNative.PostMessage(window.Handle, 0x0010, 0, 0));
+                () => { activate(window); dismiss(); }, () => { if (DockNative.IsWindow(window.Handle)) DockNative.PostMessage(window.Handle, 0x0010, 0, 0); });
         }
         // Fit the whole row as a unit; no tile becomes disproportionately large on small screens.
         var rowWidth = tiles.Sum(tile => tile.Host.Width + 6) + 12;

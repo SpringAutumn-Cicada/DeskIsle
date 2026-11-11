@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 namespace DeskIsle.Dock;
@@ -40,6 +41,8 @@ internal sealed class WindowThumbnail : IDisposable
     }
     internal void Feedback(bool value)
     {
+        if (closeSurface != null && DockNative.GetCursorPos(out var pointer) && DockNative.GetWindowRect(closeSurface.Handle, out var closeRect))
+            DrawClose(closePressed || (pointer.X >= closeRect.Left && pointer.X < closeRect.Right && pointer.Y >= closeRect.Top && pointer.Y < closeRect.Bottom));
         if (hovered == value) return;
         hovered = value;
         if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(125, 146, 172) : Color.FromRgb(48, 61, 79);
@@ -47,8 +50,57 @@ internal sealed class WindowThumbnail : IDisposable
     private readonly Action click;
     private readonly Action? close;
     private bool pressed;
+    private readonly HwndSource? closeSurface;
+    private bool closePressed;
+    private readonly DrawingVisual closeVisual = new();
+    private double closeScale = 1;
+    private double drawnScale = double.NaN;
+    private bool closeActive;
     private WindowThumbnail(nint handle, nint owner, HwndSource surface, Action click, Action? close)
-    { this.handle = handle; this.owner = owner; this.surface = surface; this.click = click; this.close = close; surface.AddHook(Input); }
+    {
+        this.handle = handle; this.owner = owner; this.surface = surface; this.click = click; this.close = close;
+        surface.AddHook(Input);
+        if (close != null)
+        {
+            // A separate owned surface stays above the native DWM image (WPF siblings cannot).
+            closeSurface = new HwndSource(new HwndSourceParameters("DeskIsle preview close")
+            {
+                ParentWindow = surface.Handle, Width = 1, Height = 1,
+                WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
+            });
+            closeSurface.RootVisual = closeVisual;
+            closeSurface.AddHook(CloseInput);
+            DrawClose(false);
+        }
+    }
+    private void DrawClose(bool active)
+    {
+        if (closeActive == active && drawnScale == closeScale) return;
+        closeActive = active; drawnScale = closeScale;
+        using var drawing = closeVisual.RenderOpen();
+        drawing.PushTransform(new ScaleTransform(closeScale, closeScale));
+        drawing.DrawRoundedRectangle(new SolidColorBrush(active ? Color.FromRgb(176, 64, 75) : Color.FromRgb(38, 47, 61)),
+            new Pen(new SolidColorBrush(Color.FromRgb(130, 145, 165)), .7), new Rect(.5, .5, 21, 21), 6, 6);
+        var pen = new Pen(new SolidColorBrush(Color.FromRgb(240, 244, 250)), 1.5);
+        drawing.DrawLine(pen, new Point(7.5, 7.5), new Point(14.5, 14.5));
+        drawing.DrawLine(pen, new Point(14.5, 7.5), new Point(7.5, 14.5));
+        drawing.Pop();
+    }
+    private nint CloseInput(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        if (message == 0x84) { handled = true; return 1; }
+        if (message == 0x21) { handled = true; return 3; }
+        if (message == 0x201) { closePressed = true; SetCapture(hwnd); DrawClose(true); handled = true; }
+        if (message == 0x215) { closePressed = false; DrawClose(false); }
+        if (message == 0x202 && closePressed)
+        {
+            closePressed = false; ReleaseCapture(); DrawClose(false); handled = true;
+            if (DockNative.GetCursorPos(out var p) && DockNative.GetWindowRect(hwnd, out var r)
+                && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom)
+                surface.Dispatcher.BeginInvoke(new Action(() => { if (handle != 0) close?.Invoke(); }));
+        }
+        return 0;
+    }
     private nint Input(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message == 0x84) { handled = true; return 1; } // HTCLIENT
@@ -90,6 +142,17 @@ internal sealed class WindowThumbnail : IDisposable
             SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10);
             placement = position;
         }
+        if (closeSurface != null)
+        {
+            var dpi = HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1;
+            var side = Math.Min(Math.Min(boxWidth, boxHeight), (int)Math.Round(22 * dpi));
+            var offset = (int)Math.Round(6 * dpi);
+            // DrawingVisual coordinates are DIPs; HwndSource supplies the monitor scale.
+            closeScale = side / (22 * (closeSurface.CompositionTarget?.TransformToDevice.M11 ?? 1));
+            DrawClose(closeActive);
+            SetWindowPos(closeSurface.Handle, -1, origin.X + Math.Max(0, boxWidth - side - offset),
+                origin.Y + Math.Min(offset, Math.Max(0, boxHeight - side)), side, side, 0x10);
+        }
         var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
         box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
@@ -103,6 +166,11 @@ internal sealed class WindowThumbnail : IDisposable
         if (present) Present();
         last = box; return true;
     }
-    internal void Present() { if (handle != 0 && !DockNative.IsWindowVisible(surface.Handle)) DockNative.ShowWindow(surface.Handle, 4); }
-    public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; surface.RemoveHook(Input); surface.Dispose(); } }
+    internal void Present()
+    {
+        if (handle == 0) return;
+        if (!DockNative.IsWindowVisible(surface.Handle)) DockNative.ShowWindow(surface.Handle, 4);
+        if (closeSurface != null && !DockNative.IsWindowVisible(closeSurface.Handle)) DockNative.ShowWindow(closeSurface.Handle, 4);
+    }
+    public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; closeSurface?.RemoveHook(CloseInput); closeSurface?.Dispose(); surface.RemoveHook(Input); surface.Dispose(); } }
 }
