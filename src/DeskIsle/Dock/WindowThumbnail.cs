@@ -49,7 +49,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (closeSurface != null && DockNative.GetCursorPos(out var pointer) && DockNative.GetWindowRect(closeSurface.Handle, out var closeRect))
             DrawClose(closePressed || (pointer.X >= closeRect.Left && pointer.X < closeRect.Right && pointer.Y >= closeRect.Top && pointer.Y < closeRect.Bottom));
         if (changed && surface.CompositionTarget != null)
-            surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(86, 107, 132) : Color.FromRgb(41, 53, 70);
+            surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(34, 44, 58) : Color.FromRgb(32, 41, 54);
         SyncCloseVisibility();
     }
     private void SyncCloseVisibility()
@@ -120,7 +120,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (message == 0x84) { handled = true; return 1; } // HTCLIENT
         if (message == 0x21) { handled = true; return 3; }
         if (message == 0x201) { pressed = true; SetCapture(hwnd); handled = true;
-            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(101, 121, 145); }
+            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(34, 44, 58); }
         if (message == 0x215) { pressed = false; }
         if (message == 0x202 && pressed)
         {
@@ -140,7 +140,7 @@ internal sealed class WindowThumbnail : IDisposable
             ParentWindow = destination, Width = 1, Height = 1,
             WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
         });
-        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(41, 53, 70);
+        if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(32, 41, 54);
         var disableTransitions = 1;
         DwmSetWindowAttribute(surface.Handle, 3, ref disableTransitions, sizeof(int));
         if (DwmRegisterThumbnail(surface.Handle, source, out var thumbnail) < 0) { surface.Dispose(); return null; }
@@ -176,7 +176,7 @@ internal sealed class WindowThumbnail : IDisposable
                 closePlacement = closeBox;
             }
         }
-        var inset = Math.Clamp((int)Math.Round(4 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 3, 12);
+        var inset = Math.Clamp((int)Math.Round(2 * (HwndSource.FromHwnd(owner)?.CompositionTarget?.TransformToDevice.M11 ?? 1)), 2, 8);
         box = new DockNative.Rect { Left = inset, Top = inset, Right = boxWidth - inset, Bottom = boxHeight - inset };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));

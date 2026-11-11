@@ -160,7 +160,7 @@ internal sealed class WindowPreview : Window
         content.Children.Add(row);
         void AddImage(DockWindow window, Card card, double width, double height, Action click, bool composite)
         {
-            var host = new Grid { Width = width, Height = height, Background = Brush("#151D29"), VerticalAlignment = VerticalAlignment.Center };
+            var host = new Grid { Width = width, Height = height, Background = Brush("#202936"), VerticalAlignment = VerticalAlignment.Center };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
             if (!previousTiles.Remove((window.Handle, composite), out var tile))
@@ -264,8 +264,8 @@ internal sealed class WindowPreview : Window
             var hovered = ReferenceEquals(hoverGroup, card);
             if (card.Hover == hovered) continue;
             card.Hover = hovered;
-            card.Surface.Background = Brush(hovered ? "#2B3645" : "#202936");
-            card.Surface.BorderBrush = Brush(hovered ? "#61758C" : "#344252");
+            card.Surface.Background = Brush(hovered ? "#222C3A" : "#202936");
+            card.Surface.BorderBrush = Brush("#344252");
             card.Close.Visibility = hovered ? Visibility.Visible : Visibility.Hidden;
         }
         foreach (var tile in tiles)
