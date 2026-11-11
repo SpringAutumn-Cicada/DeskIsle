@@ -90,7 +90,7 @@ internal sealed partial class DockController : IDisposable
     private void CreateWindows()
     {
         lastExternalForeground = DockNative.GetForegroundWindow();
-        bar = new(this); bar.Show(); bar.Place(); bar.Hide();
+        bar = new(this) { Opacity = 0 }; bar.Show(); bar.Place(); bar.HideAnimated(true);
         var button = new Button { Content = "返回 Dock", Padding = new Thickness(12, 7, 12, 7), ToolTip = "返回悬浮 Dock；右键可关闭 Dock" };
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
         button.Click += (_, _) => ToggleNative();
@@ -145,14 +145,14 @@ internal sealed partial class DockController : IDisposable
         if (lease == null) return;
         var native = !lease.NativeMode;
         lease.Native(native);
-        if (native) { bar?.Hide(); PlaceReturn(); returnButton?.Show(); }
+        if (native) { bar?.HideAnimated(true); PlaceReturn(); returnButton?.Show(); }
         else { returnButton?.Hide(); Reveal(); }
     }
     private void Reveal()
     {
         if (bar == null || lease == null || lease.NativeMode) return;
         if (bar.WindowState == WindowState.Minimized) bar.WindowState = WindowState.Normal;
-        bar.Show(); bar.Place();
+        bar.RevealAnimated(); bar.Place();
         DockNative.ShowWindowAsync(new WindowInteropHelper(bar).Handle, 4);
         DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x40);
         awaySince = Environment.TickCount64;
@@ -163,7 +163,7 @@ internal sealed partial class DockController : IDisposable
         UpdateAttention();
         if (Environment.TickCount64 < attentionUntil && !lease.NativeMode)
         {
-            if (!bar.IsVisible) Reveal();
+            if (!bar.IsVisible || bar.IsHiding) Reveal();
             awaySince = Environment.TickCount64;
             return;
         }
@@ -172,7 +172,7 @@ internal sealed partial class DockController : IDisposable
         // A desktop with no unminimized application windows keeps its launcher visible.
         if (!DockNative.FullScreen() && windows.All(w => !DockNative.IsWindowVisible(w.Handle) || DockNative.IsIconic(w.Handle)))
         {
-            if (!bar.IsVisible || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle)) Reveal();
+            if (!bar.IsVisible || bar.IsHiding || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle)) Reveal();
             awaySince = Environment.TickCount64;
             edgeSince = 0;
             return;
@@ -198,10 +198,14 @@ internal sealed partial class DockController : IDisposable
         DockNative.GetWindowRect(new WindowInteropHelper(bar).Handle, out var rect);
         var within = bar.IsVisible && mouse.X >= rect.Left && mouse.X < rect.Right && mouse.Y >= rect.Top && mouse.Y < monitor.Bottom;
         if (DockNative.FullScreen() && !atEdge && !within && !bar.Interacting)
-        { bar.Hide(); returnButton?.Hide(); return; }
+        { bar.HideAnimated(); returnButton?.Hide(); return; }
         if (!bar.IsVisible) return;
-        if (within || bar.Interacting || settingsWindow?.IsVisible == true) awaySince = now;
-        else if (now - awaySince >= Settings.HideMs) bar.Hide();
+        if (within || bar.Interacting || settingsWindow?.IsVisible == true)
+        {
+            if (bar.IsHiding) Reveal();
+            awaySince = now;
+        }
+        else if (now - awaySince >= Settings.HideMs) bar.HideAnimated();
     }
     private async Task Refresh()
     {

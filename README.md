@@ -160,3 +160,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.5.4：按用户选择改用提醒方案 C，以底部暖色柔光圆点替代方案 A 的右上角提示点和短线，保留提醒与自动弹出逻辑。详见 [Dock 暖色柔光点方案 C](docs/Dock暖色柔光点方案C.md)。
 
 1.5.5：在 Dock 设置按钮左侧新增任务管理器入口，并为工具按钮扩展预留滚动区宽度。详见 [Dock 任务管理器入口](docs/Dock任务管理器入口.md)。
+
+1.6.0：Dock 增加轻微上浮淡入与下沉淡出，支持中途反转、重复唤出不重播及系统减少动画偏好；保持开始菜单与预览逻辑。详见 [Dock 显隐过渡动画](docs/Dock显隐过渡动画.md)。
