@@ -49,7 +49,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (closeSurface != null && DockNative.GetCursorPos(out var pointer) && DockNative.GetWindowRect(closeSurface.Handle, out var closeRect))
             DrawClose(closePressed || (pointer.X >= closeRect.Left && pointer.X < closeRect.Right && pointer.Y >= closeRect.Top && pointer.Y < closeRect.Bottom));
         if (changed && surface.CompositionTarget != null)
-            surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(34, 44, 58) : Color.FromRgb(32, 41, 54);
+            surface.CompositionTarget.BackgroundColor = value ? Color.FromRgb(48, 62, 80) : Color.FromRgb(32, 41, 54);
         SyncCloseVisibility();
     }
     private void SyncCloseVisibility()
@@ -120,7 +120,7 @@ internal sealed class WindowThumbnail : IDisposable
         if (message == 0x84) { handled = true; return 1; } // HTCLIENT
         if (message == 0x21) { handled = true; return 3; }
         if (message == 0x201) { pressed = true; SetCapture(hwnd); handled = true;
-            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(34, 44, 58); }
+            if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(48, 62, 80); }
         if (message == 0x215) { pressed = false; }
         if (message == 0x202 && pressed)
         {

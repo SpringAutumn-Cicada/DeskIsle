@@ -132,7 +132,7 @@ internal sealed class WindowPreview : Window
         header.Children.Add(icons); header.Children.Add(title); header.Children.Add(close);
         header.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
         var layout = new StackPanel(); layout.Children.Add(header); layout.Children.Add(images);
-        var surface = new Border { Child = layout, Padding = new Thickness(4), BorderThickness = new Thickness(1),
+        var surface = new Border { Child = layout, Padding = new Thickness(3.5), BorderThickness = new Thickness(1.5),
             BorderBrush = Brush("#344252"), CornerRadius = new CornerRadius(8), Background = Brush("#202936"),
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3) };
         var card = new Card { Surface = surface, Images = images, Title = title, Close = close, Windows = members };
@@ -264,8 +264,9 @@ internal sealed class WindowPreview : Window
             var hovered = ReferenceEquals(hoverGroup, card);
             if (card.Hover == hovered) continue;
             card.Hover = hovered;
-            card.Surface.Background = Brush(hovered ? "#222C3A" : "#202936");
-            card.Surface.BorderBrush = Brush("#344252");
+            card.Surface.Background = Brush(hovered ? "#303E50" : "#202936");
+            card.Surface.BorderBrush = Brush(hovered ? "#829AB5" : "#344252");
+            card.Title.Foreground = Brush(hovered ? "#FFFFFF" : "#DDE5EF");
             card.Close.Visibility = hovered ? Visibility.Visible : Visibility.Hidden;
         }
         foreach (var tile in tiles)
