@@ -69,6 +69,7 @@ internal sealed class TaskbarLease : IDisposable
     }
     private static bool Alive(Recovery record)
     {
+        if (record.Pid <= 0) return false;
         try { using var p = Process.GetProcessById(record.Pid); return !p.HasExited && p.StartTime.ToUniversalTime().Ticks == record.Started; }
         catch (ArgumentException) { return false; }
         catch (InvalidOperationException) { return false; }
