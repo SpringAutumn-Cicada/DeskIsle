@@ -77,6 +77,11 @@ public partial class MainWindow
         NewItemName.IsEnabled = !busy;
         NewItemCancel.IsEnabled = !busy;
     }
+    private static bool CleanupDraft(string work)
+    {
+        try { if (Directory.Exists(work)) Directory.Delete(work, recursive: true); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
     private void CancelNewItem(object sender, RoutedEventArgs e)
     {
         if (creatingItem) return;
@@ -111,7 +116,7 @@ public partial class MainWindow
         NewItemPanel.Visibility = Visibility.Collapsed;
         Files.IsHitTestVisible = true;
         newItemDialog?.Close();
-        if (!BeginDesktopOperation()) { Directory.Delete(draft.Work, recursive: true); return; }
+        if (!BeginDesktopOperation()) { if (!CleanupDraft(draft.Work)) Status.Text = "草稿清理未完成，材料保留在桌面恢复目录。"; return; }
         TransferReport? report = null;
         string? warning = null;
         try
@@ -127,7 +132,7 @@ public partial class MainWindow
         {
             workspace.EndFileMove();
             // Only the unique draft allocated above is removed, never a user source.
-            if (Directory.Exists(draft.Work)) Directory.Delete(draft.Work, recursive: true);
+            if (!CleanupDraft(draft.Work)) warning ??= "草稿清理未完成，材料保留在桌面恢复目录。";
         }
         await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
         if (closing) return;

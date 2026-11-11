@@ -134,7 +134,9 @@ public sealed class FileTransfer(
     {
         // Persist the operation result before changing card references. Recovery records remain local.
         var record = Path.Combine(Work, Guid.NewGuid().ToString("N") + ".json");
-        File.WriteAllText(record, JsonSerializer.Serialize(completion));
+        try { File.WriteAllText(record, JsonSerializer.Serialize(completion)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { report.Errors.Add($"项目已到达 {completion.Target}，但操作日志写入失败：{ex.Message}"); }
         completedPaths[completion.Source] = completion.Target;
         await committed(completion);
     }
