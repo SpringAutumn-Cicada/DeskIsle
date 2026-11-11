@@ -143,7 +143,7 @@ internal sealed class WindowPreview : Window
                 if (PresentationSource.FromVisual(tile.Host) == null) continue;
                 var start = tile.Host.PointToScreen(new Point());
                 var end = tile.Host.PointToScreen(new Point(tile.Host.ActualWidth, tile.Host.ActualHeight));
-                if (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y) { hoverGroup = tile.Group; break; }
+                if (tile.Thumbnail?.ContainsPointer() == true || (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y)) { hoverGroup = tile.Group; break; }
             }
         foreach (var tile in tiles)
         {
@@ -158,6 +158,7 @@ internal sealed class WindowPreview : Window
     }
     internal bool ContainsPointer()
     {
+        if (tiles.Any(tile => tile.Thumbnail?.ContainsPointer() == true)) return true;
         if (!IsVisible || !DockNative.GetCursorPos(out var point) || !DockNative.GetWindowRect(new WindowInteropHelper(this).Handle, out var box)) return false;
         return point.X >= box.Left && point.X < box.Right && point.Y >= box.Top && point.Y < box.Bottom;
     }
@@ -174,7 +175,9 @@ internal sealed class WindowPreview : Window
     internal void SetWindows(DockWindow[] latest)
     {
         if (finished) return;
-        var changed = !windows.Select(w => w.Handle).SequenceEqual(latest.Select(w => w.Handle));
+        var priorGroup = groups.Find(windows);
+        var nextGroup = groups.Find(latest);
+        var changed = (priorGroup?.Left.Handle != nextGroup?.Left.Handle || priorGroup?.Right.Handle != nextGroup?.Right.Handle) || !windows.Select(w => w.Handle).SequenceEqual(latest.Select(w => w.Handle));
         windows = latest;
         if (windows.Length == 0) { dismiss(); return; }
         if (changed) RenderPage();

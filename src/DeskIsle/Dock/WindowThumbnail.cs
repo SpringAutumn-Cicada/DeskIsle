@@ -26,7 +26,13 @@ internal sealed class WindowThumbnail : IDisposable
     private readonly HwndSource surface;
     private DockNative.Rect? last;
     private DockNative.Rect? placement;
-    private bool shown;
+    [DllImport("user32.dll")] private static extern nint SetCapture(nint window);
+    [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+    internal bool ContainsPointer()
+    {
+        return DockNative.IsWindowVisible(surface.Handle) && DockNative.GetCursorPos(out var p) && DockNative.GetWindowRect(surface.Handle, out var r)
+            && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom;
+    }
     private bool hovered;
     internal double AspectRatio
     {
@@ -45,13 +51,14 @@ internal sealed class WindowThumbnail : IDisposable
     { this.handle = handle; this.owner = owner; this.surface = surface; this.click = click; this.close = close; surface.AddHook(Input); }
     private nint Input(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (message == 0x84) { handled = true; return 1; } // HTCLIENT
         if (message == 0x21) { handled = true; return 3; }
-        if (message == 0x201) { pressed = true; handled = true;
+        if (message == 0x201) { pressed = true; SetCapture(hwnd); handled = true;
             if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(148, 166, 190); }
         if (message == 0x202 && pressed)
         {
-            pressed = false; handled = true;
-            surface.Dispatcher.BeginInvoke(click);
+            pressed = false; ReleaseCapture(); handled = true;
+            if (ContainsPointer()) surface.Dispatcher.BeginInvoke(new Action(() => { if (handle != 0) click(); }));
         }
         return 0;
     }
@@ -83,7 +90,7 @@ internal sealed class WindowThumbnail : IDisposable
             SetWindowPos(surface.Handle, -1, origin.X, origin.Y, boxWidth, boxHeight, 0x10);
             placement = position;
         }
-        box = new DockNative.Rect { Left = 2, Top = 2, Right = boxWidth - 2, Bottom = boxHeight - 2 };
+        box = new DockNative.Rect { Left = 3, Top = 3, Right = boxWidth - 3, Bottom = boxHeight - 3 };
         var scale = Math.Min((double)(box.Right - box.Left) / size.Width, (double)(box.Bottom - box.Top) / size.Height);
         var width = Math.Max(1, (int)Math.Round(size.Width * scale));
         var height = Math.Max(1, (int)Math.Round(size.Height * scale));
@@ -95,6 +102,6 @@ internal sealed class WindowThumbnail : IDisposable
         if (present) Present();
         last = box; return true;
     }
-    internal void Present() { if (!shown && handle != 0) { DockNative.ShowWindow(surface.Handle, 4); shown = true; } }
+    internal void Present() { if (handle != 0 && !DockNative.IsWindowVisible(surface.Handle)) DockNative.ShowWindow(surface.Handle, 4); }
     public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; surface.RemoveHook(Input); surface.Dispose(); } }
 }

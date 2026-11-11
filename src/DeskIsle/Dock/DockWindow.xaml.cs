@@ -287,7 +287,7 @@ public partial class DockBar : Window
         ClosePreview();
         hoveredView = view;
         preview = new WindowPreview(this, view.Button, live, view.Image.Source,
-            window => { view.RecentWindow = window.Handle; Activate(window); }, ClosePreview, splitGroups);
+            window => { view.RecentWindow = window.Handle; ClosePreview(); Activate(window); }, ClosePreview, splitGroups);
         preview.MouseEnter += (_, _) => previewClose.Stop();
         preview.MouseLeave += (_, _) => { previewClose.Stop(); previewClose.Start(); };
         preview.Show();
@@ -299,7 +299,7 @@ public partial class DockBar : Window
     }
     private static void Activate(DockWindow window)
     {
-        if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindowAsync(window.Handle, 9);
+        if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);
         DockNative.SetForegroundWindow(window.Handle);
     }
     private void StartClick(object sender, RoutedEventArgs e)

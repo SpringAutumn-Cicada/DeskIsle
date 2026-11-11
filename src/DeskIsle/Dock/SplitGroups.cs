@@ -21,10 +21,10 @@ internal sealed class SplitGroups
             if (monitor != DockNative.MonitorFromWindow(right.Handle, 2)) continue;
             var info = new DockNative.MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<DockNative.MonitorInfo>() };
             if (!DockNative.GetMonitorInfo(monitor, ref info)) continue;
-            var work = info.Work; var middle = (work.Left + work.Right) / 2;
+            var work = info.Work; var middle = (a.Right + b.Left) / 2;
             // Require two full-height complementary halves, allowing resize frame borders.
-            bool Near(int x, int y) => Math.Abs(x - y) <= 20;
-            if (Near(a.Left, work.Left) && Near(a.Right, middle) && Near(b.Left, middle) && Near(b.Right, work.Right) &&
+            bool Near(int x, int y) => Math.Abs(x - y) <= Math.Max(24, (work.Right - work.Left) / 80);
+            if (Near(a.Left, work.Left) && Near(a.Right, b.Left) && middle > work.Left + (work.Right - work.Left) * .2 && middle < work.Right - (work.Right - work.Left) * .2 && Near(b.Right, work.Right) &&
                 Near(a.Top, work.Top) && Near(b.Top, work.Top) && Near(a.Bottom, work.Bottom) && Near(b.Bottom, work.Bottom))
                 return new(left, right, a, b);
         }
