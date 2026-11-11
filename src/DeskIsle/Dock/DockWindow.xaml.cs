@@ -26,6 +26,7 @@ public partial class DockBar : Window
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AppView> views = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim iconSlots = new(2);
+    private readonly SplitGroups splitGroups = new();
     private readonly List<string> runningOrder = [];
     private readonly Border separator = new() { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) };
     private readonly TextBlock emptyHint = new() { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) };
@@ -102,6 +103,7 @@ public partial class DockBar : Window
     {
         if (closed) return;
         if (dragging || menuOpen) { pendingPins = pins; pendingWindows = windows; return; }
+        splitGroups.Observe(windows);
         windows = windows.OrderBy(w => w.Handle.ToInt64()).ToArray();
         var desired = new List<UIElement>();
         var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -285,7 +287,7 @@ public partial class DockBar : Window
         ClosePreview();
         hoveredView = view;
         preview = new WindowPreview(this, view.Button, live, view.Image.Source,
-            window => { view.RecentWindow = window.Handle; Activate(window); }, ClosePreview);
+            window => { view.RecentWindow = window.Handle; Activate(window); }, ClosePreview, splitGroups);
         preview.MouseEnter += (_, _) => previewClose.Stop();
         preview.MouseLeave += (_, _) => { previewClose.Stop(); previewClose.Start(); };
         preview.Show();

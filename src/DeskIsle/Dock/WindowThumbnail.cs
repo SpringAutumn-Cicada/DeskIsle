@@ -25,9 +25,26 @@ internal sealed class WindowThumbnail : IDisposable
     private readonly nint owner;
     private readonly HwndSource surface;
     private DockNative.Rect? last;
-    private WindowThumbnail(nint handle, nint owner, HwndSource surface)
-    { this.handle = handle; this.owner = owner; this.surface = surface; }
-    internal static WindowThumbnail? Create(nint destination, nint source)
+    private readonly Action click;
+    private readonly Action? close;
+    private bool pressed;
+    private WindowThumbnail(nint handle, nint owner, HwndSource surface, Action click, Action? close)
+    { this.handle = handle; this.owner = owner; this.surface = surface; this.click = click; this.close = close; surface.AddHook(Input); }
+    private nint Input(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        if (message == 0x21) { handled = true; return 3; }
+        if (message == 0x201) { pressed = true; handled = true; }
+        if (message == 0x202 && pressed)
+        {
+            pressed = false; handled = true;
+            var x = (short)(lParam.ToInt64() & 0xFFFF); var y = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
+            var closing = close != null && x >= GetWidth() - 28 && y >= 0 && y < 28;
+            surface.Dispatcher.BeginInvoke(new Action(() => { if (closing) close!(); else click(); }));
+        }
+        return 0;
+    }
+    private int GetWidth() { DockNative.GetWindowRect(surface.Handle, out var rect); return rect.Right - rect.Left; }
+    internal static WindowThumbnail? Create(nint destination, nint source, Action click, Action? close = null)
     {
         if (!DockNative.IsWindow(source)) return null;
         // A native owned surface avoids WPF's opaque scene obscuring the DWM image.
@@ -35,11 +52,11 @@ internal sealed class WindowThumbnail : IDisposable
         var surface = new HwndSource(new HwndSourceParameters("DeskIsle thumbnail")
         {
             ParentWindow = destination, Width = 1, Height = 1,
-            WindowStyle = unchecked((int)0x88000000), ExtendedWindowStyle = 0x080000A0
+            WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
         });
         if (surface.CompositionTarget != null) surface.CompositionTarget.BackgroundColor = Color.FromRgb(21, 29, 41);
         if (DwmRegisterThumbnail(surface.Handle, source, out var thumbnail) < 0) { surface.Dispose(); return null; }
-        return new(thumbnail, destination, surface);
+        return new(thumbnail, destination, surface, click, close);
     }
     internal bool Update(DockNative.Rect box)
     {
@@ -61,5 +78,5 @@ internal sealed class WindowThumbnail : IDisposable
         DockNative.ShowWindow(surface.Handle, 4);
         last = box; return true;
     }
-    public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; surface.Dispose(); } }
+    public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; surface.RemoveHook(Input); surface.Dispose(); } }
 }
