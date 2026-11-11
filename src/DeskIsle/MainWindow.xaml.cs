@@ -24,14 +24,11 @@ public partial class MainWindow : Window
     private IReadOnlyList<FileTile> tiles = [];
     private FileTile? selectedTile;
     private int columns;
-    private string modeDetails = "浮动模式 · Win+D 可能隐藏卡片";
     private readonly DispatcherTimer monitor = new() { Interval = TimeSpan.FromSeconds(3) };
     private CancellationTokenSource? loading;
     private string? directory;
     private bool dragging;
     private DesktopHost.POINT dragPoint;
-    private bool desktopRequested;
-    private int recoveryAttempts;
 
     public MainWindow(WorkspaceManager workspace, CardState card)
     {
@@ -61,20 +58,16 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => host.SetHandle(this);
         fileSync.Tick += (_, _) => { RebuildFileWatchers(); SyncFiles(null, EventArgs.Empty); };
         eventSync.Tick += (_, _) => { eventSync.Stop(); eventSync.Interval = TimeSpan.FromMilliseconds(40); SyncFiles(null, EventArgs.Empty); };
-        Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { SetDesktopMode(true); monitor.Start(); } };
+        Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { monitor.Start(); } };
         Closing += (_, e) => { if (HasPendingCreation) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>
         {
             UpdateDesktopButton();
             var desktop = DesktopReturnMonitor.ForegroundDesktop();
             if (desktop != 0) RecoverOnDesktop(desktop, false);
-            if (!desktopRequested || host.IsAlive) return;
-            host.Detach();
-            if (++recoveryAttempts <= 3 && host.TryAttach(this)) return;
-            desktopRequested = false;
-            UpdateMode("桌面连接中断，已切换为浮动模式；可手动重试。");
+
         };
-        Closed += (_, _) => { StopFileSync(); monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); host.Detach(); };
+        Closed += (_, _) => { StopFileSync(); monitor.Stop(); ClearReorderPreview(); loading?.Cancel(); icons.Dispose(); };
     }
 
     private void RenameClick(object sender, RoutedEventArgs e)
@@ -258,28 +251,8 @@ public partial class MainWindow : Window
     internal void RecoverOnDesktop(nint desktop, bool repaint = true)
     {
         if (closing || !IsLoaded) return;
-        var attached = host.Attached;
         host.RecoverOnDesktop(this, desktop, repaint);
         foreach (var pair in dialogHosts.ToArray()) pair.Value.RecoverOnDesktop(pair.Key, desktop, repaint);
-        if (attached && !host.Attached)
-        {
-            desktopRequested = false;
-            UpdateMode("桌面宿主暂不可用，已恢复为浮动模式。");
-        }
-    }
-    private void ModeClick(object sender, RoutedEventArgs e) => SetDesktopMode(!host.Attached);
-    private void SetDesktopMode(bool enabled)
-    {
-        recoveryAttempts = 0;
-        desktopRequested = enabled;
-        if (!enabled) host.Detach();
-        else if (!host.TryAttach(this)) desktopRequested = false;
-        UpdateMode(enabled && !host.Attached ? "桌面连接不可用，已使用浮动模式。" : null);
-    }
-    private void UpdateMode(string? reason)
-    {
-        ModeButton.Header = host.Attached ? "切换浮动模式" : "尝试桌面模式";
-        modeDetails = reason ?? (host.Attached ? "桌面模式 · 兼容性待 Windows 验收" : "浮动模式 · Win+D 可能隐藏卡片");
     }
     private int GridColumnCount()
     {
@@ -329,7 +302,6 @@ public partial class MainWindow : Window
         if (sender is Button { ContextMenu: { } menu } button)
         { menu.PlacementTarget = button; menu.IsOpen = true; }
     }
-    private void ModeInfoClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, modeDetails, "显示模式");
     private void OpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (Surface != null) Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * e.NewValue), 36, 41, 53));
