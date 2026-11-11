@@ -7,7 +7,12 @@ namespace DeskIsle.Dock;
 
 internal sealed class WindowPreview : Window
 {
-    private sealed record Tile(DockWindow Window, FrameworkElement Host, WindowThumbnail? Thumbnail);
+    private sealed class Tile
+    {
+        internal required DockWindow Window;
+        internal required FrameworkElement Host;
+        internal WindowThumbnail? Thumbnail;
+    }
     private readonly DockBar bar;
     private readonly Button anchor;
     private DockWindow[] windows;
@@ -28,12 +33,14 @@ internal sealed class WindowPreview : Window
         // Non-layered destination so DWM can compose its thumbnails directly into the client area.
         Background = Brush("#202936"); Foreground = Brush("#EAF0F8");
         SizeToContent = SizeToContent.WidthAndHeight; UseLayoutRounding = true; SnapsToDevicePixels = true;
-        Content = new Border { Padding = new Thickness(10), BorderThickness = new Thickness(1), BorderBrush = Brush("#526178"), Child = content };
+        Content = new Border { Padding = new Thickness(12), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), BorderBrush = Brush("#43536B"), Background = Brush("#202936"), Child = content };
         SourceInitialized += (_, _) =>
         {
             var hwnd = new WindowInteropHelper(this).Handle;
             DockNative.SetWindowLong(hwnd, -20, DockNative.GetWindowLong(hwnd, -20) | 0x08000000 | 0x80);
             source = HwndSource.FromHwnd(hwnd); source?.AddHook(NoActivate);
+            var corner = 2;
+            DwmSetWindowAttribute(hwnd, 33, ref corner, sizeof(int));
         };
         ContentRendered += (_, _) => { RenderPage(); Place(); check.Start(); };
         LayoutUpdated += (_, _) => UpdateThumbnails();
@@ -48,10 +55,12 @@ internal sealed class WindowPreview : Window
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
         RenderPage();
     }
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
     private static SolidColorBrush Brush(string value) => new((Color)ColorConverter.ConvertFromString(value));
     private nint NoActivate(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     { if (message == 0x21) { handled = true; return 3; } return 0; }
-    private int PerPage => Math.Clamp((int)((SystemParameters.WorkArea.Width - 30) / 226), 1, 4);
+    private int PerPage => Math.Clamp((int)((SystemParameters.WorkArea.Width - 30) / 270), 1, 4);
     private void RenderPage()
     {
         if (finished) return;
@@ -59,11 +68,15 @@ internal sealed class WindowPreview : Window
         var perPage = PerPage;
         var pages = Math.Max(1, (windows.Length + perPage - 1) / perPage);
         page = Math.Clamp(page, 0, pages - 1);
+        var label = new Grid { Margin = new Thickness(6, 2, 6, 10) };
+        label.Children.Add(new TextBlock { Text = "窗口预览", FontSize = 12, Foreground = Brush("#D5E3F4"), FontWeight = FontWeights.SemiBold });
+        label.Children.Add(new TextBlock { Text = $"{windows.Length} 个窗口", FontSize = 11, Foreground = Brush("#91A5C0"), HorizontalAlignment = HorizontalAlignment.Right });
+        content.Children.Add(label);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(row);
         foreach (var window in windows.Skip(page * perPage).Take(perPage))
         {
-            var card = new StackPanel { Width = 216, Margin = new Thickness(4) };
+            var card = new StackPanel { Width = 260, Margin = new Thickness(4) };
             var heading = new Grid { Margin = new Thickness(4, 0, 0, 8) };
             heading.ColumnDefinitions.Add(new ColumnDefinition()); heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             heading.Children.Add(new TextBlock { Text = window.Title, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, ToolTip = window.Title });
@@ -73,14 +86,14 @@ internal sealed class WindowPreview : Window
             card.Children.Add(heading);
             var fallback = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
             fallback.Children.Add(new Image { Source = icon, Width = 38, Height = 38 });
-            fallback.Children.Add(new TextBlock { Text = "点击切换窗口", Foreground = Brush("#9CACC2"), FontSize = 11, Margin = new Thickness(0, 8, 0, 0) });
-            var host = new Grid { Width = 208, Height = 124, Background = Brush("#151D29") };
+            fallback.Children.Add(new TextBlock { Text = "系统暂未提供窗口画面", Foreground = Brush("#9CACC2"), FontSize = 11, Margin = new Thickness(0, 8, 0, 0) });
+            var host = new Grid { Width = 248, Height = 148, Background = Brush("#151D29") };
             host.Children.Add(fallback);
             var open = new Button { Content = host, Padding = new Thickness(2), Margin = new Thickness(0), Focusable = false, Background = Brushes.Transparent, ToolTip = window.Title };
             open.Click += (_, _) => { activate(window); dismiss(); };
             card.Children.Add(open); row.Children.Add(card);
-            var thumbnail = IsLoaded && !DockNative.IsIconic(window.Handle) ? WindowThumbnail.Create(new WindowInteropHelper(this).Handle, window.Handle) : null;
-            tiles.Add(new(window, host, thumbnail));
+            // Minimized sources may still have a cached DWM frame. Always attempt registration.
+            tiles.Add(new Tile { Window = window, Host = host });
         }
         if (pages > 1)
         {
@@ -97,7 +110,9 @@ internal sealed class WindowPreview : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
         foreach (var tile in tiles)
         {
-            if (tile.Thumbnail == null || tile.Host.ActualWidth <= 0) continue;
+            if (tile.Host.ActualWidth <= 0 || !DockNative.IsWindow(tile.Window.Handle)) continue;
+            tile.Thumbnail ??= WindowThumbnail.Create(new WindowInteropHelper(this).Handle, tile.Window.Handle);
+            if (tile.Thumbnail == null) continue;
             var point = tile.Host.TranslatePoint(new Point(), this);
             var a = scale.Transform(point); var b = scale.Transform(point + new Vector(tile.Host.ActualWidth, tile.Host.ActualHeight));
             tile.Thumbnail.Update(new DockNative.Rect { Left = (int)Math.Round(a.X), Top = (int)Math.Round(a.Y), Right = (int)Math.Round(b.X), Bottom = (int)Math.Round(b.Y) });
