@@ -100,6 +100,32 @@ public sealed class WorkspaceManager : IDisposable
         catch { state.Cards.Insert(index, card); throw; }
         window.Close();
     }
+    public bool FileMoveInProgress { get; private set; }
+    public bool BeginFileMove()
+    {
+        if (Exiting || FileMoveInProgress || windows.Values.Any(w => w.HasPendingCreation || w.IsReordering || w.HasOpenFileDialog)) return false;
+        if (store.ReadOnly) throw new IOException("配置处于保护模式，不能移动文件并保存引用。");
+        FileMoveInProgress = true;
+        return true;
+    }
+    public void EndFileMove() => FileMoveInProgress = false;
+    public void ApplyFileMove(Guid sourceCard, string source, string destination)
+    {
+        foreach (var card in state.Cards)
+        {
+            card.References = card.References
+                .Where(path => card.Id != sourceCard || !FileMoveService.Same(path, source))
+                .Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (card.CreationDirectory != null) card.CreationDirectory = FileMoveService.Remap(card.CreationDirectory, source, destination);
+            card.FolderOrders = card.FolderOrders.GroupBy(pair => FileMoveService.Remap(pair.Key, source, destination), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.SelectMany(pair => pair.Value).Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+        }
+        Save();
+    }
+    public async Task RefreshAfterFileMove(string source, string destination)
+    {
+        foreach (var window in windows.Values.ToArray()) await window.RefreshAfterFileMove(source, destination);
+    }
     public void Save()
     {
         if (store.ReadOnly) throw new IOException("配置处于只读保护模式，未覆盖原文件。");

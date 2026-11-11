@@ -155,7 +155,7 @@ public partial class MainWindow : Window
     }
     private void FileDragOver(object sender, DragEventArgs e)
     {
-        if (NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
+        if (HasPendingCreation || NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderOver(e); return; }
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && (e.AllowedEffects & DragDropEffects.Link) != 0 ? DragDropEffects.Link : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -170,7 +170,7 @@ public partial class MainWindow : Window
     }
     private async void FileDrop(object sender, DragEventArgs e)
     {
-        if (NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
+        if (HasPendingCreation || NewItemPanel.Visibility == Visibility.Visible) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
         if (IsReorder(e)) { ReorderDrop(e); return; }
         FileDragLeave(sender, e);
         e.Handled = true;
@@ -204,7 +204,7 @@ public partial class MainWindow : Window
     }
     private async void CollectionClick(object sender, RoutedEventArgs e)
     {
-        if (creatingItem) return;
+        if (HasPendingCreation) return;
         CancelNewItem(sender, e);
         await LoadReferences();
     }
@@ -232,7 +232,7 @@ public partial class MainWindow : Window
     }
     private async void ChooseClick(object sender, RoutedEventArgs e)
     {
-        if (creatingItem) return;
+        if (HasPendingCreation) return;
         CancelNewItem(sender, e);
         var picker = new OpenFolderDialog { Title = "选择要展示的文件夹" };
         if (picker.ShowDialog(this) != true) return;

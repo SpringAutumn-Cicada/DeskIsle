@@ -14,11 +14,11 @@ public partial class MainWindow
     private bool creatingItem;
     private bool newItemInFolder;
     private int newItemVersion;
-    internal bool HasPendingCreation => creatingItem || deletingItem;
+    internal bool HasPendingCreation => creatingItem || deletingItem || workspace.FileMoveInProgress;
 
     private void BeginNewItemClick(object sender, RoutedEventArgs e)
     {
-        if (creatingItem || deletingItem || sender is not MenuItem { Tag: string tag } || !Enum.TryParse<NewItemKind>(tag, out var kind)) return;
+        if (HasPendingCreation || sender is not MenuItem { Tag: string tag } || !Enum.TryParse<NewItemKind>(tag, out var kind)) return;
         FinishRename(true);
         var version = ++newItemVersion;
         newItemKind = kind;

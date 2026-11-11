@@ -1,0 +1,30 @@
+<Window x:Class="DeskIsle.MoveConfirmation" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="移入文件夹" Width="440" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" Foreground="#EDF1F8" ShowInTaskbar="False" UseLayoutRounding="True">
+<Border Background="#222936" BorderBrush="#4A566C" BorderThickness="1" CornerRadius="16" Padding="22">
+<Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+<Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+<Border Width="34" Height="34" CornerRadius="10" Background="#30475A" Margin="0,0,12,0"><TextBlock Text="↳" FontSize="23" Foreground="#A6D3DF" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+<TextBlock Grid.Column="1" Text="移入文件夹" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+<Button Grid.Column="2" x:Name="CloseAction" Content="×" IsCancel="True" Width="28" Height="28" Padding="0" Margin="8,0,0,0" Background="Transparent" BorderThickness="0" Foreground="#A9B5C8" FontSize="20" AutomationProperties.Name="取消移动"/>
+</Grid>
+<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+<Border Background="#1B222E" BorderBrush="#354156" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel>
+<TextBlock Text="原位置" Foreground="#94A3BA" FontSize="10"/>
+<TextBlock x:Name="SourcePath" TextWrapping="Wrap" FontSize="11" Margin="0,3,0,8"/>
+<TextBlock Text="移入到" Foreground="#94A3BA" FontSize="10"/>
+<TextBlock x:Name="TargetPath" TextWrapping="Wrap" Foreground="#B9DBE8" FontSize="11" Margin="0,3,0,0"/>
+</StackPanel></Border>
+<TextBlock Text="保存名称（同名时可修改）" FontSize="11" Foreground="#A9B7CD" Margin="0,12,0,5"/>
+<TextBox x:Name="DestinationName" FontSize="12" Padding="8,6" MaxLength="200" Background="#1B222E" Foreground="#EDF1F8" CaretBrush="#A8C8FA" BorderBrush="#657EAA" BorderThickness="1" AutomationProperties.Name="移入后的名称">
+<TextBox.Template><ControlTemplate TargetType="TextBox"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost"/></Border></ControlTemplate></TextBox.Template>
+</TextBox>
+<TextBlock Text="将改变真实文件位置；不会覆盖或合并已有项目。" TextWrapping="Wrap" FontSize="10" Foreground="#94A3BA" Margin="0,8,0,4"/>
+<TextBlock x:Name="ErrorText" Foreground="#E9ADAD" TextWrapping="Wrap" FontSize="11"/>
+</StackPanel></ScrollViewer>
+<StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+<Button x:Name="CancelAction" Content="取消" IsCancel="True" IsDefault="True" MinWidth="80" Margin="0,0,8,0" Padding="14,8"/>
+<Button x:Name="MoveAction" Content="移入" Click="ConfirmMove" MinWidth="80" Margin="0" Padding="14,8" Background="#3C6376" BorderBrush="#80B5BD"/>
+</StackPanel>
+</Grid>
+</Border>
+</Window>

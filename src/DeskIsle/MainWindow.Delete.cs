@@ -8,7 +8,7 @@ public partial class MainWindow
     private bool deletingItem;
     private async void DeleteFileClick(object sender, RoutedEventArgs e)
     {
-        if (deletingItem || creatingItem) return;
+        if (HasPendingCreation) return;
         var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
         if (tile == null) return;
         var path = tile.FullPath;

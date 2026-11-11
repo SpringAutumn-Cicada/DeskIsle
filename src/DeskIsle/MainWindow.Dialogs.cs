@@ -5,6 +5,7 @@ namespace DeskIsle;
 public partial class MainWindow
 {
     private readonly Dictionary<Window, DesktopHost> dialogHosts = [];
+    internal bool HasOpenFileDialog => dialogHosts.Count > 0;
     private void TrackDialog(Window dialog)
     {
         var recovery = new DesktopHost();

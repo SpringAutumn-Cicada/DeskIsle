@@ -24,6 +24,7 @@ public partial class MainWindow
     private Button? pressedTile;
     private FileTile? reorderSource;
     private int insertionIndex;
+    private FileTile? folderDropTarget;
     private DateTime suppressOpenUntil;
     private ReorderAdorner? reorderAdorner;
     private AdornerLayer? reorderLayer;
@@ -33,13 +34,14 @@ public partial class MainWindow
 
     private void TilePress(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left) return;
+        if (e.ChangedButton != MouseButton.Left || HasPendingCreation) return;
         pressedTile = sender as Button;
         tilePressPoint = e.GetPosition(Files);
     }
     private void TileRelease(object sender, MouseButtonEventArgs e) => pressedTile = null;
     private void TileMove(object sender, MouseEventArgs e)
     {
+        if (HasPendingCreation) { pressedTile = null; return; }
         if (pressedTile is not { DataContext: FileTile tile } button || e.LeftButton != MouseButtonState.Pressed || reorderSource != null) return;
         var current = e.GetPosition(Files);
         if (Math.Abs(current.X - tilePressPoint.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(current.Y - tilePressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) return;
@@ -79,7 +81,7 @@ public partial class MainWindow
         var point = e.GetPosition(Files);
         return point.X >= 0 && point.Y >= 0 && point.X <= Files.ActualWidth && point.Y <= Files.ActualHeight;
     }
-    private bool AcceptReorder(DragEventArgs e) => PointerInFiles(e) && e.Data.GetData(ReorderFormat) is ReorderPayload payload && payload.CardId == state.Id && tiles.Any(x => x.FullPath.Equals(payload.Path, StringComparison.OrdinalIgnoreCase));
+    private bool AcceptReorder(DragEventArgs e) => !HasPendingCreation && PointerInFiles(e) && e.Data.GetData(ReorderFormat) is ReorderPayload payload && payload.CardId == state.Id && tiles.Any(x => x.FullPath.Equals(payload.Path, StringComparison.OrdinalIgnoreCase));
     private void ReorderOver(DragEventArgs e)
     {
         e.Handled = true;
@@ -87,6 +89,7 @@ public partial class MainWindow
         if (e.Effects == DragDropEffects.None) { HideReorderPreview(); return; }
         reorderPointer = e.GetPosition(Files);
         UpdateReorderPreview();
+        if (folderDropTarget != null && reorderSource != null && FileMoveService.QuickError(reorderSource.FullPath, folderDropTarget.FullPath) != null) e.Effects = DragDropEffects.None;
         if (!reorderTimer.IsEnabled)
         {
             reorderScroll = FindScroll(Files);
@@ -129,6 +132,13 @@ public partial class MainWindow
     {
         var point = reorderPointer;
         var targetButton = FindTile(Files.InputHitTest(point) as DependencyObject);
+        folderDropTarget = null;
+        if (targetButton?.DataContext is FileTile { Entry.IsDirectory: true } folder)
+        {
+            var local = Files.TranslatePoint(point, targetButton);
+            if (local.X >= targetButton.ActualWidth * .2 && local.X <= targetButton.ActualWidth * .8 && local.Y >= 0 && local.Y <= targetButton.ActualHeight)
+                folderDropTarget = folder;
+        }
         // Hover feedback follows the actual pointer hit, independent of the insertion slot.
         var hoverBounds = targetButton == null ? Rect.Empty : new Rect(targetButton.TranslatePoint(new Point(), Files), targetButton.RenderSize);
         // Gaps and unused row space choose the closest realized tile, not an arbitrary last item.
@@ -177,14 +187,20 @@ public partial class MainWindow
                 line = new Rect(previous.Right + 3, previous.Top + 5, 0, Math.Max(0, previous.Height - 10));
             }
         }
+        if (folderDropTarget != null) line = Rect.Empty;
         if (reorderAdorner == null)
         {
             reorderLayer = AdornerLayer.GetAdornerLayer(Files);
             reorderAdorner = new ReorderAdorner(Files) { IsHitTestVisible = false };
             reorderLayer?.Add(reorderAdorner);
         }
-        var changed = reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != hoverBounds ||
+        var moveError = folderDropTarget != null && reorderSource != null ? FileMoveService.QuickError(reorderSource.FullPath, folderDropTarget.FullPath) : null;
+        var caption = folderDropTarget == null ? null : moveError ?? $"移入「{folderDropTarget.Name}」";
+        var changed = reorderAdorner.Caption != caption || reorderAdorner.Visibility != Visibility.Visible || reorderAdorner.Target != hoverBounds ||
             reorderAdorner.InsertionLine != line || reorderAdorner.Pointer != point || reorderAdorner.Tile != reorderSource;
+        reorderAdorner.Caption = caption;
+        reorderAdorner.IsFolderDrop = folderDropTarget != null;
+        reorderAdorner.IsInvalid = moveError != null;
         reorderAdorner.Visibility = Visibility.Visible;
         reorderAdorner.Target = hoverBounds;
         reorderAdorner.InsertionLine = line;
@@ -199,6 +215,18 @@ public partial class MainWindow
         if (!AcceptReorder(e) || e.Data.GetData(ReorderFormat) is not ReorderPayload payload) { ClearReorderPreview(); return; }
         reorderPointer = e.GetPosition(Files);
         UpdateReorderPreview();
+        if (folderDropTarget is { } folder)
+        {
+            var sourcePath = payload.Path;
+            var targetPath = folder.FullPath;
+            ClearReorderPreview();
+            if (FileMoveService.QuickError(sourcePath, targetPath) == null)
+            {
+                e.Effects = DragDropEffects.Copy; // Transport effect only; explicit internal operation follows confirmation.
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => MoveIntoFolder(sourcePath, targetPath)));
+            }
+            return;
+        }
         var items = tiles.ToList();
         var index = items.FindIndex(x => x.FullPath.Equals(payload.Path, StringComparison.OrdinalIgnoreCase));
         var target = insertionIndex;
@@ -223,6 +251,7 @@ public partial class MainWindow
     {
         reorderTimer.Stop();
         if (reorderAdorner != null) reorderLayer?.Remove(reorderAdorner);
+        folderDropTarget = null;
         reorderAdorner = null;
         reorderLayer = null;
         if (reorderScroll != null) reorderScroll.ScrollChanged -= ReorderScrollChanged;
