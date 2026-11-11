@@ -27,7 +27,11 @@ internal partial class DockSettingsWindow : Window
         OpacityValue.Text = $"{OpacitySlider.Value:P0}";
     }
     private void DragHeading(object sender, MouseButtonEventArgs e)
-    { if (e.OriginalSource is not System.Windows.Controls.Button && e.LeftButton == MouseButtonState.Pressed) DragMove(); }
+    {
+        for (var node = e.OriginalSource as DependencyObject; node != null; node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+            if (node is System.Windows.Controls.Primitives.ButtonBase) return;
+        if (e.LeftButton == MouseButtonState.Pressed) DragMove();
+    }
     private void CancelClick(object sender, RoutedEventArgs e) => Close();
     private void SaveClick(object sender, RoutedEventArgs e)
     {
