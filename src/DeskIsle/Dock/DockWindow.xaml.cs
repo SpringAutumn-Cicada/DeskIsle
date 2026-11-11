@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,25 +9,42 @@ namespace DeskIsle.Dock;
 
 public partial class DockBar : Window
 {
+    private sealed class AppView
+    {
+        internal required Button Button;
+        internal required Image Image;
+        internal required TextBlock Placeholder;
+        internal required Border Indicator;
+        internal DockWindow[] Windows = [];
+        internal DockPin? Pin;
+        internal string? IconPath, IconKey;
+        internal long IconVersion;
+    }
     private readonly DockController controller;
     private readonly Dictionary<string, ImageSource?> icons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AppView> views = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim iconSlots = new(2);
+    private readonly List<string> runningOrder = [];
+    private readonly Border separator = new() { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) };
+    private readonly TextBlock emptyHint = new() { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) };
     private Point down;
     private string? dragPin;
-    private bool dragging;
-    private readonly List<string> runningOrder = [];
-    private string signature = "";
+    private bool dragging, menuOpen, closed;
+    private HwndSource? source;
     internal bool Interacting => dragging || menuOpen;
-    private bool menuOpen;
     internal DockBar(DockController controller)
     {
         this.controller = controller;
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
         SizeChanged += (_, _) => Place();
-        DpiChanged += (_, _) => { icons.Clear(); signature = ""; Place(); };
+        DpiChanged += (_, _) =>
+        {
+            icons.Clear();
+            foreach (var view in views.Values) { view.IconKey = null; LoadIcon(view); }
+            Place();
+        };
     }
-    private HwndSource? source;
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -37,16 +53,14 @@ public partial class DockBar : Window
     }
     private nint MouseActivation(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
-        // MA_NOACTIVATE lets the click see the actual application's foreground status.
+        // MA_NOACTIVATE: preserve the application's foreground state through a Dock click.
         if (message == 0x21) { handled = true; return 3; }
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
-        var area = SystemParameters.WorkArea;
-        // WPF converts the main monitor geometry into the window DPI coordinate space.
         var primary = DockNative.Primary();
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
@@ -57,113 +71,155 @@ public partial class DockBar : Window
     }
     internal void SetApps(DockPin[] pins, DockWindow[] windows)
     {
-        // Window enumeration follows Z-order. Canonicalize snapshots before comparing them.
+        if (closed || Interacting) return;
         windows = windows.OrderBy(w => w.Handle.ToInt64()).ToArray();
-        var key = VisualTreeHelper.GetDpi(this).DpiScaleX + "#" + DockNative.GetForegroundWindow() + "#" + string.Join("|", pins.Select(x => x.Path)) + "#" + string.Join("|", windows.Select(x => $"{x.Handle}:{x.Title}:{x.Executable}"));
-        if (key == signature || Interacting) return;
-        signature = key;
-        Apps.Children.Clear();
+        var desired = new List<UIElement>();
+        var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Use(string id, string title, string? iconPath, DockPin? pin, DockWindow[] group)
+        {
+            alive.Add(id);
+            if (!views.TryGetValue(id, out var view)) { view = CreateView(); views.Add(id, view); }
+            view.Windows = group; view.Pin = pin; view.IconPath = iconPath;
+            view.Button.ToolTip = pin != null && !File.Exists(pin.Path) ? title + "（路径不可用，右键重新定位）" : title;
+            view.Button.Opacity = pin != null && !File.Exists(pin.Path) ? .45 : 1;
+            view.Indicator.Visibility = group.Length > 0 ? Visibility.Visible : Visibility.Hidden;
+            view.Indicator.Background = group.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
+            LoadIcon(view);
+            desired.Add(view.Button);
+        }
         foreach (var pin in pins)
-            AddButton(pin.Name, pin.Path, pin, windows.Where(w => pin.Executable != null && string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)).ToArray());
+            Use("pin:" + pin.Path, pin.Name, pin.Path, pin, windows.Where(w => pin.Executable != null && string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)).ToArray());
         var extra = windows.Where(w => !pins.Any(p => p.Executable != null && string.Equals(p.Executable, w.Executable, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(w => w.Executable ?? $"window:{w.Handle}", StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         foreach (var id in extra.Keys)
             if (!runningOrder.Contains(id, StringComparer.OrdinalIgnoreCase)) runningOrder.Add(id);
         if (runningOrder.Count > 256) runningOrder.RemoveAll(id => !extra.ContainsKey(id));
-        if (extra.Count > 0 && pins.Length > 0) Apps.Children.Add(new Border { Width = 1, Background = Brushes.SlateGray, Margin = new Thickness(7, 10, 7, 10) });
+        if (extra.Count > 0 && pins.Length > 0) desired.Add(separator);
         foreach (var id in runningOrder.Where(extra.ContainsKey))
+        { var group = extra[id]; Use("running:" + id, group[0].Title, group[0].Executable, null, group); }
+        if (desired.Count == 0) desired.Add(emptyHint);
+        // Keep existing controls in place: state/title/foreground changes never replace hovered items.
+        for (var i = Apps.Children.Count - 1; i >= 0; i--)
+            if (!desired.Contains(Apps.Children[i])) Apps.Children.RemoveAt(i);
+        for (var i = 0; i < desired.Count; i++)
         {
-            var group = extra[id];
-            AddButton(group[0].Title, group[0].Executable, null, group);
+            if (i < Apps.Children.Count && ReferenceEquals(Apps.Children[i], desired[i])) continue;
+            if (Apps.Children.Contains(desired[i])) Apps.Children.Remove(desired[i]);
+            Apps.Children.Insert(i, desired[i]);
         }
-        if (pins.Length == 0 && windows.Length == 0)
-            Apps.Children.Add(new TextBlock { Text = "拖入应用快捷方式", Foreground = Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12) });
+        foreach (var id in views.Keys.Where(id => !alive.Contains(id)).ToArray())
+        { views[id].IconVersion++; views.Remove(id); }
     }
-    private async void AddButton(string title, string? iconPath, DockPin? pin, DockWindow[] windows)
+    private AppView CreateView()
     {
-        var button = new Button { Width = 50, Height = 52, Padding = new Thickness(3), ToolTip = title, Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
-        var panel = new Grid();
+        var button = new Button { Width = 50, Height = 52, Padding = new Thickness(3), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
         var image = new Image { Width = 36, Height = 36, Margin = new Thickness(0, 0, 0, 5), Stretch = Stretch.Uniform };
-        panel.Children.Add(new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        var placeholder = new TextBlock { Text = "▧", FontSize = 28, Foreground = Brushes.LightSteelBlue, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var indicator = new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center };
+        var view = new AppView { Button = button, Image = image, Placeholder = placeholder, Indicator = indicator };
+        var panel = new Grid(); panel.Children.Add(placeholder); panel.Children.Add(image); panel.Children.Add(indicator); button.Content = panel;
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        panel.Children.Add(image);
-        if (windows.Length > 0) panel.Children.Add(new Border { Width = 5, Height = 3, CornerRadius = new CornerRadius(2), Background = windows.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray, VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center });
-        button.Content = panel;
         var transform = new ScaleTransform(1, 1);
         image.RenderTransform = transform; image.RenderTransformOrigin = new Point(.5, .5);
-        button.MouseEnter += (_, _) => Animate(1.12);
-        button.MouseLeave += (_, _) => Animate(1);
-        void Animate(double value) { var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100)); transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation); transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation); }
+        var hovered = false;
+        button.MouseEnter += (_, _) => { if (hovered) return; hovered = true; Animate(1.12); };
+        button.MouseLeave += (_, _) => { if (!hovered) return; hovered = false; Animate(1); };
+        void Animate(double value)
+        {
+            var animation = new DoubleAnimation(value, TimeSpan.FromMilliseconds(100));
+            transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
+            transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
+        }
         button.Click += (_, _) =>
         {
-            var active = windows.FirstOrDefault(w => w.Handle == DockNative.GetForegroundWindow() && !DockNative.IsIconic(w.Handle));
+            var active = view.Windows.FirstOrDefault(w => w.Handle == DockNative.GetForegroundWindow() && !DockNative.IsIconic(w.Handle));
             if (active != null) DockNative.ShowWindowAsync(active.Handle, 6);
-            else if (windows.Length == 1) Activate(windows[0]);
-            else if (windows.Length > 1) OpenWindows(button, windows);
-            else if (pin != null) controller.Launch(pin.Path);
+            else if (view.Windows.Length == 1) Activate(view.Windows[0]);
+            else if (view.Windows.Length > 1) OpenWindows(button, view.Windows);
+            else if (view.Pin != null) controller.Launch(view.Pin.Path);
         };
-        button.PreviewMouseLeftButtonDown += (_, e) => { down = e.GetPosition(this); dragPin = pin?.Path; };
+        button.PreviewMouseLeftButtonDown += (_, e) => { down = e.GetPosition(this); dragPin = view.Pin?.Path; };
         button.PreviewMouseMove += (_, e) =>
         {
+            var pin = view.Pin;
             if (dragging || pin == null || dragPin != pin.Path || e.LeftButton != MouseButtonState.Pressed) return;
             var point = e.GetPosition(this);
             if (Math.Abs(point.X - down.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(point.Y - down.Y) < SystemParameters.MinimumVerticalDragDistance) return;
             dragging = true;
-            try { var data = new DataObject("DeskIsle.Dock.Pin", pin.Path); DragDrop.DoDragDrop(button, data, DragDropEffects.Move); }
+            try { DragDrop.DoDragDrop(button, new DataObject("DeskIsle.Dock.Pin", pin.Path), DragDropEffects.Move); }
             finally { dragging = false; dragPin = null; }
         };
         button.AllowDrop = true;
         button.DragEnter += (_, e) =>
         {
-            button.BorderThickness = new Thickness(0);
-            if (pin != null && e.Data.GetDataPresent("DeskIsle.Dock.Pin"))
+            if (view.Pin != null && e.Data.GetDataPresent("DeskIsle.Dock.Pin"))
             { button.BorderThickness = new Thickness(2, 0, 0, 0); button.BorderBrush = Brushes.Aquamarine; }
         };
         button.DragLeave += (_, _) => button.BorderThickness = new Thickness(0);
         button.Drop += (_, e) =>
         {
             button.BorderThickness = new Thickness(0);
-            if (pin != null && e.Data.GetData("DeskIsle.Dock.Pin") is string source) { controller.Reorder(source, pin.Path); e.Handled = true; }
+            if (view.Pin != null && e.Data.GetData("DeskIsle.Dock.Pin") is string origin) { controller.Reorder(origin, view.Pin.Path); e.Handled = true; }
         };
         var menu = new ContextMenu();
-        Add(menu, "打开新窗口", () => { if (pin != null) controller.Launch(pin.Path); else if (iconPath != null) controller.Launch(iconPath); });
-        if (pin != null)
+        button.ContextMenu = menu;
+        button.ContextMenuOpening += (_, _) => FillMenu(menu, view);
+        menu.Opened += (_, _) => menuOpen = true;
+        menu.Closed += (_, _) => menuOpen = false;
+        // A nonempty menu is needed for WPF to raise ContextMenuOpening on first use.
+        Add(menu, "打开", () => { });
+        return view;
+    }
+    private void FillMenu(ContextMenu menu, AppView view)
+    {
+        menu.Items.Clear();
+        Add(menu, "打开新窗口", () => { if (view.Pin != null) controller.Launch(view.Pin.Path); else if (view.IconPath != null) controller.Launch(view.IconPath); });
+        if (view.Pin is { } pin)
         {
             Add(menu, "取消固定", () => controller.Unpin(pin.Path));
             Add(menu, "重新定位…", () => controller.Relocate(pin.Path));
             Add(menu, "打开所在位置", () => controller.Reveal(pin.Path));
         }
-        else if (iconPath != null) Add(menu, "固定到 Dock", () => controller.Pin([iconPath]));
-        foreach (var window in windows)
+        else if (view.IconPath is { } path) Add(menu, "固定到 Dock", () => controller.Pin([path]));
+        foreach (var window in view.Windows)
         {
             var item = new MenuItem { Header = window.Title.Length > 60 ? window.Title[..60] + "…" : window.Title };
             Add(item, "切换到窗口", () => Activate(window));
             Add(item, "关闭窗口", () => DockNative.PostMessage(window.Handle, 0x0010, 0, 0));
             menu.Items.Add(item);
         }
-        menu.Opened += (_, _) => menuOpen = true;
-        menu.Closed += (_, _) => menuOpen = false;
-        button.ContextMenu = menu;
-        Apps.Children.Add(button);
-        if (pin != null && !File.Exists(pin.Path)) { button.Opacity = .45; button.ToolTip = title + "（路径不可用，右键重新定位）"; }
-        if (iconPath == null && windows.Length == 0) return;
+    }
+    private async void LoadIcon(AppView view)
+    {
+        if (closed) return;
+        var windows = view.Windows;
+        var path = view.IconPath;
+        if (path == null && windows.Length == 0) return;
         var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
-        var iconKey = (iconPath ?? $"window:{windows[0].Handle}") + "|" + pixels;
-        if (!icons.TryGetValue(iconKey, out var icon))
+        var key = (path ?? $"window:{windows[0].Handle}") + "|" + pixels;
+        if (view.IconKey == key) return;
+        view.IconKey = key;
+        var version = ++view.IconVersion;
+        if (!icons.TryGetValue(key, out var icon))
         {
             try
             {
                 await iconSlots.WaitAsync();
-                try { icon = await Task.Run(() => iconPath != null ? DockApps.Icon(iconPath, pixels) ?? (windows.Length > 0 ? DockApps.WindowIcon(windows[0].Handle) : null) : DockApps.WindowIcon(windows[0].Handle)); }
+                try
+                {
+                    if (closed || version != view.IconVersion) return;
+                    icon = await Task.Run(() => path != null ? DockApps.Icon(path, pixels) ?? (windows.Length > 0 ? DockApps.WindowIcon(windows[0].Handle) : null) : DockApps.WindowIcon(windows[0].Handle));
+                }
                 finally { iconSlots.Release(); }
             }
             catch (Exception ex) when (ex is IOException or ArgumentException or System.Runtime.InteropServices.COMException) { icon = null; }
             if (icons.Count >= 256) icons.Clear();
-            icons[iconKey] = icon;
+            icons[key] = icon;
         }
-        image.Source = icon;
-        if (icon != null) panel.Children[0].Visibility = Visibility.Hidden;
+        if (closed || version != view.IconVersion) return;
+        view.Image.Source = icon;
+        view.Placeholder.Visibility = icon != null ? Visibility.Hidden : Visibility.Visible;
     }
     internal static void Add(ItemsControl menu, string header, Action action)
     { var item = new MenuItem { Header = header }; item.Click += (_, _) => action(); menu.Items.Add(item); }
@@ -182,10 +238,7 @@ public partial class DockBar : Window
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
     private void SettingsClick(object sender, RoutedEventArgs e) => controller.Configure();
     private void DropPins(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) controller.Pin(paths);
-        e.Handled = true;
-    }
+    { if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) controller.Pin(paths); e.Handled = true; }
     private void DragOverPins(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent("DeskIsle.Dock.Pin") ? DragDropEffects.Move : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
