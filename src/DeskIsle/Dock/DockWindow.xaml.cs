@@ -89,9 +89,19 @@ public partial class DockBar : Window
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
+    private DockPin[]? pendingPins;
+    private DockWindow[]? pendingWindows;
+    private void FlushApps()
+    {
+        if (pendingPins == null || pendingWindows == null || dragging || menuOpen) return;
+        var pins = pendingPins; var windows = pendingWindows;
+        pendingPins = null; pendingWindows = null;
+        SetApps(pins, windows);
+    }
     internal void SetApps(DockPin[] pins, DockWindow[] windows)
     {
-        if (closed || Interacting) return;
+        if (closed) return;
+        if (dragging || menuOpen) { pendingPins = pins; pendingWindows = windows; return; }
         windows = windows.OrderBy(w => w.Handle.ToInt64()).ToArray();
         var desired = new List<UIElement>();
         var alive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -131,6 +141,7 @@ public partial class DockBar : Window
             if (Apps.Children.Contains(desired[i])) Apps.Children.Remove(desired[i]);
             Apps.Children.Insert(i, desired[i]);
         }
+        preview?.SetWindows(hoveredView?.Windows ?? []);
         foreach (var id in views.Keys.Where(id => !alive.Contains(id)).ToArray())
         { views[id].IconVersion++; views.Remove(id); }
     }
@@ -192,7 +203,7 @@ public partial class DockBar : Window
             ClosePreview();
             dragging = true;
             try { DragDrop.DoDragDrop(button, new DataObject("DeskIsle.Dock.Pin", pin.Path), DragDropEffects.Move); }
-            finally { dragging = false; dragPin = null; }
+            finally { dragging = false; dragPin = null; FlushApps(); }
         };
         button.AllowDrop = true;
         button.DragEnter += (_, e) =>
@@ -210,7 +221,7 @@ public partial class DockBar : Window
         button.ContextMenu = menu;
         button.ContextMenuOpening += (_, _) => { ClosePreview(); FillMenu(menu, view); };
         menu.Opened += (_, _) => menuOpen = true;
-        menu.Closed += (_, _) => menuOpen = false;
+        menu.Closed += (_, _) => { menuOpen = false; FlushApps(); };
         // A nonempty menu is needed for WPF to raise ContextMenuOpening on first use.
         Add(menu, "打开", () => { });
         return view;

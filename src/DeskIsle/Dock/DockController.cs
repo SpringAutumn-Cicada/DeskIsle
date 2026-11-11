@@ -20,7 +20,7 @@ internal sealed class DockController : IDisposable
     private Window? returnButton;
     private HwndSource? messages;
     private DockSettingsWindow? settingsWindow;
-    private bool scanning, disposed, hotkey;
+    private bool scanning, disposed, hotkey, refreshPending;
     private nint windowHook, foregroundHook;
     private DockNative.WinEventProc? changeCallback;
     private readonly DispatcherTimer settle = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
@@ -189,7 +189,8 @@ internal sealed class DockController : IDisposable
     }
     private async Task Refresh()
     {
-        if (scanning || disposed || lease == null) return;
+        if (disposed || lease == null) return;
+        if (scanning) { refreshPending = true; return; }
         scanning = true;
         try
         {
@@ -205,7 +206,11 @@ internal sealed class DockController : IDisposable
             bar?.SetApps(pins, windows);
         }
         catch (Exception ex) when (Recoverable(ex)) { /* Preserve last snapshot; try again on the next event/tick. */ }
-        finally { scanning = false; }
+        finally
+        {
+            scanning = false;
+            if (refreshPending && !disposed && lease != null) { refreshPending = false; settle.Start(); }
+        }
     }
     private static Task<DockPin[]> ResolvePins(string[] paths)
     {
