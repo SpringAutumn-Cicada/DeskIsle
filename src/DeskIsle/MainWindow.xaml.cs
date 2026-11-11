@@ -116,13 +116,6 @@ public partial class MainWindow : Window
         { MessageBox.Show(this, "无法保存恢复标记，未继续隐藏桌面图标。", "DeskIsle"); }
         UpdateDesktopButton();
     }
-    private void RestoreDesktopIcons(object sender, RoutedEventArgs e)
-    {
-        workspace.CancelStartupHide();
-        try { if (!desktopIcons.Restore()) MessageBox.Show(this, "未找到桌面图标视图，请在桌面右键→查看→显示桌面图标。", "DeskIsle"); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "无法清除恢复标记，请检查配置目录权限。"; }
-        UpdateDesktopButton();
-    }
     private async Task LoadReferences()
     {
         loading?.Cancel();
