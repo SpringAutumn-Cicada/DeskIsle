@@ -41,7 +41,7 @@
 <Grid x:Name="BatteryKey" Width="34" Height="28">
 <Viewbox Width="28" Height="18" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center"><Grid Width="32" Height="20">
 <Path x:Name="BatteryGlyph" Data="M5,2 L23,2 Q27,2 27,6 L27,14 Q27,18 23,18 L5,18 Q1,18 1,14 L1,6 Q1,2 5,2 Z M28,7 Q31,7 31,9 L31,11 Q31,13 28,13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.9" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-<TextBlock x:Name="BatteryText" Text="—" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="10" FontWeight="SemiBold" Margin="0,0,4,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+<TextBlock x:Name="BatteryText" Text="—" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="11" FontWeight="Bold" Margin="1,2,5,2" TextAlignment="Center" Typography.NumeralAlignment="Tabular" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
 </Grid></Viewbox>
 <Path x:Name="ChargingGlyph" Data="M5,0 L1,6 L5,6 L1,12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="5" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
 </Grid>
