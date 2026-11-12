@@ -8,3 +8,10 @@
 - 依据：[微软 Windows Terminal 命令行文档](https://learn.microsoft.com/en-us/windows/terminal/command-line-arguments)。
 - 未运行测试、lint、独立类型检查或 Windows 交互验收；只读检查配置不代表启动验收。仅执行授权的发布构建及包校验。
 - 待用户验收：关闭全部终端后从已有 Dock 固定图标启动 Ubuntu-24.04、右键新窗口、已有窗口激活及发行版正常进入。未来默认配置改变时将按用户新默认配置启动。
+
+## 发布记录
+
+- 功能提交 08f6f79，版本 1.11.19。
+- 专用 SDK Windows x64 自包含发布成功；ZIP 405 项 CRC 校验通过，主程序、恢复脚本与 WinRT 依赖存在。
+- 已复制至 `E:\桌面\DeskIsle-1.11.19-win-x64.zip`，保留旧包；源包与副本 SHA-256 一致：`a6b301e398c547f1bef3dacd80ea2420ce5cbda9d41f1eb0f737fb58d9b1fba4`。
+- 未执行测试或 Windows 交互验收；实际关闭后打开 Ubuntu 待用户验收。无合并、无推送。
