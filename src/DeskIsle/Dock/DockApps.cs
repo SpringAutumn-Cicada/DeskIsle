@@ -8,7 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 namespace DeskIsle.Dock;
 
-internal sealed record DockWindow(nint Handle, string Title, string? Executable);
+internal sealed record DockWindow(nint Handle, string Title, string? Executable, bool Background = false);
 internal sealed record DockPin(string Path, string? Executable, string Name);
 internal static class DockApps
 {

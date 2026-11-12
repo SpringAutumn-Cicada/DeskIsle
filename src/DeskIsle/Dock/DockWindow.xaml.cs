@@ -340,6 +340,11 @@ public partial class DockBar : Window
     }
     internal static void Add(ItemsControl menu, string header, Action action)
     { var item = new MenuItem { Header = header }; item.Click += (_, _) => action(); menu.Items.Add(item); }
+    internal void PreviewApplication(string? executable)
+    {
+        var view = views.Values.FirstOrDefault(v => string.Equals(v.Pin?.Executable ?? v.IconPath, executable, StringComparison.OrdinalIgnoreCase) && v.Windows.Length > 0);
+        if (view != null) ShowPreview(view);
+    }
     private void ShowPreview(AppView view)
     {
         var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle)).ToArray();
@@ -360,7 +365,7 @@ public partial class DockBar : Window
     {
         if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle))
         {
-            if (window.Executable is { } path) controller.OpenPinned(new DockPin(path, path, window.Title), false);
+            // Hidden windows are preview-only: neither relaunch nor force-show application internals.
             return;
         }
         if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);

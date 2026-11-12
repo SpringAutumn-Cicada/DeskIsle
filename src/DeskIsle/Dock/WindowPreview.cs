@@ -144,7 +144,7 @@ internal sealed class WindowPreview : Window
         foreach (var card in cards)
         {
             var title = windows.FirstOrDefault(w => w.Handle == card.Windows[0].Handle)?.Title ?? card.Windows[0].Title;
-            card.Title.Text = (card.Windows.Length > 1 ? "组 | " : "") + title;
+            card.Title.Text = (card.Windows.Length > 1 ? "组 | " : "") + title + (windows.Any(w => card.Windows.Any(c => c.Handle == w.Handle) && w.Background) ? " · 后台" : "");
             card.Title.ToolTip = card.Title.Text;
         }
     }
@@ -161,6 +161,8 @@ internal sealed class WindowPreview : Window
         void AddImage(DockWindow window, Card card, double width, double height, Action click, bool composite)
         {
             var host = new Grid { Width = width, Height = height, Background = Brush("#202936"), VerticalAlignment = VerticalAlignment.Center };
+            if (window.Background)
+                host.Children.Add(new TextBlock { Text = "后台窗口", Foreground = Brushes.LightSteelBlue, FontSize = 11, VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(4) });
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
             host.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
             if (!previousTiles.Remove((window.Handle, composite), out var tile))
@@ -341,7 +343,7 @@ internal sealed class WindowPreview : Window
         var compositeHandles = tiles.Where(tile => tile.Composite).Select(tile => tile.Window.Handle).ToArray();
         var nextGroup = page == 0 ? groups.Find(latest) : null;
         var nextHandles = nextGroup == null ? Array.Empty<nint>() : new[] { nextGroup.Left.Handle, nextGroup.Right.Handle };
-        var changed = !compositeHandles.SequenceEqual(nextHandles) || !windows.Select(w => w.Handle).SequenceEqual(latest.Select(w => w.Handle));
+        var changed = !compositeHandles.SequenceEqual(nextHandles) || !windows.Select(w => (w.Handle, w.Background)).SequenceEqual(latest.Select(w => (w.Handle, w.Background)));
         windows = latest;
         if (windows.Length == 0) { dismiss(); return; }
         if (changed) RenderPage();

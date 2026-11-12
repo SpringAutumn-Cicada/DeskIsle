@@ -55,7 +55,6 @@ public partial class DockBar
             BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}" : "—";
             BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
-            await RefreshBackgroundApps();
         }
         finally { statusBusy = false; }
     }
@@ -73,21 +72,6 @@ public partial class DockBar
     {
         if (systemPopup != null) systemPopup.IsOpen = false;
         systemPopup = null;
-    }
-    private void OpenSystemPanel(Button anchor, UIElement content)
-    {
-        CloseSystemPanel(); ClosePreview();
-        var border = new Border { Background = new SolidColorBrush(Color.FromRgb(32, 38, 50)), BorderBrush = new SolidColorBrush(Color.FromRgb(88, 130, 151)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(14), Child = content };
-        systemPopup = new Popup { Child = border, PlacementTarget = anchor, Placement = PlacementMode.Custom, VerticalOffset = -12, AllowsTransparency = true, StaysOpen = false };
-        systemPopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
-            [new CustomPopupPlacement(new Point((targetSize.Width - popupSize.Width) / 2, -popupSize.Height - 10), PopupPrimaryAxis.Horizontal)];
-        systemPopup.IsOpen = true;
-    }
-    private static TextBlock PanelText(string text) => new() { Text = text, Foreground = Brushes.LightSteelBlue, Margin = new Thickness(0, 4, 0, 10), TextWrapping = TextWrapping.Wrap, MaxWidth = 270 };
-    private static Button PanelButton(string text, Action action)
-    {
-        var button = new Button { Content = text, Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 3, 0, 3), HorizontalContentAlignment = HorizontalAlignment.Left, Foreground = Brushes.LightSteelBlue, Background = new SolidColorBrush(Color.FromRgb(43, 57, 73)), BorderBrush = Brushes.Transparent };
-        button.Click += (_, _) => action(); return button;
     }
     private void QuickSettingsClick(object sender, RoutedEventArgs e)
     {
