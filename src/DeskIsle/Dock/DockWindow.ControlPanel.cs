@@ -126,6 +126,7 @@ public partial class DockBar
         if (title == "原生任务栏")
         {
             icon = ReturnDockHead.Icon(27);
+            icon.RenderTransform = new TranslateTransform(0, 2);
         }
         else if (title == "任务管理器") icon = ControlIcon("M2,13 L7,13 L10,5 L14,21 L17,11 L22,11", 23);
         else icon = ControlIcon(path, 23);
