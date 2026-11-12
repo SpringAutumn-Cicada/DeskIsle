@@ -42,8 +42,9 @@ internal static class DockWireless
             if (radio.State == RadioState.Disabled) return "无线设备被硬件或系统策略禁用。";
             if (await radio.SetStateAsync(enabled ? RadioState.On : RadioState.Off) != RadioAccessStatus.Allowed) return "系统未接受开关操作，请检查硬件和权限。";
         }
-        await Task.Delay(250);
         var actual = await Read(kind);
+        for (var attempt = 0; actual.On != enabled && attempt < 3; attempt++)
+        { await Task.Delay(80); actual = await Read(kind); }
         return actual.On == enabled ? null : "无线状态尚未达到目标，请检查系统开关。";
     }
     internal static async Task<Network[]> Networks()

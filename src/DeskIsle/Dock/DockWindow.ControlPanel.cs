@@ -14,6 +14,7 @@ public partial class DockBar
     private Slider? panelVolume;
     private Button? panelMute;
     private bool volumeSync, wirelessBusy, radioRefreshBusy;
+    private long wirelessRevision;
     private long panelVersion;
     private readonly Dictionary<RadioKind, (Button Toggle, TextBlock Status, Grid Switch)> radioViews = [];
     private static SolidColorBrush ControlBrush(string color) => new((Color)ColorConverter.ConvertFromString(color));
@@ -124,9 +125,7 @@ public partial class DockBar
         FrameworkElement icon;
         if (title == "原生任务栏")
         {
-            var panes = new UniformGrid { Rows = 2, Columns = 2, Width = 20, Height = 20 };
-            for (var i = 0; i < 4; i++) panes.Children.Add(new Border { Margin = new Thickness(1), CornerRadius = new CornerRadius(1.5), BorderBrush = ControlBrush("#D8EFF6"), BorderThickness = new Thickness(1.4), Background = Brushes.Transparent });
-            icon = panes;
+            icon = ReturnDockHead.Icon(27);
         }
         else if (title == "任务管理器") icon = ControlIcon("M2,13 L7,13 L10,5 L14,21 L17,11 L22,11", 23);
         else icon = ControlIcon(path, 23);
@@ -142,7 +141,7 @@ public partial class DockBar
         var path = new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse(kind == RadioKind.WiFi
-                ? "M3,9 Q13,0 23,9 M6.5,13 Q13,7 19.5,13 M10,17 Q13,14.5 16,17"
+                ? "M2,8 Q13,-2 24,8 M5.5,13 Q13,5 20.5,13 M9.5,17 Q13,13.5 16.5,17"
                 : "M11,3 Q11,2 12,3 L19,8.5 Q19.5,9 19,9.5 L7,19 M11,23 Q11,24 12,23 L19,17.5 Q19.5,17 19,16.5 L7,7 M11,3 L11,23"),
             Stroke = ControlBrush("#BDEAF3"), StrokeThickness = kind == RadioKind.WiFi ? 2.6 : 1.9,
             StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
@@ -161,10 +160,10 @@ public partial class DockBar
     };
     private void AddRadio(Grid parent, int column, RadioKind kind, string title)
     {
-        var card = new Grid { Height = 108 };
+        var card = new Grid { Height = 98 };
         var toggleContent = new Grid();
         toggleContent.RowDefinitions.Add(new() { Height = new GridLength(32) });
-        toggleContent.RowDefinitions.Add(new() { Height = new GridLength(6) });
+        toggleContent.RowDefinitions.Add(new() { Height = new GridLength(2) });
         toggleContent.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var glyph = RadioIcon(kind); glyph.HorizontalAlignment = HorizontalAlignment.Left; glyph.VerticalAlignment = VerticalAlignment.Top; glyph.Margin = new Thickness(0, 0, 0, 0);
         toggleContent.Children.Add(glyph);
@@ -176,7 +175,7 @@ public partial class DockBar
         var toggle = ControlButton(toggleContent, () => _ = ToggleRadio(kind), title + " 开启或关闭");
         toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(12, 12, 28, 10); toggle.BorderThickness = new Thickness(0);
         card.Children.Add(toggle);
-        var radioSwitch = PowerState(false); radioSwitch.HorizontalAlignment = HorizontalAlignment.Right; radioSwitch.VerticalAlignment = VerticalAlignment.Top; radioSwitch.Margin = new Thickness(0, 10, 10, 0); radioSwitch.IsHitTestVisible = false;
+        var radioSwitch = PowerState(false); radioSwitch.HorizontalAlignment = HorizontalAlignment.Right; radioSwitch.VerticalAlignment = VerticalAlignment.Top; radioSwitch.Margin = new Thickness(0, 16, 18, 0); radioSwitch.IsHitTestVisible = false;
         card.Children.Add(radioSwitch);
         var details = ControlButton(ControlIcon("M2,1 L8,7 L2,13", 8), () => _ = ShowRadioDetails(kind), title + " 列表与设置");
         details.Style = (Style)FindResource("PanelTool"); details.Width = 32; details.Height = 32; details.MinHeight = 32;
@@ -193,12 +192,13 @@ public partial class DockBar
         try
         {
         var version = panelVersion;
+        var revision = wirelessRevision;
         foreach (var kind in radioViews.Keys.ToArray())
         {
             try
             {
                 var state = await DockWireless.Read(kind, connection: true);
-                if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
+                if (closed || wirelessBusy || revision != wirelessRevision || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
                 view.Toggle.Background = new LinearGradientBrush(Color.FromRgb(48, 60, 74), Color.FromRgb(39, 49, 63), new Point(0, 0), new Point(1, 1));
                 view.Status.Foreground = ControlBrush(state.Label == "已连接" ? "#CDEAF2" : "#A6B9CA");
                 var replacement = PowerState(state.On);
@@ -211,7 +211,7 @@ public partial class DockBar
             }
             catch (Exception ex) when (WirelessError(ex))
             {
-                if (version != panelVersion) return;
+                if (version != panelVersion || revision != wirelessRevision || wirelessBusy) return;
                 if (radioViews.TryGetValue(kind, out var view)) { view.Status.Text = "状态不可用"; view.Toggle.IsEnabled = false; }
             }
         }
@@ -222,16 +222,33 @@ public partial class DockBar
     private async Task ToggleRadio(RadioKind kind)
     {
         if (wirelessBusy) return;
-        wirelessBusy = true; var version = panelVersion;
+        wirelessBusy = true; ++wirelessRevision; var version = panelVersion;
+        if (radioViews.TryGetValue(kind, out var pending)) { pending.Status.Text = "正在切换…"; pending.Switch.Opacity = .55; }
+        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Render);
         foreach (var view in radioViews.Values) view.Toggle.IsEnabled = false;
         try
         {
             var state = await DockWireless.Read(kind);
             var error = await DockWireless.Set(kind, !state.On);
-            if (version == panelVersion) SetPanelMessage(error ?? "");
+            if (version == panelVersion)
+            {
+                SetPanelMessage(error ?? "");
+                var actual = await DockWireless.Read(kind);
+                if (version == panelVersion && radioViews.TryGetValue(kind, out var updated))
+                {
+                    var visual = PowerState(actual.On); updated.Switch.Children.Clear();
+                    foreach (var child in visual.Children.Cast<UIElement>().ToArray()) { visual.Children.Remove(child); updated.Switch.Children.Add(child); }
+                    updated.Status.Text = actual.On ? "正在确认连接…" : "未连接";
+                }
+            }
         }
         catch (Exception ex) when (WirelessError(ex)) { if (version == panelVersion) SetPanelMessage("开关操作失败，请在系统设置中操作。"); }
-        finally { wirelessBusy = false; await RefreshRadioViews(); }
+        finally
+        {
+            wirelessBusy = false;
+            foreach (var view in radioViews.Values) { view.Switch.Opacity = 1; view.Toggle.IsEnabled = true; }
+            await RefreshRadioViews();
+        }
     }
     private async Task ShowRadioDetails(RadioKind kind)
     {
