@@ -17,7 +17,7 @@ internal static class ReturnDockHead
 <Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Width="40" Height="40" Focusable="False" ToolTip="返回 Dock · 拖动可调整位置 · 右键关闭 Dock" AutomationProperties.Name="返回 Dock" UseLayoutRounding="True" SnapsToDevicePixels="True">
 <Button.Template><ControlTemplate TargetType="Button">
 <Grid Background="Transparent" Margin="2">
-<Border x:Name="Shell" CornerRadius="12" Background="#142333" Opacity="0"/>
+<Border x:Name="Shell" CornerRadius="12" Background="#1D3B4A" Opacity="1"/>
 <Border x:Name="Light" CornerRadius="12" Background="#2254D8EC" Opacity="0"/>
 <Viewbox Width="29" Height="29"><Canvas Width="34" Height="34">
 <Path Data="M16,8 L17,3 L22,3" Stroke="#82E3EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
@@ -26,7 +26,7 @@ internal static class ReturnDockHead
 <Path Data="M10,19 Q13,13 16,19 M20,19 Q23,13 26,19" Stroke="#81E2EB" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
 </Canvas></Viewbox>
 </Grid>
-<ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Light" Property="Opacity" Value="1"/><Setter TargetName="Shell" Property="Opacity" Value="1"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Light" Property="Opacity" Value=".4"/><Setter TargetName="Shell" Property="Opacity" Value=".75"/></Trigger></ControlTemplate.Triggers>
+<ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Light" Property="Opacity" Value="1"/><Setter TargetName="Shell" Property="Background" Value="#294D5E"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Light" Property="Opacity" Value=".4"/><Setter TargetName="Shell" Property="Background" Value="#102A38"/></Trigger><Trigger Property="IsMouseCaptured" Value="True"><Setter TargetName="Shell" Property="Background" Value="#102A38"/><Setter TargetName="Light" Property="Opacity" Value=".35"/></Trigger></ControlTemplate.Triggers>
 </ControlTemplate></Button.Template></Button>
 """;
 }
