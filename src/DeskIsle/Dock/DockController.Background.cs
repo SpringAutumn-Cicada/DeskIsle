@@ -89,32 +89,36 @@ internal sealed partial class DockController
     private async Task RestoreThroughTray(DockPin pin)
     {
         if (disposed || lease == null || trayRestore != null) return;
-        var openedNative = !lease.NativeMode;
-        if (openedNative) ToggleNative();
-        if (Path.GetFileNameWithoutExtension(pin.Executable ?? pin.Path).ToLowerInvariant() is not ("wechat" or "weixin")) return;
+        var executable = pin.Executable;
+        if (Path.GetFileNameWithoutExtension(executable ?? pin.Path).ToLowerInvariant() is not ("wechat" or "weixin"))
+        {
+            MessageBox.Show("应用仍在后台运行，暂时无法自动恢复其主窗口。", "DeskIsle Dock");
+            return;
+        }
         using var request = new CancellationTokenSource();
         trayRestore = request;
         try
         {
-            await Task.Delay(120, request.Token);
-            if (disposed || lease == null || !lease.NativeMode) return;
-            var invoked = await DockTrayActivation.TryWeChat(DockNative.Taskbars(), request.Token);
-            if (!invoked || disposed || lease == null || request.IsCancellationRequested) return;
-            // Only return to Dock after the application has actually exposed an enabled main window.
-            for (var attempt = 0; attempt < 8; attempt++)
+            // Ask WeChat's own startup/single-instance activation path to restore its UI.
+            // Do not force-show an internal HWND or change the user's taskbar mode.
+            if (executable == null || !File.Exists(executable)) return;
+            Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true })?.Dispose();
+            for (var attempt = 0; attempt < 15; attempt++)
             {
-                await Task.Delay(120, request.Token);
-                if (disposed || lease == null || !lease.NativeMode) return;
+                await Task.Delay(200, request.Token);
+                if (disposed || lease == null) return;
                 var restored = await Task.Run(DockApps.Windows);
                 if (request.IsCancellationRequested) return;
-                if (!restored.Any(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle))) continue;
-                if (openedNative) ToggleNative();
+                var main = restored.FirstOrDefault(w => string.Equals(w.Executable, executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle));
+                if (main == null) continue;
+                if (DockNative.IsIconic(main.Handle)) DockNative.ShowWindowAsync(main.Handle, 9);
+                DockNative.SetForegroundWindow(main.Handle);
                 settle.Start(); return;
             }
+            MessageBox.Show("已请求微信自行恢复，但尚未发现可操作的主窗口。当前微信版本可能未响应启动激活，请从微信自身托盘图标打开。", "DeskIsle Dock");
         }
         catch (OperationCanceledException) { }
         finally { if (ReferenceEquals(trayRestore, request)) trayRestore = null; }
-        // Unknown shell layouts or unavailable InvokePattern leave native tray open for manual restore.
     }
     private static readonly HashSet<string> TrayClients = new(StringComparer.OrdinalIgnoreCase)
     { "WeChat", "Weixin", "QQ", "TIM", "WXWork", "DingTalk", "Telegram", "OneDrive" };

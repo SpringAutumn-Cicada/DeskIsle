@@ -78,7 +78,9 @@ public partial class DockBar
     {
         CloseSystemPanel(); ClosePreview();
         var border = new Border { Background = new SolidColorBrush(Color.FromRgb(32, 38, 50)), BorderBrush = new SolidColorBrush(Color.FromRgb(88, 130, 151)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(14), Child = content };
-        systemPopup = new Popup { Child = border, PlacementTarget = anchor, Placement = PlacementMode.Top, VerticalOffset = -12, AllowsTransparency = true, StaysOpen = false };
+        systemPopup = new Popup { Child = border, PlacementTarget = anchor, Placement = PlacementMode.Custom, VerticalOffset = -12, AllowsTransparency = true, StaysOpen = false };
+        systemPopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
+            [new CustomPopupPlacement(new Point((targetSize.Width - popupSize.Width) / 2, -popupSize.Height - 10), PopupPrimaryAxis.Horizontal)];
         systemPopup.IsOpen = true;
     }
     private static TextBlock PanelText(string text) => new() { Text = text, Foreground = Brushes.LightSteelBlue, Margin = new Thickness(0, 4, 0, 10), TextWrapping = TextWrapping.Wrap, MaxWidth = 270 };

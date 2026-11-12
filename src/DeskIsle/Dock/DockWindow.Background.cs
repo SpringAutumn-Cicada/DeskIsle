@@ -53,22 +53,22 @@ public partial class DockBar
                 System.Windows.Automation.AutomationProperties.SetName(view.Button, "恢复后台应用 " + app.Name);
                 if (!backgroundOrder.Contains(id, StringComparer.OrdinalIgnoreCase)) backgroundOrder.Add(id);
             }
-            BackgroundKey.ToolTip = backgroundOrder.Count > 0 ? $"后台应用（{backgroundOrder.Count}）" : "后台应用与原生托盘";
+            BackgroundKey.ToolTip = backgroundOrder.Count > 0 ? $"后台应用（{backgroundOrder.Count}）" : "后台应用";
             if (changed && systemPopup?.PlacementTarget == BackgroundKey) ShowBackgroundPanel();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
-        { BackgroundKey.ToolTip = "后台应用暂不可读取 · 可打开原生托盘"; }
+        { BackgroundKey.ToolTip = "后台应用暂不可读取"; }
         finally { backgroundBusy = false; }
     }
     private async void LoadBackgroundIcon(BackgroundView view)
     {
-        var pixels = (int)Math.Clamp(Math.Ceiling(22 * VisualTreeHelper.GetDpi(this).DpiScaleX), 48, 128);
+        var pixels = (int)Math.Clamp(Math.Ceiling(28 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.5), 96, 256);
         var path = view.App.Executable!;
         var key = path + "|background|" + pixels;
         if (closed || view.IconKey == key || Environment.TickCount64 < view.RetryAt) return;
         view.IconKey = key;
         var version = ++view.IconVersion;
-        var icon = views.Values.FirstOrDefault(v => string.Equals(v.Pin?.Executable ?? v.IconPath, path, StringComparison.OrdinalIgnoreCase))?.Image.Source;
+        ImageSource? icon = null;
         if (icon == null && !icons.TryGetValue(key, out icon))
         {
             try
@@ -92,22 +92,22 @@ public partial class DockBar
     }
     private void ShowBackgroundPanel()
     {
-        var panel = new StackPanel { Width = 224 };
+        var panel = new StackPanel { Width = Math.Clamp(backgroundOrder.Count, 1, 5) * 44 };
         var extra = backgroundOrder.Select(id => backgroundViews[id]).ToArray();
         if (extra.Length > 0)
         {
-            panel.Children.Add(PanelText("后台应用"));
-            var grid = new WrapPanel();
+            var grid = new WrapPanel { Width = panel.Width, HorizontalAlignment = HorizontalAlignment.Center };
             foreach (var view in extra)
             {
                 LoadBackgroundIcon(view);
-                var image = new Image { Width = 24, Height = 24 };
+                var image = new Image { Width = 28, Height = 28, SnapsToDevicePixels = true, UseLayoutRounding = true };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
                 image.SetBinding(Image.SourceProperty, new Binding(nameof(Image.Source)) { Source = view.Image });
                 var content = new Grid();
                 var placeholder = new TextBlock { Text = view.App.Name[..1], FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.LightSteelBlue };
                 placeholder.SetBinding(VisibilityProperty, new Binding(nameof(Visibility)) { Source = view.Placeholder });
                 content.Children.Add(placeholder); content.Children.Add(image);
-                var button = new Button { Style = (Style)FindResource("TerminalKey"), Width = 40, Height = 40, ToolTip = view.App.Name, Content = content };
+                var button = new Button { Style = (Style)FindResource("TerminalKey"), Width = 44, Height = 44, ToolTip = view.App.Name, Content = content };
                 System.Windows.Automation.AutomationProperties.SetName(button, "恢复后台应用 " + view.App.Name);
                 button.Click += (_, _) => { CloseSystemPanel(); controller.OpenPinned(view.App, false); };
                 grid.Children.Add(button);
@@ -115,7 +115,6 @@ public partial class DockBar
             panel.Children.Add(new ScrollViewer { Content = grid, MaxHeight = 200, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         }
         else panel.Children.Add(PanelText("暂无可识别的后台应用"));
-        panel.Children.Add(PanelButton("打开完整原生托盘", () => { CloseSystemPanel(); controller.ToggleNative(); }));
         OpenSystemPanel(BackgroundKey, panel);
     }
 }
