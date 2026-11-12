@@ -17,3 +17,9 @@
 自动调用有两秒等待限制与全局单工作槽；用户切换原生/Dock 模式、退出或停用会取消后续恢复动作。系统托盘结构、语言、权限或 InvokePattern 不兼容时，保持原生任务栏可见，供手动点击微信真实托盘图标，不再强制显示旧画面。自动恢复兼容性仍待 Windows 验收。已被旧版强制显示的微信窗口，可先从原生托盘正常打开，使其自行恢复内部状态。
 
 实际验证：仅人工审阅路径与生命周期；未执行测试、构建或交互验收，未生成 1.9.2 包。第一项提交 706ce77，第二项按完整修复独立提交。参考：[微软 UI Automation 线程说明](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading)、[InvokePattern.Invoke](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.invokepattern.invoke)。
+
+## 用户再次确认自动打包后的发布记录
+
+用户明确要求每次自动打包到桌面、由用户验收，已同步补充 AGENTS.md，无需重复请求打包授权。本次以功能提交 `ca93cdb` 发布 1.9.2 Windows x64 自包含便携包。发布完成，ZIP 403 项 CRC 校验通过，主程序及恢复任务栏脚本存在；已复制到 `E:\桌面\DeskIsle-1.9.2-win-x64.zip`，源包与副本 SHA256 一致：`bd01fc841e9812560d5ca3e5420fcd8d7ef498803dfb1ce4297b269b5130ecf5`。
+
+未运行测试、lint、独立类型检查或 Windows 功能验收。箭头入口与微信关闭到托盘后的恢复仍待用户验收；自动托盘调用不兼容时保留手动原生托盘入口。未合并、未推送。
