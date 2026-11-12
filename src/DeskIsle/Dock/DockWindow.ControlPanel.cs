@@ -30,11 +30,25 @@ public partial class DockBar
         CloseSystemPanel(); ClosePreview();
         var content = new StackPanel { Width = 328 };
         controlContent = content;
-        var shell = new Border { Child = content, Background = ControlBrush("#FC202833"), BorderBrush = ControlBrush("#586F83"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(18), Padding = new Thickness(16), SnapsToDevicePixels = true, UseLayoutRounding = true };
-        shell.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 14, ShadowDepth = 3, Opacity = .22 };
-        shell.Margin = new Thickness(8);
+        var shell = new ControlBubble { Child = content, SnapsToDevicePixels = true, UseLayoutRounding = true,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 12, ShadowDepth = 2, Opacity = .18 } };
         systemPopup = new Popup { Child = shell, PlacementTarget = StatusKey, Placement = PlacementMode.Custom, AllowsTransparency = true, StaysOpen = false };
-        systemPopup.CustomPopupPlacementCallback = (size, target, offset) => [new CustomPopupPlacement(new Point(target.Width - size.Width, -size.Height - 10), PopupPrimaryAxis.Horizontal)];
+        systemPopup.CustomPopupPlacementCallback = (size, target, offset) =>
+        {
+            var x = (target.Width - size.Width) / 2;
+            if (PresentationSource.FromVisual(StatusKey)?.CompositionTarget is { } composition)
+            {
+                var transform = composition.TransformFromDevice;
+                var monitor = DockNative.Primary().Monitor;
+                var start = transform.Transform(StatusKey.PointToScreen(new Point()));
+                var screenLeft = transform.Transform(new Point(monitor.Left, monitor.Top)).X;
+                var screenRight = transform.Transform(new Point(monitor.Right, monitor.Bottom)).X;
+                x = Math.Clamp(x, screenLeft - start.X + 8, Math.Max(screenLeft - start.X + 8, screenRight - start.X - size.Width - 8));
+            }
+            shell.AnchorX = target.Width / 2 - x;
+            // The bubble has 8 DIP transparent shadow padding below the pointer: keep its tip 18 DIP above Dock.
+            return [new CustomPopupPlacement(new Point(x, -size.Height - 10), PopupPrimaryAxis.Horizontal)];
+        };
         var popup = systemPopup;
         popup.Closed += (_, _) =>
         {
@@ -80,7 +94,7 @@ public partial class DockBar
         AddRadio(top, 0, RadioKind.WiFi, "Wi-Fi", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22");
         AddRadio(top, 1, RadioKind.Bluetooth, "蓝牙", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23");
         controlContent.Children.Add(top);
-        var volumeRow = new Grid { Margin = new Thickness(2, 14, 2, 12) };
+        var volumeRow = new Grid { Margin = new Thickness(8, 2, 8, 2) };
         volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(36) }); volumeRow.ColumnDefinitions.Add(new()); volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(42) });
         panelMuteGlyph = ControlIcon("M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17", 21);
         panelMute = ControlButton(panelMuteGlyph, () => { DockAudio.Access(v => { v.GetMute(out var mute); v.SetMute(!mute, 0); }); ReadAudio(); }, "静音或取消静音");
@@ -95,21 +109,20 @@ public partial class DockBar
         };
         Grid.SetColumn(panelVolume, 1); volumeRow.Children.Add(panelVolume);
         panelVolumeText = ControlText("—", 11); panelVolumeText.FontFamily = new FontFamily("Cascadia Mono, Consolas"); panelVolumeText.HorizontalAlignment = HorizontalAlignment.Right; Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
-        controlContent.Children.Add(volumeRow);
+        controlContent.Children.Add(new Border { Child = volumeRow, CornerRadius = new CornerRadius(15), BorderBrush = ControlBrush("#345D788C"), BorderThickness = new Thickness(1), Background = ControlBrush("#0D83BDD7"), Margin = new Thickness(0, 12, 0, 10) });
         var tools = new UniformGrid { Columns = 3 };
-        tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M2,9 L22,9", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
-        tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M5,14 L8,14 L10,8 L13,17 L16,11 L19,11", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
-        tools.Children.Add(ControlButton(ToolContent("M4,2 L4,22 M12,2 L12,22 M20,2 L20,22 M1,7 L7,7 M9,16 L15,16 M17,9 L23,9", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
-        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#405064"), Margin = new Thickness(4, 2, 4, 6) });
+        tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,7 L6,7 M9,7 L10,7 M13,7 L14,7", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
+        tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,13 L8,13 Q9,13 10,9 Q11,5 12,12 Q13,20 15,13 Q16,11 17,12 L19,12", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
+        tools.Children.Add(ControlButton(ToolContent("M9,3 Q12,1 15,3 L15,5 L18,7 L20,7 L22,11 L20,13 L20,16 L17,20 L14,19 L11,21 L7,19 L7,17 L4,15 L2,12 L4,9 L4,6 L8,5 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
         foreach (Button tool in tools.Children) tool.Style = (Style)FindResource("PanelTool");
         controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
     }
     private static StackPanel ToolContent(string path, string title)
     {
-        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-        panel.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(path), Stroke = ControlBrush("#B4D9ED"), StrokeThickness = 1.6, Width = 23, Height = 23, Stretch = Stretch.Uniform, Margin = new Thickness(0, 2, 0, 8) });
-        var label = ControlText(title, 11); label.HorizontalAlignment = HorizontalAlignment.Center;
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        var icon = ControlIcon(path, 20); icon.StrokeThickness = 1.4; icon.Margin = new Thickness(0, 0, 6, 0); panel.Children.Add(icon);
+        var label = ControlText(title, 10); label.HorizontalAlignment = HorizontalAlignment.Center;
         panel.Children.Add(label); return panel;
     }
     private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()
@@ -120,7 +133,7 @@ public partial class DockBar
     };
     private void AddRadio(Grid parent, int column, RadioKind kind, string title, string geometry)
     {
-        var split = new Grid { Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
+        var split = new Grid();
         split.ColumnDefinitions.Add(new()); split.ColumnDefinitions.Add(new() { Width = new GridLength(30) });
         var row = new Grid(); row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new());
         row.Children.Add(ControlIcon(geometry, 22));
@@ -129,12 +142,15 @@ public partial class DockBar
         var status = ControlText("读取中", 10); status.Foreground = ControlBrush("#9FB6C8"); status.Margin = new Thickness(0, 3, 0, 0); copy.Children.Add(status);
         Grid.SetColumn(copy, 1); row.Children.Add(copy);
         var toggle = ControlButton(row, () => _ = ToggleRadio(kind), title + " 开启或关闭");
-        toggle.Tag = "RadioLeft"; toggle.MinHeight = 60; toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(9, 9, 5, 9); toggle.BorderThickness = new Thickness(0);
+        toggle.Tag = "RadioLeft"; toggle.MinHeight = 56; toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(10, 9, 5, 9); toggle.BorderThickness = new Thickness(0);
         var details = ControlButton(ControlIcon("M2,1 L8,7 L2,13", 8), () => _ = ShowRadioDetails(kind), title + " 列表与设置");
-        details.Tag = "RadioRight"; details.Margin = new Thickness(1, 0, 0, 0); details.Padding = new Thickness(8, 0, 8, 0); details.BorderThickness = new Thickness(0);
+        details.Tag = "RadioRight"; details.Margin = new Thickness(0); details.Padding = new Thickness(8, 0, 8, 0); details.BorderThickness = new Thickness(0);
         details.SetBinding(BackgroundProperty, new System.Windows.Data.Binding(nameof(Button.Background)) { Source = toggle });
         Grid.SetColumn(details, 1); split.Children.Add(toggle); split.Children.Add(details);
-        radioViews[kind] = (toggle, status); Grid.SetColumn(split, column); parent.Children.Add(split);
+        var divider = new Border { Width = 1, Height = 24, Background = ControlBrush("#41648194"), HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false };
+        Grid.SetColumn(divider, 1); split.Children.Add(divider);
+        var outline = new Border { Child = split, CornerRadius = new CornerRadius(18), BorderBrush = ControlBrush("#566C91A6"), BorderThickness = new Thickness(1), Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
+        radioViews[kind] = (toggle, status); Grid.SetColumn(outline, column); parent.Children.Add(outline);
     }
     private async Task RefreshRadioViews()
     {
@@ -145,7 +161,7 @@ public partial class DockBar
             {
                 var state = await DockWireless.Read(kind);
                 if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
-                view.Toggle.Background = ControlBrush(state.On ? "#234D63" : "#2B3543");
+                view.Toggle.Background = ControlBrush(state.On ? "#234B6171" : "#0D67869B");
                 view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
                 view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
             }

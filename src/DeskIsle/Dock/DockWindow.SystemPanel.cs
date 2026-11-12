@@ -74,12 +74,20 @@ public partial class DockBar
         if (panelVolumeText != null) panelVolumeText.Text = available ? $"{Math.Round(level * 100)}%" : "—";
         if (panelMute != null) { panelMute.IsEnabled = available; panelMute.ToolTip = muted ? "取消静音" : "静音"; panelMute.Opacity = muted ? .55 : 1; }
         volumeSync = false;
-        if (panelMuteGlyph != null) panelMuteGlyph.Data = Geometry.Parse(muted || !available
-            ? "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,8 L24,16 M24,8 L17,16"
-            : "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17");
-        AudioGlyph.Data = Geometry.Parse(muted || !available
-            ? "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,8 L24,16 M24,8 L17,16"
-            : "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17 M20,3 Q30,12 20,21");
+        var glyph = VolumeGeometry(level, muted || !available);
+        if (panelMuteGlyph != null) panelMuteGlyph.Data = glyph;
+        AudioGlyph.Data = glyph;
+    }
+    private static Geometry VolumeGeometry(float level, bool muted)
+    {
+        // Keep identical bounds so waves changing never make the speaker body jump in size.
+        const string bounds = "M0,0 M32,24 ";
+        const string speaker = "M3,8 L8,8 L14,3 Q15,2 15,4 L15,20 Q15,22 14,21 L8,16 L3,16 Q2,16 2,15 L2,9 Q2,8 3,8 Z ";
+        var waves = muted || level <= 0 ? "M20,8 L28,16 M28,8 L20,16" :
+            level <= .33f ? "M19,9 Q23,12 19,15" :
+            level <= .66f ? "M19,9 Q23,12 19,15 M23,6 Q30,12 23,18" :
+            "M19,9 Q23,12 19,15 M23,6 Q30,12 23,18 M27,3 Q37,12 27,21";
+        var geometry = Geometry.Parse(bounds + speaker + waves); geometry.Freeze(); return geometry;
     }
     private void CloseSystemPanel()
     {
