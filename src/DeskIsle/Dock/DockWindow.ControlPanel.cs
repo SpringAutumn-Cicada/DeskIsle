@@ -47,9 +47,23 @@ public partial class DockBar
         var shell = new Border { Child = content, Background = ControlBrush("#F5202632"), BorderBrush = ControlBrush("#647A8C"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(16), Padding = new Thickness(12), SnapsToDevicePixels = true, UseLayoutRounding = true };
         systemPopup = new Popup { Child = shell, PlacementTarget = StatusKey, Placement = PlacementMode.Custom, AllowsTransparency = true, StaysOpen = false };
         systemPopup.CustomPopupPlacementCallback = (size, target, offset) => [new CustomPopupPlacement(new Point(target.Width - size.Width, -size.Height - 10), PopupPrimaryAxis.Horizontal)];
-        systemPopup.Closed += (_, _) => ResetControlPanel();
+        var popup = systemPopup;
+        popup.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(systemPopup, popup)) return;
+            if (System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed && PointerOnStatusKey())
+                statusDismissedAt = Environment.TickCount64;
+            ResetControlPanel();
+        };
         ShowControlHome();
         systemPopup.IsOpen = true;
+    }
+    private bool PointerOnStatusKey()
+    {
+        if (!StatusKey.IsLoaded || PresentationSource.FromVisual(StatusKey) == null || !DockNative.GetCursorPos(out var pointer)) return false;
+        var a = StatusKey.PointToScreen(new Point());
+        var b = StatusKey.PointToScreen(new Point(StatusKey.ActualWidth, StatusKey.ActualHeight));
+        return pointer.X >= a.X && pointer.X < b.X && pointer.Y >= a.Y && pointer.Y < b.Y;
     }
     private void ResetControlPanel()
     {

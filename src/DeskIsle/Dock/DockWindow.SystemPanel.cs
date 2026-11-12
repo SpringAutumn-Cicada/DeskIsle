@@ -11,6 +11,7 @@ public partial class DockBar
     private readonly DispatcherTimer statusTick = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
     private Popup? systemPopup;
     private bool statusBusy;
+    private long statusDismissedAt = long.MinValue;
     private void InitializeSystemPanel()
     {
         statusTick.Tick += async (_, _) => await RefreshSystemStatus();
@@ -86,6 +87,10 @@ public partial class DockBar
     private void QuickSettingsClick(object sender, RoutedEventArgs e)
     {
         if (systemPopup?.IsOpen == true) { CloseSystemPanel(); return; }
+        // StaysOpen=false dismisses on mouse-down before Button.Click reaches the Dock.
+        // Consume that same gesture instead of immediately creating another popup.
+        var dismissedAt = statusDismissedAt; statusDismissedAt = long.MinValue;
+        if (dismissedAt != long.MinValue && Environment.TickCount64 - dismissedAt < 600) return;
         OpenControlPanel();
     }
 }
