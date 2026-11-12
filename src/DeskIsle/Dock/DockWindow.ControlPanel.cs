@@ -300,10 +300,10 @@ public partial class DockBar
     private static Grid SignalIcon(byte signal)
     {
         var icon = new Grid { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        var paths = new[] { "M12,21 L12,21.1", "M9,17 Q12,14 15,17", "M5,12 Q12,5 19,12", "M1,7 Q12,-2 23,7" };
+        var paths = new[] { "M12,23 L12,23.2", "M8,19 A5,5 0 0 1 16,19", "M4.5,15 A9.5,9.5 0 0 1 19.5,15", "M1,11 A14,14 0 0 1 23,11" };
         var thresholds = new[] { 0, 1, 3, 4 };
         for (var i = 0; i < paths.Length; i++)
-            icon.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(paths[i]), Stroke = ControlBrush(signal >= thresholds[i] ? "#BDDDEA" : "#405365"), StrokeThickness = 2.3, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Stretch = Stretch.None });
+            icon.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(paths[i]), Stroke = ControlBrush(signal >= thresholds[i] ? "#BDDDEA" : "#405365"), StrokeThickness = 2.5, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Stretch = Stretch.None });
         return icon;
     }
     private static LinearGradientBrush PanelSurface(bool active) => new(
@@ -333,9 +333,9 @@ public partial class DockBar
         row.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(18) });
         row.Children.Add(signal.HasValue ? SignalIcon(signal.Value) : icon.StartsWith("M8,1", StringComparison.Ordinal) ? RadioIcon(RadioKind.Bluetooth) : ControlIcon(icon, 20));
         var text = new StackPanel { Margin = new Thickness(9, 0, 4, 0) };
-        var title = ControlText(name, 13); title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis; title.MaxWidth = 222;
+        var title = ControlText(name, 14); title.FontWeight = FontWeights.SemiBold; TextOptions.SetTextFormattingMode(title, TextFormattingMode.Ideal); title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis; title.MaxWidth = 222;
         text.Children.Add(title);
-        var description = ControlText(state, 10); description.Foreground = ControlBrush(connected ? "#86D7EA" : "#94A6B7"); description.Margin = new Thickness(0, 4, 0, 0); if (!string.IsNullOrEmpty(state)) text.Children.Add(description);
+        var description = ControlText(state, 11); description.FontWeight = FontWeights.Medium; description.Foreground = ControlBrush(connected ? "#A3E8F2" : "#B2C4D2"); description.Margin = new Thickness(0, 4, 0, 0); if (!string.IsNullOrEmpty(state)) text.Children.Add(description);
         Grid.SetColumn(text, 1); row.Children.Add(text);
         FrameworkElement trailing;
         if (!string.IsNullOrEmpty(state))
