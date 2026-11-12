@@ -149,7 +149,7 @@ public partial class DockBar
         };
         glyph.Children.Add(path);
         if (kind == RadioKind.WiFi)
-            glyph.Children.Add(new System.Windows.Shapes.Ellipse { Width = 3.4, Height = 3.4, Fill = ControlBrush("#BDEAF3"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(11.5, 23, 0, 0) });
+            glyph.Children.Add(new System.Windows.Shapes.Ellipse { Width = 4, Height = 4, Fill = ControlBrush("#BDEAF3"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(11, 22, 0, 0) });
         return glyph;
     }
     private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()
@@ -300,7 +300,7 @@ public partial class DockBar
     private static Grid SignalIcon(byte signal)
     {
         var icon = new Grid { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-        var paths = new[] { "M12,23 L12,23.2", "M8,19 A5,5 0 0 1 16,19", "M4.5,15 A9.5,9.5 0 0 1 19.5,15", "M1,11 A14,14 0 0 1 23,11" };
+        var paths = new[] { "M11.6,23 L12.4,23", "M8,19 A5,5 0 0 1 16,19", "M4.5,15 A9.5,9.5 0 0 1 19.5,15", "M1,11 A14,14 0 0 1 23,11" };
         var thresholds = new[] { 0, 1, 3, 4 };
         for (var i = 0; i < paths.Length; i++)
             icon.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(paths[i]), Stroke = ControlBrush(signal >= thresholds[i] ? "#BDDDEA" : "#405365"), StrokeThickness = 2.5, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Stretch = Stretch.None });

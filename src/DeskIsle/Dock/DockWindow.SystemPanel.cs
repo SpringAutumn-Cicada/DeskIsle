@@ -42,16 +42,13 @@ public partial class DockBar
             NetworkKey.ToolTip = network.Item2 + " · 系统快捷设置";
             NetworkGlyph.Data = Geometry.Parse(network.Item1 switch
             {
-                1 => "M1,11 A14,14 0 0 1 23,11 M4.5,15 A9.5,9.5 0 0 1 19.5,15 M8,19 A5,5 0 0 1 16,19 M12,23 L12,23.2",
+                1 => "M1,11 A14,14 0 0 1 23,11 M4.5,15 A9.5,9.5 0 0 1 19.5,15 M8,19 A5,5 0 0 1 16,19 M11.6,23 L12.4,23",
                 2 => "M5,3 L19,3 Q22,3 22,6 L22,13 Q22,16 19,16 L5,16 Q2,16 2,13 L2,6 Q2,3 5,3 Z M12,16 L12,21 M7,21 L17,21",
                 _ => "M5,3 L19,3 Q22,3 22,6 L22,13 Q22,16 19,16 L5,16 Q2,16 2,13 L2,6 Q2,3 5,3 Z M8,21 L16,21 M3,1 L22,23"
             });
             NetworkKey.Opacity = network.Item1 > 0 ? 1 : .55;
             var powerAvailable = DockPower.GetSystemPowerStatus(out var power);
             BatteryKey.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 128) != 0 ? Visibility.Collapsed : Visibility.Visible;
-            // ACLineStatus remains useful when firmware pauses charging or omits the charging bit.
-            var externalPower = powerAvailable && (power.AC == 1 || power.Flags != 255 && (power.Flags & 8) != 0);
-            ChargingGlyph.Visibility = externalPower ? Visibility.Visible : Visibility.Collapsed;
             var knownCharge = powerAvailable && power.Percent <= 100;
             BatteryFill.Width = knownCharge ? 23 * power.Percent / 100.0 : 0;
             BatteryFill.Fill = new SolidColorBrush(knownCharge && power.Percent <= 20
