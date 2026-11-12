@@ -6,6 +6,7 @@ namespace DeskIsle.Dock;
 
 internal static class DockWireless
 {
+    private static RadioAccessStatus? radioAccess;
     internal sealed record State(bool Available, bool On, bool Locked, string Label);
     internal sealed record Network(WiFiAdapter Adapter, WiFiAvailableNetwork Source, string Name, byte Signal, bool Connected);
     internal sealed record Device(string Name, bool Connected);
@@ -17,7 +18,7 @@ internal static class DockWireless
     }
     internal static async Task<string?> Set(RadioKind kind, bool enabled)
     {
-        if (await Radio.RequestAccessAsync() != RadioAccessStatus.Allowed) return "系统未授权修改无线开关，请在系统设置中操作。";
+        if ((radioAccess ??= await Radio.RequestAccessAsync()) != RadioAccessStatus.Allowed) return "系统未授权修改无线开关，请在系统设置中操作。";
         var radios = (await Radio.GetRadiosAsync()).Where(r => r.Kind == kind).ToArray();
         if (radios.Length == 0) return "没有可用的无线设备。";
         foreach (var radio in radios)
@@ -25,7 +26,9 @@ internal static class DockWireless
             if (radio.State == RadioState.Disabled) return "无线设备被硬件或系统策略禁用。";
             if (await radio.SetStateAsync(enabled ? RadioState.On : RadioState.Off) != RadioAccessStatus.Allowed) return "系统未接受开关操作，请检查硬件和权限。";
         }
-        return null;
+        await Task.Delay(250);
+        var actual = await Read(kind);
+        return actual.On == enabled ? null : "无线状态尚未达到目标，请检查系统开关。";
     }
     internal static async Task<Network[]> Networks()
     {
@@ -34,7 +37,7 @@ internal static class DockWireless
         var result = new List<Network>();
         foreach (var adapter in await WiFiAdapter.FindAllAdaptersAsync())
         {
-            await adapter.ScanAsync();
+            await adapter.ScanAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12));
             var profile = await adapter.NetworkAdapter.GetConnectedProfileAsync();
             var ssid = profile?.WlanConnectionProfileDetails?.GetConnectedSsid();
             foreach (var network in adapter.NetworkReport.AvailableNetworks.Where(n => !string.IsNullOrEmpty(n.Ssid)))
@@ -52,7 +55,7 @@ internal static class DockWireless
         var selectors = new[] { BluetoothDevice.GetDeviceSelectorFromPairingState(true), BluetoothLEDevice.GetDeviceSelectorFromPairingState(true) };
         var result = new List<Device>();
         foreach (var selector in selectors)
-            foreach (var device in await DeviceInformation.FindAllAsync(selector, new[] { "System.Devices.Aep.IsConnected" }))
+            foreach (var device in await DeviceInformation.FindAllAsync(selector, new[] { "System.Devices.Aep.IsConnected" }).AsTask().WaitAsync(TimeSpan.FromSeconds(12)))
                 if (!string.IsNullOrWhiteSpace(device.Name))
                     result.Add(new(device.Name, device.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var value) && value is true));
         return result.DistinctBy(d => d.Name).OrderByDescending(d => d.Connected).ToArray();

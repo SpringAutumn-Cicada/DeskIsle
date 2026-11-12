@@ -25,7 +25,7 @@ public partial class DockBar
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
         border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding(nameof(Button.Background)) { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-        presenter.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 8, 10, 8));
+        presenter.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 8, 8, 8));
         presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
         border.AppendChild(presenter); template.VisualTree = border;
         var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
@@ -92,12 +92,18 @@ public partial class DockBar
         panelVolumeText = ControlText("—"); Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
         controlContent.Children.Add(volumeRow);
         var tools = new UniformGrid { Columns = 3 };
-        tools.Children.Add(ControlButton("▤\n原生任务栏", () => { CloseSystemPanel(); controller.ToggleNative(); }));
-        tools.Children.Add(ControlButton("▧\n任务管理器", () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
-        tools.Children.Add(ControlButton("⚙\n设置", () => { CloseSystemPanel(); controller.Configure(); }));
+        tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M2,9 L22,9", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
+        tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M5,14 L8,14 L10,8 L13,17 L16,11 L19,11", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
+        tools.Children.Add(ControlButton(ToolContent("M4,2 L4,22 M12,2 L12,22 M20,2 L20,22 M1,7 L7,7 M9,16 L15,16 M17,9 L23,9", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
         controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#405064"), Margin = new Thickness(4, 2, 4, 8) });
         controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
+    }
+    private static StackPanel ToolContent(string path, string title)
+    {
+        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        panel.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(path), Stroke = ControlBrush("#B4D9ED"), StrokeThickness = 1.6, Width = 23, Height = 23, Stretch = Stretch.Uniform, Margin = new Thickness(0, 2, 0, 8) });
+        panel.Children.Add(ControlText(title)); return panel;
     }
     private void AddRadio(Grid parent, int column, RadioKind kind, string title, string geometry)
     {
@@ -133,7 +139,7 @@ public partial class DockBar
             }
         }
     }
-    private static bool WirelessError(Exception ex) => ex is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException;
+    private static bool WirelessError(Exception ex) => ex is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException or TimeoutException;
     private async Task ToggleRadio(RadioKind kind)
     {
         if (wirelessBusy) return;
