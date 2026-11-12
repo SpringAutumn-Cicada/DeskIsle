@@ -12,6 +12,18 @@ internal sealed record DockWindow(nint Handle, string Title, string? Executable)
 internal sealed record DockPin(string Path, string? Executable, string Name);
 internal static class DockApps
 {
+    internal static ProcessStartInfo LaunchInfo(string path)
+    {
+        var executable = Path.GetFileName(path);
+        var packagedTerminal = executable.Equals("WindowsTerminal.exe", StringComparison.OrdinalIgnoreCase)
+            && path.Contains(@"\WindowsApps\Microsoft.WindowsTerminal", StringComparison.OrdinalIgnoreCase);
+        if (!packagedTerminal) return new(path) { UseShellExecute = true };
+        // A running Store application's executable path is not a supported launch entry.
+        // The per-user execution alias follows package upgrades and preserves the default profile.
+        var alias = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "wt.exe");
+        if (!File.Exists(alias)) throw new IOException("Windows Terminal 启动别名 wt.exe 不可用，请在系统‘应用执行别名’中启用，或将终端快捷方式固定到 Dock。");
+        return new(alias) { UseShellExecute = true, WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
+    }
     internal static bool Supported(string path) => Path.GetExtension(path).ToLowerInvariant() is ".exe" or ".lnk" or ".appref-ms";
     internal static DockPin Resolve(string path)
     {

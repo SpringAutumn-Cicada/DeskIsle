@@ -312,7 +312,7 @@ internal sealed partial class DockController : IDisposable
     }
     internal void Launch(string path)
     {
-        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+        try { Process.Start(DockApps.LaunchInfo(path))?.Dispose(); }
         catch (Exception ex) when (Recoverable(ex)) { MessageBox.Show("无法打开应用：" + ex.Message, "DeskIsle Dock"); }
     }
     internal void Reveal(string path)

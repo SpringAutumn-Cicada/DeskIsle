@@ -214,3 +214,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.17：返回机器人面罩增加深蓝灰填充、深浅双层轮廓及轻阴影，提高浅色背景辨识度；悬停提亮轮廓，操作行为不变。详见 [返回机器人背景对比度](docs/返回机器人背景对比度.md)。
 
 1.11.18：返回机器人在深色描边之外增加细浅蓝外沿，保持深浅背景下完整轮廓可见，造型和操作不变。详见 [机器人深色背景轮廓](docs/机器人深色背景轮廓.md)。
+
+1.11.19：商店版 Windows Terminal 从版本化 WindowsApps 路径启动时改用用户 wt.exe 别名，沿用默认 Ubuntu/其他终端配置，工作目录使用用户目录。详见 [WSL终端启动入口修复](docs/WSL终端启动入口修复.md)。
