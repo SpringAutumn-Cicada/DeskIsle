@@ -114,8 +114,8 @@ public partial class DockBar
         panelVolumeText = ControlText("—", 15); panelVolumeText.FontWeight = FontWeights.Medium; TextOptions.SetTextFormattingMode(panelVolumeText, TextFormattingMode.Ideal); panelVolumeText.HorizontalAlignment = HorizontalAlignment.Right; Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
         controlContent.Children.Add(new Border { Child = volumeRow, CornerRadius = new CornerRadius(15), BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Margin = new Thickness(0, 10, 0, 8), Padding = new Thickness(0, 3, 0, 3) });
         var tools = new UniformGrid { Columns = 3, Height = 40 };
-        tools.Children.Add(ToolButton("M6,4 L18,4 Q22,4 22,8 L22,16 Q22,20 18,20 L6,20 Q2,20 2,16 L2,8 Q2,4 6,4 Z M3,15 L21,15 M7,18 L11,18 M14,18 L17,18", "原生任务栏", () => { CloseSystemPanel(); controller.ToggleNative(); }));
         tools.Children.Add(ToolButton("M7,3 L17,3 Q22,3 22,8 L22,16 Q22,21 17,21 L7,21 Q2,21 2,16 L2,8 Q2,3 7,3 Z M6,13 L9,13 Q10,13 11,8 Q12,5 13,13 Q14,19 15,13 L18,13", "任务管理器", () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
+        tools.Children.Add(ToolButton("M6,4 L18,4 Q22,4 22,8 L22,16 Q22,20 18,20 L6,20 Q2,20 2,16 L2,8 Q2,4 6,4 Z M3,15 L21,15 M7,18 L11,18 M14,18 L17,18", "原生任务栏", () => { CloseSystemPanel(); controller.ToggleNative(); }));
         tools.Children.Add(ToolButton("M5,2 L5,7 M5,13 L5,22 M12,2 L12,13 M12,19 L12,22 M19,2 L19,5 M19,11 L19,22 M2,7 L8,7 L8,13 L2,13 Z M9,13 L15,13 L15,19 L9,19 Z M16,5 L22,5 L22,11 L16,11 Z", "设置", () => { CloseSystemPanel(); controller.Configure(); }));
         controlContent.Children.Add(new Border { Child = tools, CornerRadius = new CornerRadius(14), Background = ControlBrush("#303B4B"), Padding = new Thickness(2, 4, 2, 4) }); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
@@ -125,7 +125,7 @@ public partial class DockBar
         FrameworkElement icon;
         if (title == "原生任务栏")
         {
-            icon = ReturnDockHead.Icon(27);
+            icon = ReturnDockHead.Icon(30);
         }
         else if (title == "任务管理器") icon = ControlIcon("M2,13 L7,13 L10,5 L14,21 L17,11 L22,11", 23);
         else icon = ControlIcon(path, 23);
@@ -141,7 +141,7 @@ public partial class DockBar
         var path = new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse(kind == RadioKind.WiFi
-                ? "M2,9 Q13,-5 24,9 M5,14 Q13,3 21,14 M9,18 Q13,11 17,18"
+                ? "M1,12 A15,15 0 0 1 25,12 M5,16 A10,10 0 0 1 21,16 M9,20 A5,5 0 0 1 17,20"
                 : "M11,3 Q11,2 12,3 L19,8.5 Q19.5,9 19,9.5 L7,19 M11,23 Q11,24 12,23 L19,17.5 Q19.5,17 19,16.5 L7,7 M11,3 L11,23"),
             Stroke = ControlBrush("#BDEAF3"), StrokeThickness = kind == RadioKind.WiFi ? 2.9 : 1.9,
             StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
@@ -149,7 +149,7 @@ public partial class DockBar
         };
         glyph.Children.Add(path);
         if (kind == RadioKind.WiFi)
-            glyph.Children.Add(new System.Windows.Shapes.Ellipse { Width = 3.4, Height = 3.4, Fill = ControlBrush("#BDEAF3"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(11.5, 20, 0, 0) });
+            glyph.Children.Add(new System.Windows.Shapes.Ellipse { Width = 3.4, Height = 3.4, Fill = ControlBrush("#BDEAF3"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(11.5, 23, 0, 0) });
         return glyph;
     }
     private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()

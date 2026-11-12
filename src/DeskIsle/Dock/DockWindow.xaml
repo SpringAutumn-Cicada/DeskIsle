@@ -36,7 +36,7 @@
 </Grid></Button>
 <Button x:Name="StatusKey" Style="{StaticResource ControlKey}" Width="112" ToolTip="网络、蓝牙与音量控制" AutomationProperties.Name="打开控制中心" Click="QuickSettingsClick">
 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-<Grid x:Name="NetworkKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeLineJoin="Round" x:Name="NetworkGlyph" Data="M1,9 Q12,-5 23,9 M4,14 Q12,3 20,14 M8,18 Q12,11 16,18 M12,22 L12,22.2" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="22" Height="22" Stretch="Uniform"/></Grid>
+<Grid x:Name="NetworkKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeLineJoin="Round" x:Name="NetworkGlyph" Data="M1,11 A14,14 0 0 1 23,11 M4.5,15 A9.5,9.5 0 0 1 19.5,15 M8,19 A5,5 0 0 1 16,19 M12,23 L12,23.2" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="22" Height="22" Stretch="Uniform"/></Grid>
 <Grid x:Name="AudioKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeEndLineCap="Round" StrokeStartLineCap="Round" StrokeLineJoin="Round" x:Name="AudioGlyph" Data="M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17 M20,3 Q30,12 20,21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" Width="34" Height="24" Stretch="None"><Path.LayoutTransform><ScaleTransform ScaleX="0.70" ScaleY="0.70"/></Path.LayoutTransform></Path></Grid>
 <Grid x:Name="BatteryKey" Width="34" Height="28">
 <Viewbox Width="28" Height="18" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center"><Grid Width="32" Height="20">

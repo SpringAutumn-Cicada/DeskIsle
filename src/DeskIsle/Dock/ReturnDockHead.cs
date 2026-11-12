@@ -19,7 +19,7 @@ internal static class ReturnDockHead
 <Grid Background="Transparent" Margin="2">
 <Border x:Name="Shell" CornerRadius="12" Background="#142333" Opacity="0"/>
 <Border x:Name="Light" CornerRadius="12" Background="#2254D8EC" Opacity="0"/>
-<Viewbox Width="29" Height="29"><Canvas Width="34" Height="34">
+<Viewbox Width="34" Height="34"><Canvas Width="34" Height="34">
 
 <!-- Two continuous contours replace several subpixel rings and tiny end caps. -->
 <Path Data="M16,8 L17,3 L22,3 M2,17 L2,22 M32,17 L32,22" Stroke="#344F60" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
