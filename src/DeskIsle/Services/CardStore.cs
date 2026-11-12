@@ -11,6 +11,7 @@ public sealed class CardState
     public string? CreationDirectory { get; set; }
     public List<string> References { get; set; } = [];
     public Dictionary<string, List<string>> FolderOrders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool PositionLocked { get; set; }
     public double Left { get; set; } = 24;
     public double Top { get; set; } = 48;
     public double Width { get; set; } = 360;

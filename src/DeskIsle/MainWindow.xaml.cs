@@ -99,6 +99,8 @@ public partial class MainWindow : Window
     private void RenameLostFocus(object sender, KeyboardFocusChangedEventArgs e) => FinishRename(true);
     private void UpdateDesktopButton()
     {
+        PositionLockToggle.IsChecked = state.PositionLocked;
+        PositionLockToggle.Header = state.PositionLocked ? "取消固定卡片位置" : "固定卡片位置";
         var visible = desktopIcons.Visible;
         DesktopToggle.Header = visible == false ? "显示桌面图标" : "隐藏桌面图标";
         DesktopToggle.IsEnabled = visible.HasValue;
@@ -300,9 +302,17 @@ public partial class MainWindow : Window
         if (Surface != null) Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * e.NewValue), 36, 41, 53));
         if (state != null && saveTimer != null) { state.BackgroundOpacity = e.NewValue; saveTimer.Stop(); saveTimer.Start(); }
     }
+    private void TogglePositionLock(object sender, RoutedEventArgs e)
+    {
+        state.PositionLocked = PositionLockToggle.IsChecked;
+        dragging = false;
+        if (Header.IsMouseCaptured) Header.ReleaseMouseCapture();
+        UpdateDesktopButton();
+        SaveCard();
+    }
     private void BeginDrag(object sender, MouseButtonEventArgs e)
     {
-        if (TitleEditor.Visibility == Visibility.Visible) return;
+        if (state.PositionLocked || TitleEditor.Visibility == Visibility.Visible) return;
         if (e.OriginalSource is not TextBlock && !ReferenceEquals(e.OriginalSource, Header)) return;
         DesktopHost.GetCursorPos(out dragPoint);
         dragging = true;
@@ -310,7 +320,7 @@ public partial class MainWindow : Window
     }
     private void ContinueDrag(object sender, MouseEventArgs e)
     {
-        if (!dragging) return;
+        if (!dragging || state.PositionLocked) return;
         DesktopHost.GetCursorPos(out var next);
         host.MoveBy(next.X - dragPoint.X, next.Y - dragPoint.Y);
         dragPoint = next;

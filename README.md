@@ -218,3 +218,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.19：商店版 Windows Terminal 从版本化 WindowsApps 路径启动时改用用户 wt.exe 别名，沿用默认 Ubuntu/其他终端配置，工作目录使用用户目录。详见 [WSL终端启动入口修复](docs/WSL终端启动入口修复.md)。
 
 1.11.20：按 C 紧凑原生方案降低控制弹窗，无线横排分段卡以青色底表示开启，删除额外滑动开关，音量与工具键去框；机器人不变。详见 [C紧凑控制面板](docs/C紧凑控制面板.md)。
+
+1.11.21：改用 A 图无线纵向卡片及轻底工具栏；卡片菜单在隐藏桌面图标上方新增固定/取消固定卡片位置，按卡片保存。详见 [A面板与固定卡片位置](docs/A面板与固定卡片位置.md)。
