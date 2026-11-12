@@ -83,7 +83,7 @@ internal sealed class WindowPreview : Window
     private static SolidColorBrush Brush(string value) => new((Color)ColorConverter.ConvertFromString(value));
     private nint NoActivate(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     { if (message == 0x21) { handled = true; return 3; } return 0; }
-    private int PerPage => Math.Clamp((int)((SystemParameters.WorkArea.Width - 300) / 260), 1, 3);
+    private const int PerPage = 7;
     private sealed class Card
     {
         internal required Border Surface;
@@ -154,10 +154,16 @@ internal sealed class WindowPreview : Window
         var previousTiles = tiles.ToDictionary(tile => (tile.Window.Handle, tile.Composite));
         tiles.Clear(); cards.Clear(); content.Children.Clear();
         var perPage = PerPage;
-        var pages = Math.Max(1, (windows.Length + perPage - 1) / perPage);
+        var pair = groups.Find(windows);
+        var groupSlots = pair is null ? 0 : 1;
+        var pages = Math.Max(1, (windows.Length + groupSlots + perPage - 1) / perPage);
         page = Math.Clamp(page, 0, pages - 1);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        content.Children.Add(row);
+        var layout = new Grid();
+        layout.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        layout.ColumnDefinitions.Add(new());
+        layout.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        Grid.SetColumn(row, 1); layout.Children.Add(row); content.Children.Add(layout);
         void AddImage(DockWindow window, Card card, double width, double height, Action click, bool composite)
         {
             var host = new Grid { Width = width, Height = height, Background = Brush("#202936"), VerticalAlignment = VerticalAlignment.Center };
@@ -177,7 +183,7 @@ internal sealed class WindowPreview : Window
             }
             card.Images.Children.Add(host); tiles.Add(tile);
         }
-        if (page == 0 && groups.Find(windows) is { } pair)
+        if (page == 0 && pair is not null)
         {
             var unionHeight = Math.Max(pair.LeftRect.Bottom, pair.RightRect.Bottom) - Math.Min(pair.LeftRect.Top, pair.RightRect.Top);
             var unionWidth = pair.RightRect.Right - pair.LeftRect.Left;
@@ -189,7 +195,7 @@ internal sealed class WindowPreview : Window
             AddImage(pair.Right, card, width * (pair.RightRect.Right - pair.RightRect.Left) / Math.Max(1, unionWidth), height, restore, true);
             row.Children.Add(card.Surface);
         }
-        foreach (var window in windows.Skip(page * perPage).Take(perPage))
+        foreach (var window in windows.Skip(Math.Max(0, page * perPage - groupSlots)).Take(perPage - (page == 0 ? groupSlots : 0)))
         {
             Action click = () => { activate(window); dismiss(); };
             var card = MakeCard([window], false, click);
@@ -201,7 +207,7 @@ internal sealed class WindowPreview : Window
             row.Children.Add(card.Surface);
         }
         foreach (var obsolete in previousTiles.Values) obsolete.Thumbnail?.Dispose();
-        var chrome = cards.Count * 16 + 12;
+        var chrome = cards.Count * 16 + 12 + (pages > 1 ? 72 : 0);
         var rowWidth = tiles.Sum(tile => tile.Host.Width);
         var rowHeight = tiles.Count == 0 ? 160 : tiles.Max(tile => tile.Host.Height);
         var fit = Math.Clamp(Math.Min((SystemParameters.WorkArea.Width - 24 - chrome) / Math.Max(1, rowWidth),
@@ -212,11 +218,26 @@ internal sealed class WindowPreview : Window
         RefreshTitles();
         if (pages > 1)
         {
-            var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
-            var previous = new Button { Content = "‹", IsEnabled = page > 0, Focusable = false, Padding = new Thickness(9, 2, 9, 2) };
-            var next = new Button { Content = "›", IsEnabled = page < pages - 1, Focusable = false, Padding = new Thickness(9, 2, 9, 2) };
-            previous.Click += (_, _) => { page--; RenderPage(); }; next.Click += (_, _) => { page++; RenderPage(); };
-            footer.Children.Add(previous); footer.Children.Add(next); content.Children.Add(footer);
+            Button Pager(string glyph, bool enabled, string hint, Action action)
+            {
+                var button = new Button { Content = glyph, ToolTip = hint, IsEnabled = enabled, Focusable = false,
+                    Width = 30, Height = 38, FontSize = 24, Margin = new Thickness(3),
+                    VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("#CAE7F5"), Background = Brush("#293A49") };
+                var frame = new FrameworkElementFactory(typeof(Border));
+                frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
+                frame.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+                var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+                presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center); frame.AppendChild(presenter);
+                button.Template = new ControlTemplate(typeof(Button)) { VisualTree = frame };
+                button.Opacity = enabled ? 1 : .28;
+                button.MouseEnter += (_, _) => { if (button.IsEnabled) button.Background = Brush("#3B586D"); };
+                button.MouseLeave += (_, _) => button.Background = Brush("#293A49");
+                button.Click += (_, _) => action(); return button;
+            }
+            var previous = Pager("‹", page > 0, "上一页", () => { page--; RenderPage(); });
+            var next = Pager("›", page < pages - 1, "下一页", () => { page++; RenderPage(); });
+            layout.Children.Add(previous); Grid.SetColumn(next, 2); layout.Children.Add(next);
         }
         PrepareLayout();
     }

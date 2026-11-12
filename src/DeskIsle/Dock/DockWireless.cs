@@ -10,11 +10,27 @@ internal static class DockWireless
     internal sealed record State(bool Available, bool On, bool Locked, string Label);
     internal sealed record Network(WiFiAdapter Adapter, WiFiAvailableNetwork Source, string Name, byte Signal, bool Connected);
     internal sealed record Device(string Name, bool Connected);
-    internal static async Task<State> Read(RadioKind kind)
+    internal static async Task<State> Read(RadioKind kind, bool connection = false)
     {
         var radios = (await Radio.GetRadiosAsync()).Where(r => r.Kind == kind).ToArray();
-        return new(radios.Length > 0, radios.Any(r => r.State == RadioState.On), radios.Length > 0 && radios.All(r => r.State == RadioState.Disabled),
-            radios.Length == 0 ? "无可用设备" : radios.Any(r => r.State == RadioState.On) ? "已开启" : "已关闭");
+        var on = radios.Any(r => r.State == RadioState.On);
+        var connected = false;
+        if (connection && on)
+        {
+            if (kind == RadioKind.WiFi)
+                connected = Windows.Networking.Connectivity.NetworkInformation.GetConnectionProfiles().Any(p =>
+                    p.IsWlanConnectionProfile && p.GetNetworkConnectivityLevel() != Windows.Networking.Connectivity.NetworkConnectivityLevel.None);
+            else if (kind == RadioKind.Bluetooth)
+            {
+                var selectors = new[] { BluetoothDevice.GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus.Connected),
+                    BluetoothLEDevice.GetDeviceSelectorFromConnectionStatus(BluetoothConnectionStatus.Connected) };
+                foreach (var selector in selectors)
+                    if ((await DeviceInformation.FindAllAsync(selector).AsTask().WaitAsync(TimeSpan.FromSeconds(4))).Count > 0)
+                    { connected = true; break; }
+            }
+        }
+        return new(radios.Length > 0, on, radios.Length > 0 && radios.All(r => r.State == RadioState.Disabled),
+            radios.Length == 0 ? "无可用设备" : connected ? "已连接" : "未连接");
     }
     internal static async Task<string?> Set(RadioKind kind, bool enabled)
     {

@@ -13,9 +13,9 @@ public partial class DockBar
     private System.Windows.Shapes.Path? panelMuteGlyph;
     private Slider? panelVolume;
     private Button? panelMute;
-    private bool volumeSync, wirelessBusy;
+    private bool volumeSync, wirelessBusy, radioRefreshBusy;
     private long panelVersion;
-    private readonly Dictionary<RadioKind, (Button Toggle, TextBlock Status)> radioViews = [];
+    private readonly Dictionary<RadioKind, (Button Toggle, TextBlock Status, System.Windows.Shapes.Ellipse Indicator)> radioViews = [];
     private static SolidColorBrush ControlBrush(string color) => new((Color)ColorConverter.ConvertFromString(color));
     private Button ControlButton(object content, Action action, string? accessibleName = null)
     {
@@ -124,7 +124,7 @@ public partial class DockBar
     private static StackPanel ToolContent(string path, string title)
     {
         var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-        var icon = ControlIcon(path, 25); icon.StrokeThickness = 1.5; icon.Margin = new Thickness(0, 0, 0, 9); panel.Children.Add(icon);
+        var icon = ControlIcon(path, 20); icon.StrokeThickness = 1.5; icon.Margin = new Thickness(0, 0, 0, 4); panel.Children.Add(icon);
         var label = ControlText(title, 11); label.HorizontalAlignment = HorizontalAlignment.Center;
         panel.Children.Add(label); return panel;
     }
@@ -141,6 +141,9 @@ public partial class DockBar
         var row = new Grid(); row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new());
         row.Children.Add(ControlIcon(geometry, 22));
         var copy = new StackPanel { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(10) });
+        var indicator = new System.Windows.Shapes.Ellipse { Width = 4, Height = 4, Fill = ControlBrush("#718391"), VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(indicator, 2); row.Children.Add(indicator);
         var name = ControlText(title, 13); name.FontWeight = FontWeights.SemiBold; copy.Children.Add(name);
         var status = ControlText("读取中", 10); status.Foreground = ControlBrush("#9FB6C8"); status.Margin = new Thickness(0, 3, 0, 0); copy.Children.Add(status);
         Grid.SetColumn(copy, 1); row.Children.Add(copy);
@@ -153,20 +156,26 @@ public partial class DockBar
         var divider = new Border { Width = 1, Height = 24, Background = ControlBrush("#41648194"), HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false };
         Grid.SetColumn(divider, 1); split.Children.Add(divider);
         var outline = new Border { Child = split, CornerRadius = new CornerRadius(18), BorderBrush = ControlBrush("#566C91A6"), BorderThickness = new Thickness(1), Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
-        radioViews[kind] = (toggle, status); Grid.SetColumn(outline, column); parent.Children.Add(outline);
+        radioViews[kind] = (toggle, status, indicator); Grid.SetColumn(outline, column); parent.Children.Add(outline);
     }
     private async Task RefreshRadioViews()
     {
+        if (radioRefreshBusy) return;
+        radioRefreshBusy = true;
+        try
+        {
         var version = panelVersion;
         foreach (var kind in radioViews.Keys.ToArray())
         {
             try
             {
-                var state = await DockWireless.Read(kind);
+                var state = await DockWireless.Read(kind, connection: true);
                 if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
                 view.Toggle.Background = ControlBrush(state.On ? "#234E60" : "#293642");
                 view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
                 view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
+                view.Indicator.Fill = ControlBrush(state.On ? "#80E3F4" : "#718391");
+                view.Indicator.Effect = state.On ? new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(80, 210, 240), BlurRadius = 7, ShadowDepth = 0, Opacity = .8 } : null;
             }
             catch (Exception ex) when (WirelessError(ex))
             {
@@ -174,6 +183,8 @@ public partial class DockBar
                 if (radioViews.TryGetValue(kind, out var view)) { view.Status.Text = "状态不可用"; view.Toggle.IsEnabled = false; }
             }
         }
+        }
+        finally { radioRefreshBusy = false; }
     }
     private static bool WirelessError(Exception ex) => ex is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException or TimeoutException;
     private async Task ToggleRadio(RadioKind kind)
@@ -250,7 +261,7 @@ public partial class DockBar
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         row.Children.Add(new System.Windows.Shapes.Ellipse { Width = 5, Height = 5, Fill = ControlBrush(on ? "#8BDCEA" : "#899BA9"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        row.Children.Add(ControlText(on ? "开启" : "关闭", 11)); return row;
+        row.Children.Add(ControlIcon("M12,2 L12,11 M6,5 A9,9 0 1 0 18,5", 16)); return row;
     }
     private void AddDeviceButton(StackPanel list, string name, string state, string icon, bool connected, Action action, byte? signal = null)
     {
