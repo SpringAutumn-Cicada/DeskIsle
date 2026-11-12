@@ -91,7 +91,7 @@ internal sealed partial class DockController : IDisposable
     {
         lastExternalForeground = DockNative.GetForegroundWindow();
         bar = new(this) { Opacity = 0 }; bar.Show(); bar.Place(); bar.HideAnimated(true);
-        var button = new Button { Content = "返回 Dock", Padding = new Thickness(12, 7, 12, 7), ToolTip = "返回悬浮 Dock；右键可关闭 Dock" };
+        var button = ReturnDockCapsule.Create();
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
         button.Click += (_, _) => ToggleNative();
         var menu = new ContextMenu(); DockBar.Add(menu, "关闭 Dock 并恢复任务栏", () => Apply(false)); button.ContextMenu = menu;
@@ -100,7 +100,7 @@ internal sealed partial class DockController : IDisposable
         button.PreviewMouseMove += (_, e) =>
         {
             if (e.LeftButton != MouseButtonState.Pressed || (e.GetPosition(button) - origin).Length < 8) return;
-            try { returnButton.DragMove(); Settings.ReturnLeft = returnButton.Left; Settings.ReturnTop = returnButton.Top; Save(); }
+            try { returnButton.DragMove(); PlaceReturn(returnButton.Left, returnButton.Top); Settings.ReturnLeft = returnButton.Left; Settings.ReturnTop = returnButton.Top; Save(); }
             catch (InvalidOperationException) { }
         };
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
@@ -131,14 +131,36 @@ internal sealed partial class DockController : IDisposable
         if (message is 0x007E or 0x02E0) { bar?.Place(); PlaceReturn(); }
         return 0;
     }
-    private void PlaceReturn()
+    private void PlaceReturn(double? requestedLeft = null, double? requestedTop = null)
     {
         if (returnButton == null) return;
-        var area = SystemParameters.WorkArea;
-        var left = Settings.ReturnLeft ?? area.Right - 145;
-        var top = Settings.ReturnTop ?? area.Bottom - 60;
-        returnButton.Left = Math.Clamp(double.IsFinite(left) ? left : area.Left, area.Left, Math.Max(area.Left, area.Right - returnButton.ActualWidth));
-        returnButton.Top = Math.Clamp(double.IsFinite(top) ? top : area.Top, area.Top, Math.Max(area.Top, area.Bottom - returnButton.ActualHeight));
+        var transform = PresentationSource.FromVisual(returnButton)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        var monitor = DockNative.Primary().Monitor;
+        var start = transform.Transform(new Point(monitor.Left, monitor.Top));
+        var end = transform.Transform(new Point(monitor.Right, monitor.Bottom));
+        double leftEdge = start.X + 12, topEdge = start.Y + 12, rightEdge = end.X - 12, bottomEdge = end.Y - 12;
+        // WorkArea can still reflect the hidden taskbar. Use its HWND bounds even before
+        // Explorer refreshes WorkArea, and convert physical pixels into WPF DIP.
+        foreach (var taskbar in DockNative.Taskbars())
+        {
+            if (!DockNative.GetWindowRect(taskbar, out var bounds) || bounds.Right <= bounds.Left || bounds.Bottom <= bounds.Top) continue;
+            var a = transform.Transform(new Point(bounds.Left, bounds.Top));
+            var z = transform.Transform(new Point(bounds.Right, bounds.Bottom));
+            if (z.X <= start.X || a.X >= end.X || z.Y <= start.Y || a.Y >= end.Y) continue;
+            if (z.X - a.X >= z.Y - a.Y)
+            {
+                if (a.Y > (start.Y + end.Y) / 2) bottomEdge = Math.Min(bottomEdge, a.Y - 12);
+                else topEdge = Math.Max(topEdge, z.Y + 12);
+            }
+            else if (a.X > (start.X + end.X) / 2) rightEdge = Math.Min(rightEdge, a.X - 12);
+            else leftEdge = Math.Max(leftEdge, z.X + 12);
+        }
+        var width = returnButton.ActualWidth > 0 ? returnButton.ActualWidth : 76;
+        var height = returnButton.ActualHeight > 0 ? returnButton.ActualHeight : 38;
+        var left = requestedLeft ?? Settings.ReturnLeft ?? rightEdge - width;
+        var top = requestedTop ?? Settings.ReturnTop ?? bottomEdge - height;
+        returnButton.Left = Math.Clamp(double.IsFinite(left) ? left : rightEdge - width, leftEdge, Math.Max(leftEdge, rightEdge - width));
+        returnButton.Top = Math.Clamp(double.IsFinite(top) ? top : bottomEdge - height, topEdge, Math.Max(topEdge, bottomEdge - height));
     }
     internal void ToggleNative()
     {
