@@ -21,3 +21,9 @@
 待用户验收：双层比例与不同 DPI、底边唤出/自动收起、两层间移动、预览与面板、网络和音频设备切换、电池状态、微信各版本关闭到托盘后的恢复。不同微信版本或提升权限的应用可能无法安全恢复主窗口，此时使用原生托盘入口。
 
 实现参考：微软 [Core Audio EndpointVolume](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudioendpointvolume)、[SYSTEM_POWER_STATUS](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-system_power_status)。
+
+## 最终发布记录
+
+功能提交：`c111452`。项目专用 SDK 的 Windows x64 自包含 Release 发布完成，ZIP 403 项 CRC 校验通过，主程序及恢复任务栏脚本存在。已复制至 `E:\桌面\DeskIsle\DeskIsle-1.9.0-win-x64.zip`，源包与桌面副本 SHA256 一致：`1e50436774887657407de5a3ed315ea5d5a8f8be4605f2bacde1e4a9830725e6`。
+
+未运行自动测试、lint、独立类型检查或 Windows 交互验收；功能与外观等待用户验收。未合并、未推送。
