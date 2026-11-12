@@ -15,7 +15,7 @@ public partial class DockBar
     private Button? panelMute;
     private bool volumeSync, wirelessBusy, radioRefreshBusy;
     private long panelVersion;
-    private readonly Dictionary<RadioKind, (Button Toggle, TextBlock Status)> radioViews = [];
+    private readonly Dictionary<RadioKind, (Button Toggle, TextBlock Status, Grid Switch)> radioViews = [];
     private static SolidColorBrush ControlBrush(string color) => new((Color)ColorConverter.ConvertFromString(color));
     private Button ControlButton(object content, Action action, string? accessibleName = null)
     {
@@ -116,7 +116,7 @@ public partial class DockBar
         tools.Children.Add(ToolButton("M6,4 L18,4 Q22,4 22,8 L22,16 Q22,20 18,20 L6,20 Q2,20 2,16 L2,8 Q2,4 6,4 Z M3,15 L21,15 M7,18 L11,18 M14,18 L17,18", "原生任务栏", () => { CloseSystemPanel(); controller.ToggleNative(); }));
         tools.Children.Add(ToolButton("M7,3 L17,3 Q22,3 22,8 L22,16 Q22,21 17,21 L7,21 Q2,21 2,16 L2,8 Q2,3 7,3 Z M6,13 L9,13 Q10,13 11,8 Q12,5 13,13 Q14,19 15,13 L18,13", "任务管理器", () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
         tools.Children.Add(ToolButton("M9,2 L15,2 L16,5 L19,6 L22,6 L24,11 L22,13 L21,16 L22,19 L18,23 L15,22 L12,22 L9,23 L5,20 L5,17 L3,14 L1,12 L3,7 L6,7 L8,5 Z M17,12 A4,4 0 1 1 9,12 A4,4 0 1 1 17,12", "设置", () => { CloseSystemPanel(); controller.Configure(); }));
-        controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
+        controlContent.Children.Add(new Border { Child = tools, CornerRadius = new CornerRadius(14), Background = ControlBrush("#303B4B"), Padding = new Thickness(2, 4, 2, 4) }); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
     }
     private Button ToolButton(string path, string title, Action action)
@@ -161,25 +161,27 @@ public partial class DockBar
     };
     private void AddRadio(Grid parent, int column, RadioKind kind, string title)
     {
-        var split = new Grid();
-        split.ColumnDefinitions.Add(new()); split.ColumnDefinitions.Add(new() { Width = new GridLength(24) });
-        var row = new Grid(); row.ColumnDefinitions.Add(new() { Width = new GridLength(36) }); row.ColumnDefinitions.Add(new());
-        row.Children.Add(RadioIcon(kind));
-        var copy = new StackPanel { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        var name = ControlText(title, 14); name.FontWeight = FontWeights.Medium; copy.Children.Add(name);
-        var status = ControlText("读取中", 10); status.Foreground = ControlBrush("#9FB6C8"); status.Margin = new Thickness(0, 3, 0, 0); copy.Children.Add(status);
-        Grid.SetColumn(copy, 1); row.Children.Add(copy);
-        var toggle = ControlButton(row, () => _ = ToggleRadio(kind), title + " 开启或关闭");
-        toggle.Tag = "RadioLeft"; toggle.MinHeight = 54; toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(10, 9, 5, 9); toggle.BorderThickness = new Thickness(0);
+        var card = new Grid { Height = 100 };
+        var toggleContent = new Grid();
+        var glyph = RadioIcon(kind); glyph.HorizontalAlignment = HorizontalAlignment.Left; glyph.VerticalAlignment = VerticalAlignment.Top; glyph.Margin = new Thickness(0, 0, 0, 0);
+        toggleContent.Children.Add(glyph);
+        var copy = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
+        var name = ControlText(title, 15); name.FontWeight = FontWeights.Medium; copy.Children.Add(name);
+        var status = ControlText("读取中", 11); status.Margin = new Thickness(0, 2, 0, 0); copy.Children.Add(status);
+        toggleContent.Children.Add(copy);
+        var toggle = ControlButton(toggleContent, () => _ = ToggleRadio(kind), title + " 开启或关闭");
+        toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(14, 14, 12, 12); toggle.BorderThickness = new Thickness(0);
+        card.Children.Add(toggle);
+        var radioSwitch = PowerState(false); radioSwitch.HorizontalAlignment = HorizontalAlignment.Right; radioSwitch.VerticalAlignment = VerticalAlignment.Top; radioSwitch.Margin = new Thickness(0, 10, 10, 0); radioSwitch.IsHitTestVisible = false;
+        card.Children.Add(radioSwitch);
         var details = ControlButton(ControlIcon("M2,1 L8,7 L2,13", 8), () => _ = ShowRadioDetails(kind), title + " 列表与设置");
-        details.Tag = "RadioRight"; details.Margin = new Thickness(0); details.Padding = new Thickness(6, 0, 6, 0); details.BorderThickness = new Thickness(0);
-        details.SetBinding(BackgroundProperty, new System.Windows.Data.Binding(nameof(Button.Background)) { Source = toggle });
-        Grid.SetColumn(details, 1); split.Children.Add(toggle); split.Children.Add(details);
-        var divider = new Border { Width = 1, Height = 24, Background = ControlBrush("#41648194"), HorizontalAlignment = HorizontalAlignment.Left, IsHitTestVisible = false };
-        Grid.SetColumn(divider, 1); split.Children.Add(divider);
-        var outline = new Border { Child = split, CornerRadius = new CornerRadius(15), BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(0), Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
-        radioViews[kind] = (toggle, status); Grid.SetColumn(outline, column); parent.Children.Add(outline);
+        details.Style = (Style)FindResource("PanelTool"); details.Width = 32; details.Height = 32; details.MinHeight = 32;
+        details.HorizontalAlignment = HorizontalAlignment.Right; details.VerticalAlignment = VerticalAlignment.Bottom; details.Margin = new Thickness(0, 0, 4, 2);
+        card.Children.Add(details);
+        var outline = new Border { Child = card, Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
+        radioViews[kind] = (toggle, status, radioSwitch); Grid.SetColumn(outline, column); parent.Children.Add(outline);
     }
+
     private async Task RefreshRadioViews()
     {
         if (radioRefreshBusy) return;
@@ -193,10 +195,12 @@ public partial class DockBar
             {
                 var state = await DockWireless.Read(kind, connection: true);
                 if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
-                view.Toggle.Background = state.On
-                    ? new LinearGradientBrush(Color.FromRgb(0, 169, 190), Color.FromRgb(0, 143, 169), new Point(0, 0), new Point(1, 1))
-                    : ControlBrush("#2A3540");
-                view.Status.Foreground = ControlBrush(state.On ? "#E0F8FC" : "#9FB2C1");
+                view.Toggle.Background = new LinearGradientBrush(Color.FromRgb(48, 60, 74), Color.FromRgb(39, 49, 63), new Point(0, 0), new Point(1, 1));
+                view.Status.Foreground = ControlBrush(state.Label == "已连接" ? "#CDEAF2" : "#A6B9CA");
+                var replacement = PowerState(state.On);
+                view.Switch.Children.Clear();
+                foreach (var child in replacement.Children.Cast<UIElement>().ToArray())
+                { replacement.Children.Remove(child); view.Switch.Children.Add(child); }
                 view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
                 view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
 
