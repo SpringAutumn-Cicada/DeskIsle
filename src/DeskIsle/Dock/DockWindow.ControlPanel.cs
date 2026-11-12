@@ -225,7 +225,7 @@ public partial class DockBar
                 if (version != panelVersion || closed) return;
                 SetPanelMessage(networks.Length == 0 ? "未发现网络" : "");
                 foreach (var network in networks)
-                    AddDeviceButton(list, network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", WiFiShape(network.Signal), network.Connected, () => _ = ConnectNetwork(network, version));
+                    AddDeviceButton(list, network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,21.1", network.Connected, () => _ = ConnectNetwork(network, version), network.Signal);
             }
             else
             {
@@ -238,33 +238,41 @@ public partial class DockBar
         }
         catch (Exception ex) when (WirelessError(ex)) { if (version == panelVersion) SetPanelMessage("无法读取列表，请使用下方系统设置。Wi-Fi 扫描可能需要位置访问许可。"); }
     }
-    private static string WiFiShape(byte signal) => "M12,21 L12,21.1" + (signal >= 1 ? " M9,17 Q12,14 15,17" : "") + (signal >= 3 ? " M5,12 Q12,5 19,12" : "") + (signal >= 4 ? " M1,7 Q12,-2 23,7" : "");
+    private static Grid SignalIcon(byte signal)
+    {
+        var icon = new Grid { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        var paths = new[] { "M12,21 L12,21.1", "M9,17 Q12,14 15,17", "M5,12 Q12,5 19,12", "M1,7 Q12,-2 23,7" };
+        var thresholds = new[] { 0, 1, 3, 4 };
+        for (var i = 0; i < paths.Length; i++)
+            icon.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(paths[i]), Stroke = ControlBrush(signal >= thresholds[i] ? "#BDDDEA" : "#405365"), StrokeThickness = 1.6, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Stretch = Stretch.None });
+        return icon;
+    }
     private static StackPanel PowerState(bool on)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         row.Children.Add(new System.Windows.Shapes.Ellipse { Width = 5, Height = 5, Fill = ControlBrush(on ? "#8BDCEA" : "#899BA9"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
         row.Children.Add(ControlText(on ? "开启" : "关闭", 11)); return row;
     }
-    private void AddDeviceButton(StackPanel list, string name, string state, string icon, bool connected, Action action)
+    private void AddDeviceButton(StackPanel list, string name, string state, string icon, bool connected, Action action, byte? signal = null)
     {
-        var button = ControlButton(DeviceRow(name, state, icon, connected), action, name);
+        var button = ControlButton(DeviceRow(name, state, icon, connected, signal), action, name);
         button.Style = (Style)FindResource("PanelListAction");
         button.ToolTip = name;
         if (connected) button.Background = ControlBrush("#243F50");
         list.Children.Add(button);
         list.Children.Add(new Border { Height = .5, Background = ControlBrush("#203F5667"), Margin = new Thickness(48, 0, 12, 0) });
     }
-    private static Grid DeviceRow(string name, string state, string icon, bool connected)
+    private static Grid DeviceRow(string name, string state, string icon, bool connected, byte? signal = null)
     {
         var row = new Grid { Margin = new Thickness(2, 4, 2, 4) };
         row.ColumnDefinitions.Add(new() { Width = new GridLength(30) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(18) });
-        row.Children.Add(ControlIcon(icon, 20));
+        row.Children.Add(signal.HasValue ? SignalIcon(signal.Value) : ControlIcon(icon, 20));
         var text = new StackPanel { Margin = new Thickness(9, 0, 4, 0) };
         var title = ControlText(name, 12); title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis; title.MaxWidth = 208;
         text.Children.Add(title);
         var description = ControlText(state, 10); description.Foreground = ControlBrush(connected ? "#86D7EA" : "#94A6B7"); description.Margin = new Thickness(0, 4, 0, 0); if (!string.IsNullOrEmpty(state)) text.Children.Add(description);
         Grid.SetColumn(text, 1); row.Children.Add(text);
-        var chevron = ControlIcon("M2,1 L8,7 L2,13", 7); Grid.SetColumn(chevron, 2); row.Children.Add(chevron); return row;
+        var chevron = ControlIcon(connected && !string.IsNullOrEmpty(state) ? "M2,7 L6,11 L14,2" : "M2,1 L8,7 L2,13", connected && !string.IsNullOrEmpty(state) ? 12 : 7); Grid.SetColumn(chevron, 2); row.Children.Add(chevron); return row;
     }
     private async Task ToggleDetailRadio(RadioKind kind, long version)
     {
