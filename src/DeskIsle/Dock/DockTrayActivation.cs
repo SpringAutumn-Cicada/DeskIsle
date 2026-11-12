@@ -8,77 +8,130 @@ namespace DeskIsle.Dock;
 internal static class DockTrayActivation
 {
     private static readonly SemaphoreSlim workerSlot = new(1);
-    internal static async Task<bool> TryWeChat(nint[] taskbars, CancellationToken request)
+    internal sealed record Candidate(string Key, string Name, string ClassName, int ProcessId, bool HasInvoke, bool HasPoint, int Score);
+    internal sealed record Outcome(bool Invoked, string Stage, Candidate[] Candidates);
+    private sealed record Target(AutomationElement Element, Candidate Info);
+    internal static async Task<Outcome> TryActivate(nint[] taskbars, DockPin app, uint[] processIds, CancellationToken request, string? selection = null)
     {
-        if (!workerSlot.Wait(0)) return false;
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(request);
-        cancellation.CancelAfter(TimeSpan.FromSeconds(2));
+        if (!workerSlot.Wait(0)) return new(false, "worker-busy", []);
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(request);
+        cancellation.CancelAfter(TimeSpan.FromSeconds(4));
         var token = cancellation.Token;
         var work = Task.Run(async () =>
         {
+            var targets = new List<Target>();
             try
             {
+                var aliases = Aliases(app);
                 foreach (var hwnd in taskbars)
                 {
-                    if (token.IsCancellationRequested) return false;
+                    token.ThrowIfCancellationRequested();
                     var root = AutomationElement.FromHandle(hwnd);
-                    if (root != null && InvokeNamed(root, IsWeChat, token)) return true;
+                    if (root == null) continue;
+                    // Restrict traversal to notification-area containers; never score taskbar application buttons.
+                    var regions = root.FindAll(TreeScope.Descendants, new OrCondition(
+                        new PropertyCondition(AutomationElement.ClassNameProperty, "TrayNotifyWnd"),
+                        new PropertyCondition(AutomationElement.AutomationIdProperty, "SystemTrayFrame"),
+                        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.SystemTrayFrame")));
+                    foreach (AutomationElement region in regions) Collect(region, targets, aliases, processIds, token);
                 }
-                if (InvokeOverflow(IsWeChat, token)) return true;
-                foreach (var hwnd in taskbars)
+                CollectOverflow(targets, aliases, processIds, token);
+                var selected = Choose(targets, selection);
+                if (selected == null)
                 {
-                    if (token.IsCancellationRequested) return false;
-                    var root = AutomationElement.FromHandle(hwnd);
-                    if (root == null || !InvokeNamed(root, IsChevron, token)) continue;
-                    await Task.Delay(150, token).ConfigureAwait(false);
-                    return InvokeOverflow(IsWeChat, token);
+                    foreach (var hwnd in taskbars)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var root = AutomationElement.FromHandle(hwnd);
+                        // Only an exact accessible chevron name may trigger expansion.
+                        var buttons = root?.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+                        if (buttons == null) continue;
+                        foreach (AutomationElement button in buttons)
+                        {
+                            if (!IsChevron(button.Current.Name) || button.Current.IsOffscreen) continue;
+                            if (!Perform(button, token, false)) continue;
+                            await Task.Delay(200, token).ConfigureAwait(false);
+                            CollectOverflow(targets, aliases, processIds, token);
+                            break;
+                        }
+                    }
+                    selected = Choose(targets, selection);
                 }
-                return false;
+                var candidates = targets.DistinctBy(t => t.Info.Key).Take(64).Select(t => t.Info).ToArray();
+                if (selected == null) return new Outcome(false, targets.Count == 0 ? "no-accessible-tray-items" : "ownership-ambiguous", candidates);
+                token.ThrowIfCancellationRequested();
+                return new Outcome(Perform(selected.Element, token, true), "tray-default-action", candidates);
             }
-            catch (Exception ex) when (ex is COMException or ElementNotAvailableException or ElementNotEnabledException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException) { return false; }
-            finally { workerSlot.Release(); }
+            catch (Exception ex) when (ex is COMException or ElementNotAvailableException or ElementNotEnabledException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException)
+            { return new Outcome(false, "uia-" + ex.GetType().Name, targets.Select(t => t.Info).Take(64).ToArray()); }
+            finally { cancellation.Dispose(); workerSlot.Release(); }
         });
-        try { return await work.WaitAsync(TimeSpan.FromSeconds(2)); }
-        catch (TimeoutException) { cancellation.Cancel(); return false; }
+        try { return await work.WaitAsync(TimeSpan.FromSeconds(4)); }
+        catch (TimeoutException)
+        {
+            try { cancellation.Cancel(); } catch (ObjectDisposedException) { }
+            return new(false, "uia-timeout", []);
+        }
     }
-    private static bool IsWeChat(string name)
+    private static string[] Aliases(DockPin app)
     {
-        foreach (var prefix in new[] { "微信", "WeChat", "Weixin" })
-            if (name.Equals(prefix, StringComparison.OrdinalIgnoreCase)
-                || (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && name.Length > prefix.Length && " ,，\n\r(:：（".Contains(name[prefix.Length]))) return true;
-        return false;
+        var names = new List<string> { System.IO.Path.GetFileNameWithoutExtension(app.Executable ?? app.Path), app.Name };
+        try
+        {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(app.Executable ?? app.Path);
+            if (info.ProductName is { Length: > 0 } product) names.Add(product);
+            if (info.FileDescription is { Length: > 0 } description) names.Add(description);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or ArgumentException) { }
+        return names.Where(n => n.Length >= 2 && n.Length <= 80).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
     private static bool IsChevron(string name) => name.Trim() is "显示隐藏的图标" or "隐藏的图标菜单" or "Show hidden icons" or "Hidden icon menu";
-    private static bool InvokeOverflow(Func<string, bool> matches, CancellationToken token)
+    private static Target? Choose(List<Target> targets, string? selection)
     {
-        // These shell class names vary by Windows release. Unknown layouts use manual fallback.
+        var unique = targets.DistinctBy(t => t.Info.Key).ToArray();
+        if (selection != null) return unique.SingleOrDefault(t => t.Info.Key == selection);
+        // Explorer usually owns all UIA elements: process ID  of Explorer is NOT app ownership.
+        // Only a provider exposing the actual target PID is sufficient for automatic invocation.
+        var owned = unique.Where(t => t.Info.Score >= 100).ToArray();
+        return owned.Length == 1 ? owned[0] : null;
+    }
+    private static void CollectOverflow(List<Target> targets, string[] aliases, uint[] pids, CancellationToken token)
+    {
         var roots = AutomationElement.RootElement.FindAll(TreeScope.Children, new OrCondition(
             new PropertyCondition(AutomationElement.ClassNameProperty, "NotifyIconOverflowWindow"),
             new PropertyCondition(AutomationElement.ClassNameProperty, "TopLevelWindowForOverflowXamlIsland")));
-        foreach (AutomationElement root in roots)
-        {
-            if (token.IsCancellationRequested) return false;
-            if (InvokeNamed(root, matches, token)) return true;
-        }
-        return false;
+        foreach (AutomationElement root in roots) Collect(root, targets, aliases, pids, token);
     }
-    private static bool InvokeNamed(AutomationElement root, Func<string, bool> matches, CancellationToken token)
+    private static void Collect(AutomationElement root, List<Target> targets, string[] aliases, uint[] pids, CancellationToken token)
     {
-        var buttons = root.FindAll(TreeScope.Descendants, new AndCondition(
-            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+        var elements = root.FindAll(TreeScope.Descendants, new AndCondition(
             new PropertyCondition(AutomationElement.IsOffscreenProperty, false),
-            new PropertyCondition(AutomationElement.IsEnabledProperty, true)));
-        foreach (AutomationElement button in buttons)
+            new PropertyCondition(AutomationElement.IsEnabledProperty, true),
+            new OrCondition(new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem))));
+        foreach (AutomationElement element in elements)
         {
-            if (token.IsCancellationRequested) return false;
-            if (!matches(button.Current.Name)) continue;
-            if (token.IsCancellationRequested) return false;
-            // Win11 tray providers do not consistently implement InvokePattern.
-            // Use the real button's on-screen point, preserving the pointer if the user has not moved it.
-            if (button.TryGetClickablePoint(out var point))
-                return Click(point.X, point.Y, matches == (Func<string, bool>)IsWeChat);
-            if (button.TryGetCurrentPattern(InvokePattern.Pattern, out var action))
-            { ((InvokePattern)action).Invoke(); return true; }
+            token.ThrowIfCancellationRequested();
+            var info = element.Current;
+            if (string.IsNullOrWhiteSpace(info.Name) || IsChevron(info.Name)) continue;
+            var score = pids.Contains((uint)info.ProcessId) ? 100 : aliases.Any(a => info.Name.Equals(a, StringComparison.OrdinalIgnoreCase) || info.Name.StartsWith(a + " ", StringComparison.OrdinalIgnoreCase)) ? 50 : 0;
+            var key = DockRestoreDiagnostics.Hash(info.AutomationId + "|" + info.Name + "|" + info.ClassName + "|" + info.ProcessId);
+            targets.Add(new(element, new(key, info.Name, info.ClassName, info.ProcessId,
+                element.TryGetCurrentPattern(InvokePattern.Pattern, out _), element.TryGetClickablePoint(out _), score)));
+        }
+    }
+    private static bool Perform(AutomationElement element, CancellationToken token, bool twice)
+    {
+        token.ThrowIfCancellationRequested();
+        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var action))
+        { token.ThrowIfCancellationRequested(); ((InvokePattern)action).Invoke(); return true; }
+        if (element.TryGetClickablePoint(out var point))
+        {
+            token.ThrowIfCancellationRequested();
+            var hit = AutomationElement.FromPoint(point);
+            // Do not inject a click if a dialog or another window now covers the tray item.
+            if (!Automation.Compare(hit, element)) return false;
+            return Click(point.X, point.Y, twice);
         }
         return false;
     }

@@ -286,6 +286,7 @@ public partial class DockBar : Window
     private void FillMenu(ContextMenu menu, AppView view)
     {
         menu.Items.Clear();
+        Add(menu, "打开恢复诊断目录", () => controller.OpenRestoreDiagnostics());
         Add(menu, "打开新窗口", () => { if (view.Pin != null) controller.Launch(view.Pin.Path); else if (view.IconPath != null) controller.Launch(view.IconPath); });
         if (view.Pin is { } pin)
         {

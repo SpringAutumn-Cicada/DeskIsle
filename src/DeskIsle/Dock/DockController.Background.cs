@@ -19,10 +19,10 @@ internal sealed partial class DockController
     }
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
     private static bool Uncloaked(nint handle) => DwmGetWindowAttribute(handle, 14, out var value, sizeof(int)) != 0 || value == 0;
-    private sealed record RunningApp(bool Running, bool Uncertain, nint Handle, uint ProcessId);
+    private sealed record RunningApp(bool Running, bool Uncertain, nint Handle, uint ProcessId, uint[] ProcessIds);
     private static RunningApp FindRunning(DockPin pin, DockWindow[] remembered)
     {
-        if (pin.Executable == null) return new(false, false, 0, 0);
+        if (pin.Executable == null) return new(false, false, 0, 0, []);
         var ids = new HashSet<uint>();
         var uncertain = false;
         try
@@ -39,7 +39,7 @@ internal sealed partial class DockController
                 }
             }
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return new(false, true, 0, 0); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return new(false, true, 0, 0, []); }
         nint handle = 0; uint owner = 0;
         foreach (var window in remembered.Where(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)))
         {
@@ -47,7 +47,7 @@ internal sealed partial class DockController
             DockNative.GetWindowThreadProcessId(window.Handle, out var pid);
             if (ids.Contains(pid)) { handle = window.Handle; owner = pid; break; }
         }
-        return new(ids.Count > 0, uncertain, handle, owner);
+        return new(ids.Count > 0, uncertain, handle, owner, ids.ToArray());
     }
     internal async void OpenPinned(DockPin pin, bool launchIfMissing = true)
     {
@@ -55,7 +55,7 @@ internal sealed partial class DockController
         if (!opening.Add(key)) return;
         try
         {
-            var remembered = knownWindows.Values.ToArray();
+            var remembered = knownWindows.Values.Concat(await Task.Run(DockApps.Windows)).DistinctBy(w => w.Handle).ToArray();
             var app = await Task.Run(() => FindRunning(pin, remembered));
             if (disposed || lease == null) return;
             if (app.Handle != 0 && DockNative.IsWindow(app.Handle))
@@ -68,9 +68,15 @@ internal sealed partial class DockController
                     settle.Start(); return;
                 }
             }
-            if (app.Running || app.Uncertain)
+            if (app.Uncertain && !app.Running)
             {
-                await RestoreBackground(pin);
+                DockRestoreDiagnostics.Write(pin, "process-permission-uncertain", app.ProcessIds, []);
+                MessageBox.Show("当前权限无法确认应用是否已运行，未启动新实例。可右键打开恢复诊断目录。", "DeskIsle Dock");
+                return;
+            }
+            if (app.Running)
+            {
+                await RestoreBackground(pin, app.ProcessIds);
                 return;
             }
             if (launchIfMissing) Launch(pin.Path);
@@ -99,11 +105,9 @@ internal sealed partial class DockController
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { return false; }
     }
     private CancellationTokenSource? restoring;
-    private async Task RestoreBackground(DockPin pin)
+    private async Task RestoreBackground(DockPin pin, uint[] processIds)
     {
-        if (lease == null || restoring != null) return;
-        if (Path.GetFileNameWithoutExtension(pin.Executable ?? pin.Path).ToLowerInvariant() is not ("wechat" or "weixin"))
-        { bar?.PreviewApplication(pin.Executable); return; }
+        if (lease == null || restoring != null || processIds.Length == 0) return;
         using var request = new CancellationTokenSource();
         restoring = request;
         var currentLease = lease;
@@ -113,8 +117,17 @@ internal sealed partial class DockController
             currentLease.SetTrayAccess(true);
             await Task.Delay(150, request.Token);
             if (disposed || request.IsCancellationRequested) return;
-            var invoked = await DockTrayActivation.TryWeChat(DockNative.Taskbars(), request.Token);
-            if (!invoked) { MessageBox.Show("未能找到可点击的微信托盘图标，未启动新实例。", "DeskIsle"); return; }
+            var outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token);
+            var invoked = outcome.Invoked;
+            if (!invoked)
+            {
+                DockRestoreDiagnostics.Write(pin, outcome.Stage, processIds, outcome.Candidates);
+                request.Token.ThrowIfCancellationRequested();
+                var selection = SelectTrayTarget(outcome.Candidates);
+                if (selection == null || request.IsCancellationRequested) return;
+                outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token, selection);
+                if (!outcome.Invoked) { DockRestoreDiagnostics.Write(pin, outcome.Stage, processIds, outcome.Candidates); MessageBox.Show("托盘恢复未完成，已保存诊断记录。未启动新实例。", "DeskIsle"); return; }
+            }
             for (int i = 0; i < 12; i++)
             {
                 await Task.Delay(150, request.Token);
@@ -123,9 +136,16 @@ internal sealed partial class DockController
                 var window = live.FirstOrDefault(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle));
                 if (window == null) continue;
                 if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindowAsync(window.Handle, 9);
-                DockNative.SetForegroundWindow(window.Handle); settle.Start(); return;
+                DockNative.SetForegroundWindow(window.Handle);
+                await Task.Delay(100, request.Token);
+                var foreground = DockNative.GetForegroundWindow();
+                DockNative.GetWindowThreadProcessId(foreground, out var foregroundPid);
+                if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle) || !processIds.Contains(foregroundPid)) continue;
+                DockRestoreDiagnostics.Write(pin, "restored-and-foreground", processIds, []);
+                settle.Start(); return;
             }
-            MessageBox.Show("微信托盘已响应点击，但尚未发现可操作的主窗口。", "DeskIsle");
+            DockRestoreDiagnostics.Write(pin, "action-sent-no-active-window", processIds, outcome.Candidates);
+            MessageBox.Show("托盘动作已发出，但未确认应用主窗口恢复并获得前台。已保存诊断记录。", "DeskIsle");
         }
         catch (OperationCanceledException) { }
         finally
