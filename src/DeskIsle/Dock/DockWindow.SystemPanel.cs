@@ -13,7 +13,6 @@ public partial class DockBar
     private bool statusBusy;
     private void InitializeSystemPanel()
     {
-        TerminalSurface.Opacity = controller.Settings.Opacity;
         statusTick.Tick += async (_, _) => await RefreshSystemStatus();
         IsVisibleChanged += async (_, _) =>
         {
@@ -55,6 +54,7 @@ public partial class DockBar
             BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}" : "—";
             BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
+            if (systemPopup?.IsOpen == true && radioViews.Count > 0) await RefreshRadioViews();
         }
         finally { statusBusy = false; }
     }
@@ -64,6 +64,15 @@ public partial class DockBar
         var available = DockAudio.Access(v => { v.GetMasterVolumeLevelScalar(out level); v.GetMute(out muted); });
         AudioKey.Opacity = available ? 1 : .5;
         AudioKey.ToolTip = available ? muted ? "已静音" : $"音量 {Math.Round(level * 100)}%" : "音频设备暂不可用 · 系统快捷设置";
+        volumeSync = true;
+        if (panelVolume != null)
+        {
+            panelVolume.IsEnabled = available;
+            if (!panelVolume.IsMouseCaptureWithin) panelVolume.Value = level * 100;
+        }
+        if (panelVolumeText != null) panelVolumeText.Text = available ? $"{Math.Round(level * 100)}%" : "—";
+        if (panelMute != null) { panelMute.IsEnabled = available; panelMute.ToolTip = muted ? "取消静音" : "静音"; panelMute.Opacity = muted ? .55 : 1; }
+        volumeSync = false;
         AudioGlyph.Data = Geometry.Parse(muted || !available
             ? "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,8 L24,16 M24,8 L17,16"
             : "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17 M20,3 Q30,12 20,21");
@@ -72,11 +81,11 @@ public partial class DockBar
     {
         if (systemPopup != null) systemPopup.IsOpen = false;
         systemPopup = null;
+        ResetControlPanel();
     }
     private void QuickSettingsClick(object sender, RoutedEventArgs e)
     {
-        CloseSystemPanel(); ClosePreview();
-        if (!DockNative.OpenQuickSettings())
-            MessageBox.Show("系统未接受快捷设置快捷键，请按 Win+A 打开。", "DeskIsle");
+        if (systemPopup?.IsOpen == true) { CloseSystemPanel(); return; }
+        OpenControlPanel();
     }
 }

@@ -73,7 +73,6 @@ internal sealed partial class DockController : IDisposable
                 }
                 Settings.Enabled = true;
                 bar!.Surface.Opacity = Settings.Opacity;
-                bar.TerminalSurface.Opacity = Settings.Opacity;
                 RegisterKey(); pointer.Start(); refresh.Start();
                 _ = Refresh();
                 Reveal();
