@@ -24,7 +24,7 @@ internal sealed partial class DockController : IDisposable
     private nint windowHook, foregroundHook;
     private DockNative.WinEventProc? changeCallback;
     private readonly DispatcherTimer settle = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(180) };
-    private long edgeSince, awaySince, edgeRepairAt;
+    private long edgeSince, awaySince, edgeRepairAt, returnRevealUntil;
     private nint lastExternalForeground;
     internal nint ForegroundForClick()
     {
@@ -91,18 +91,39 @@ internal sealed partial class DockController : IDisposable
     {
         lastExternalForeground = DockNative.GetForegroundWindow();
         bar = new(this) { Opacity = 0 }; bar.Show(); bar.Place(); bar.HideAnimated(true);
-        var button = ReturnDockCapsule.Create();
+        var button = ReturnDockHead.Create();
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
-        button.Click += (_, _) => ToggleNative();
         var menu = new ContextMenu(); DockBar.Add(menu, "关闭 Dock 并恢复任务栏", () => Apply(false)); button.ContextMenu = menu;
-        Point origin = default;
-        button.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(button);
+        bool pressed = false, moved = false;
+        DockNative.Point origin = default;
+        Point initial = default;
+        button.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (!DockNative.GetCursorPos(out origin)) return;
+            pressed = true; moved = false;
+            initial = new Point(returnButton.Left, returnButton.Top);
+            button.CaptureMouse(); e.Handled = true;
+        };
         button.PreviewMouseMove += (_, e) =>
         {
-            if (e.LeftButton != MouseButtonState.Pressed || (e.GetPosition(button) - origin).Length < 8) return;
-            try { returnButton.DragMove(); PlaceReturn(returnButton.Left, returnButton.Top); Settings.ReturnLeft = returnButton.Left; Settings.ReturnTop = returnButton.Top; Save(); }
-            catch (InvalidOperationException) { }
+            if (!pressed || e.LeftButton != MouseButtonState.Pressed || !DockNative.GetCursorPos(out var current)) return;
+            var scale = PresentationSource.FromVisual(returnButton)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+            var delta = scale.Transform(new Vector(current.X - origin.X, current.Y - origin.Y));
+            if (!moved && Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            moved = true;
+            PlaceReturn(initial.X + delta.X, initial.Y + delta.Y); e.Handled = true;
         };
+        button.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (!pressed) return;
+            var dragged = moved; pressed = false;
+            button.ReleaseMouseCapture(); e.Handled = true;
+            if (dragged) { Settings.ReturnLeft = returnButton.Left; Settings.ReturnTop = returnButton.Top; Save(); }
+            else ToggleNative();
+        };
+        button.LostMouseCapture += (_, _) => { pressed = false; };
+        // Keyboard/accessibility invocation still uses Button.Click; captured mouse gestures do not.
+        button.Click += (_, _) => { if (!pressed) ToggleNative(); };
         returnButton.Show(); PlaceReturn(); returnButton.Hide();
         messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
         messages.AddHook(WindowMessage);
@@ -155,8 +176,8 @@ internal sealed partial class DockController : IDisposable
             else if (a.X > (start.X + end.X) / 2) rightEdge = Math.Min(rightEdge, a.X - 12);
             else leftEdge = Math.Max(leftEdge, z.X + 12);
         }
-        var width = returnButton.ActualWidth > 0 ? returnButton.ActualWidth : 76;
-        var height = returnButton.ActualHeight > 0 ? returnButton.ActualHeight : 38;
+        var width = returnButton.ActualWidth > 0 ? returnButton.ActualWidth : 40;
+        var height = returnButton.ActualHeight > 0 ? returnButton.ActualHeight : 40;
         var left = requestedLeft ?? Settings.ReturnLeft ?? rightEdge - width;
         var top = requestedTop ?? Settings.ReturnTop ?? bottomEdge - height;
         returnButton.Left = Math.Clamp(double.IsFinite(left) ? left : rightEdge - width, leftEdge, Math.Max(leftEdge, rightEdge - width));
@@ -168,14 +189,13 @@ internal sealed partial class DockController : IDisposable
         var native = !lease.NativeMode;
         lease.Native(native);
         if (native) { bar?.HideAnimated(true); PlaceReturn(); returnButton?.Show(); }
-        else { returnButton?.Hide(); Reveal(); }
+        else { returnButton?.Hide(); edgeSince = 0; returnRevealUntil = Environment.TickCount64 + 1400; Reveal(); }
     }
     private void Reveal()
     {
         if (bar == null || lease == null || lease.NativeMode) return;
         if (bar.WindowState == WindowState.Minimized) bar.WindowState = WindowState.Normal;
-        bar.RevealAnimated(); bar.Place();
-        DockNative.ShowWindowAsync(new WindowInteropHelper(bar).Handle, 4);
+        bar.Place(); bar.RevealAnimated();
         DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x40);
         awaySince = Environment.TickCount64;
     }
@@ -183,6 +203,12 @@ internal sealed partial class DockController : IDisposable
     {
         if (lease == null || bar == null) return;
         UpdateAttention();
+        if (!lease.NativeMode && Environment.TickCount64 < returnRevealUntil)
+        {
+            if (!bar.IsVisible || bar.IsHiding) Reveal();
+            awaySince = Environment.TickCount64;
+            return;
+        }
         if (Environment.TickCount64 < attentionUntil && !lease.NativeMode)
         {
             if (!bar.IsVisible || bar.IsHiding) Reveal();
