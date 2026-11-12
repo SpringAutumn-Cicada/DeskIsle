@@ -10,6 +10,7 @@ public partial class DockBar
 {
     private StackPanel? controlContent;
     private TextBlock? controlMessage, panelVolumeText;
+    private System.Windows.Shapes.Path? panelMuteGlyph;
     private Slider? panelVolume;
     private Button? panelMute;
     private bool volumeSync, wirelessBusy;
@@ -18,22 +19,7 @@ public partial class DockBar
     private static SolidColorBrush ControlBrush(string color) => new((Color)ColorConverter.ConvertFromString(color));
     private Button ControlButton(object content, Action action, string? accessibleName = null)
     {
-        var button = new Button { Content = content, Style = (Style)FindResource("ControlKey"), Width = double.NaN, Height = double.NaN, MinHeight = 38, Padding = new Thickness(10), Margin = new Thickness(2), HorizontalContentAlignment = HorizontalAlignment.Stretch, Foreground = ControlBrush("#C2D9E8") };
-        // Keep the Dock's hover language, with a stretching content presenter for control cards.
-        var template = new ControlTemplate(typeof(Button));
-        var border = new FrameworkElementFactory(typeof(Border));
-        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
-        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding(nameof(Button.Background)) { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
-        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-        presenter.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 8, 8, 8));
-        presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-        border.AppendChild(presenter); template.VisualTree = border;
-        var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
-        hover.Setters.Add(new Setter(OpacityProperty, .8)); template.Triggers.Add(hover);
-        var disabled = new Trigger { Property = IsEnabledProperty, Value = false };
-        disabled.Setters.Add(new Setter(OpacityProperty, .45)); template.Triggers.Add(disabled);
-        button.Template = template;
-        button.Background = ControlBrush("#2B3543");
+        var button = new Button { Content = content, Style = (Style)FindResource("PanelAction") };
         System.Windows.Automation.AutomationProperties.SetName(button, accessibleName ?? content.ToString() ?? "控制");
         button.Click += (_, _) => action();
         return button;
@@ -42,9 +28,11 @@ public partial class DockBar
     private void OpenControlPanel()
     {
         CloseSystemPanel(); ClosePreview();
-        var content = new StackPanel { Width = 340 };
+        var content = new StackPanel { Width = 328 };
         controlContent = content;
-        var shell = new Border { Child = content, Background = ControlBrush("#F5202632"), BorderBrush = ControlBrush("#647A8C"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(16), Padding = new Thickness(12), SnapsToDevicePixels = true, UseLayoutRounding = true };
+        var shell = new Border { Child = content, Background = ControlBrush("#FC202833"), BorderBrush = ControlBrush("#586F83"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(18), Padding = new Thickness(16), SnapsToDevicePixels = true, UseLayoutRounding = true };
+        shell.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 14, ShadowDepth = 3, Opacity = .22 };
+        shell.Margin = new Thickness(8);
         systemPopup = new Popup { Child = shell, PlacementTarget = StatusKey, Placement = PlacementMode.Custom, AllowsTransparency = true, StaysOpen = false };
         systemPopup.CustomPopupPlacementCallback = (size, target, offset) => [new CustomPopupPlacement(new Point(target.Width - size.Width, -size.Height - 10), PopupPrimaryAxis.Horizontal)];
         var popup = systemPopup;
@@ -56,6 +44,7 @@ public partial class DockBar
             ResetControlPanel();
         };
         ShowControlHome();
+        StatusKey.Tag = "PanelOpen";
         systemPopup.IsOpen = true;
     }
     private bool PointerOnStatusKey()
@@ -67,8 +56,9 @@ public partial class DockBar
     }
     private void ResetControlPanel()
     {
+        StatusKey.Tag = null;
         ++panelVersion; radioViews.Clear(); controlContent = null; controlMessage = null;
-        panelVolume = null; panelVolumeText = null; panelMute = null;
+        panelVolume = null; panelVolumeText = null; panelMute = null; panelMuteGlyph = null;
     }
     private void SetPanelMessage(string text)
     {
@@ -78,9 +68,9 @@ public partial class DockBar
     }
     private void NewPanelPage()
     {
-        ++panelVersion; radioViews.Clear(); panelVolume = null; panelVolumeText = null; panelMute = null;
+        ++panelVersion; radioViews.Clear(); panelVolume = null; panelVolumeText = null; panelMute = null; panelMuteGlyph = null;
         controlContent?.Children.Clear();
-        controlMessage = ControlText(""); controlMessage.Margin = new Thickness(6); controlMessage.Visibility = Visibility.Collapsed;
+        controlMessage = ControlText(""); controlMessage.Margin = new Thickness(4, 8, 4, 2); controlMessage.Visibility = Visibility.Collapsed;
     }
     private void ShowControlHome()
     {
@@ -90,11 +80,12 @@ public partial class DockBar
         AddRadio(top, 0, RadioKind.WiFi, "Wi-Fi", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22");
         AddRadio(top, 1, RadioKind.Bluetooth, "蓝牙", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23");
         controlContent.Children.Add(top);
-        var volumeRow = new Grid { Margin = new Thickness(4, 12, 4, 12) };
-        volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(44) }); volumeRow.ColumnDefinitions.Add(new()); volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(42) });
-        panelMute = ControlButton("◖))", () => { DockAudio.Access(v => { v.GetMute(out var mute); v.SetMute(!mute, 0); }); ReadAudio(); }, "静音或取消静音");
-        panelMute.FontSize = 16; volumeRow.Children.Add(panelMute);
-        panelVolume = new Slider { Minimum = 0, Maximum = 100, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Foreground = ControlBrush("#42BFE8") };
+        var volumeRow = new Grid { Margin = new Thickness(2, 14, 2, 12) };
+        volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(36) }); volumeRow.ColumnDefinitions.Add(new()); volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(42) });
+        panelMuteGlyph = ControlIcon("M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17", 21);
+        panelMute = ControlButton(panelMuteGlyph, () => { DockAudio.Access(v => { v.GetMute(out var mute); v.SetMute(!mute, 0); }); ReadAudio(); }, "静音或取消静音");
+        panelMute.Style = (Style)FindResource("PanelTool"); panelMute.Padding = new Thickness(6); volumeRow.Children.Add(panelMute);
+        panelVolume = new Slider { Style = (Style)FindResource("PanelVolumeSlider"), Minimum = 0, Maximum = 100, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Foreground = ControlBrush("#42BFE8") };
         panelVolume.ValueChanged += (_, _) =>
         {
             if (volumeSync || panelVolume == null) return;
@@ -103,13 +94,14 @@ public partial class DockBar
             ReadAudio();
         };
         Grid.SetColumn(panelVolume, 1); volumeRow.Children.Add(panelVolume);
-        panelVolumeText = ControlText("—"); Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
+        panelVolumeText = ControlText("—", 11); panelVolumeText.FontFamily = new FontFamily("Cascadia Mono, Consolas"); panelVolumeText.HorizontalAlignment = HorizontalAlignment.Right; Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
         controlContent.Children.Add(volumeRow);
         var tools = new UniformGrid { Columns = 3 };
         tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M2,9 L22,9", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
         tools.Children.Add(ControlButton(ToolContent("M2,3 L22,3 L22,21 L2,21 Z M5,14 L8,14 L10,8 L13,17 L16,11 L19,11", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
         tools.Children.Add(ControlButton(ToolContent("M4,2 L4,22 M12,2 L12,22 M20,2 L20,22 M1,7 L7,7 M9,16 L15,16 M17,9 L23,9", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
-        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#405064"), Margin = new Thickness(4, 2, 4, 8) });
+        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#405064"), Margin = new Thickness(4, 2, 4, 6) });
+        foreach (Button tool in tools.Children) tool.Style = (Style)FindResource("PanelTool");
         controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
     }
@@ -117,21 +109,32 @@ public partial class DockBar
     {
         var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
         panel.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(path), Stroke = ControlBrush("#B4D9ED"), StrokeThickness = 1.6, Width = 23, Height = 23, Stretch = Stretch.Uniform, Margin = new Thickness(0, 2, 0, 8) });
-        panel.Children.Add(ControlText(title)); return panel;
+        var label = ControlText(title, 11); label.HorizontalAlignment = HorizontalAlignment.Center;
+        panel.Children.Add(label); return panel;
     }
+    private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()
+    {
+        Data = Geometry.Parse(geometry), Stroke = ControlBrush("#CAE7F5"), StrokeThickness = 1.6,
+        StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+        Width = size, Height = size, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+    };
     private void AddRadio(Grid parent, int column, RadioKind kind, string title, string geometry)
     {
-        var section = new StackPanel { Margin = new Thickness(2) };
-        var split = new Grid(); split.ColumnDefinitions.Add(new()); split.ColumnDefinitions.Add(new() { Width = new GridLength(34) });
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse(geometry), Stroke = ControlBrush("#D8ECF5"), StrokeThickness = 1.6, Width = 22, Height = 22, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 8, 0) });
-        row.Children.Add(ControlText(title, 14));
-        var toggle = ControlButton(row, () => _ = ToggleRadio(kind), title + " 开启或关闭"); toggle.MinHeight = 52;
-        var details = ControlButton("›", () => _ = ShowRadioDetails(kind), title + " 列表与设置"); details.MinHeight = 52; details.FontSize = 22;
+        var split = new Grid { Margin = new Thickness(column == 0 ? 0 : 5, 0, column == 0 ? 5 : 0, 0) };
+        split.ColumnDefinitions.Add(new()); split.ColumnDefinitions.Add(new() { Width = new GridLength(30) });
+        var row = new Grid(); row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new());
+        row.Children.Add(ControlIcon(geometry, 22));
+        var copy = new StackPanel { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var name = ControlText(title, 13); name.FontWeight = FontWeights.SemiBold; copy.Children.Add(name);
+        var status = ControlText("读取中", 10); status.Foreground = ControlBrush("#9FB6C8"); status.Margin = new Thickness(0, 3, 0, 0); copy.Children.Add(status);
+        Grid.SetColumn(copy, 1); row.Children.Add(copy);
+        var toggle = ControlButton(row, () => _ = ToggleRadio(kind), title + " 开启或关闭");
+        toggle.Tag = "RadioLeft"; toggle.MinHeight = 60; toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(9, 9, 5, 9); toggle.BorderThickness = new Thickness(0);
+        var details = ControlButton(ControlIcon("M2,1 L8,7 L2,13", 8), () => _ = ShowRadioDetails(kind), title + " 列表与设置");
+        details.Tag = "RadioRight"; details.Margin = new Thickness(1, 0, 0, 0); details.Padding = new Thickness(8, 0, 8, 0); details.BorderThickness = new Thickness(0);
+        details.SetBinding(BackgroundProperty, new System.Windows.Data.Binding(nameof(Button.Background)) { Source = toggle });
         Grid.SetColumn(details, 1); split.Children.Add(toggle); split.Children.Add(details);
-        var status = ControlText("读取中"); status.Margin = new Thickness(10, 4, 4, 0);
-        radioViews[kind] = (toggle, status); section.Children.Add(split); section.Children.Add(status);
-        Grid.SetColumn(section, column); parent.Children.Add(section);
+        radioViews[kind] = (toggle, status); Grid.SetColumn(split, column); parent.Children.Add(split);
     }
     private async Task RefreshRadioViews()
     {
@@ -142,7 +145,7 @@ public partial class DockBar
             {
                 var state = await DockWireless.Read(kind);
                 if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
-                view.Toggle.Background = ControlBrush(state.On ? "#246E8B" : "#2B3543");
+                view.Toggle.Background = ControlBrush(state.On ? "#234D63" : "#2B3543");
                 view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
                 view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
             }
@@ -173,8 +176,9 @@ public partial class DockBar
         if (controlContent == null || wirelessBusy) return;
         NewPanelPage(); var version = panelVersion;
         var heading = new Grid(); heading.ColumnDefinitions.Add(new() { Width = new GridLength(42) }); heading.ColumnDefinitions.Add(new()); heading.ColumnDefinitions.Add(new() { Width = new GridLength(64) });
-        heading.Children.Add(ControlButton("‹", ShowControlHome, "返回控制中心"));
-        var title = ControlText(kind == RadioKind.WiFi ? "Wi-Fi" : "蓝牙", 18); Grid.SetColumn(title, 1); heading.Children.Add(title);
+        var back = ControlButton(ControlIcon("M8,1 L2,7 L8,13", 10), ShowControlHome, "返回控制中心"); back.Style = (Style)FindResource("PanelTool");
+        heading.Children.Add(back);
+        var title = ControlText(kind == RadioKind.WiFi ? "Wi-Fi" : "蓝牙", 16); title.FontWeight = FontWeights.SemiBold; title.Margin = new Thickness(6, 0, 0, 0); Grid.SetColumn(title, 1); heading.Children.Add(title);
         var toggle = ControlButton("开关", () => _ = ToggleDetailRadio(kind, version), "切换无线开关"); Grid.SetColumn(toggle, 2); heading.Children.Add(toggle);
         controlContent.Children.Add(heading);
         var list = new StackPanel(); var scroll = new ScrollViewer { Content = list, MaxHeight = 280, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -194,7 +198,7 @@ public partial class DockBar
                 if (version != panelVersion || closed) return;
                 SetPanelMessage(networks.Length == 0 ? "未发现网络" : "");
                 foreach (var network in networks)
-                    list.Children.Add(ControlButton($"{network.Name}\n{(network.Connected ? "已连接" : $"信号 {network.Signal}/5")}  ›", () => _ = ConnectNetwork(network, version)));
+                    list.Children.Add(ControlButton(DeviceRow(network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17", network.Connected), () => _ = ConnectNetwork(network, version), network.Name));
             }
             else
             {
@@ -202,10 +206,22 @@ public partial class DockBar
                 if (version != panelVersion || closed) return;
                 SetPanelMessage(devices.Length == 0 ? "暂无已配对设备，请在更多蓝牙设置中添加。" : "");
                 foreach (var device in devices)
-                    list.Children.Add(ControlButton($"{device.Name}\n{(device.Connected ? "已连接" : "已配对")}  ›", () => { CloseSystemPanel(); controller.Launch("ms-settings:bluetooth"); }));
+                    list.Children.Add(ControlButton(DeviceRow(device.Name, device.Connected ? "已连接" : "已配对", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23", device.Connected), () => { CloseSystemPanel(); controller.Launch("ms-settings:bluetooth"); }, device.Name));
             }
         }
         catch (Exception ex) when (WirelessError(ex)) { if (version == panelVersion) SetPanelMessage("无法读取列表，请使用下方系统设置。Wi-Fi 扫描可能需要位置访问许可。"); }
+    }
+    private static Grid DeviceRow(string name, string state, string icon, bool connected)
+    {
+        var row = new Grid { Margin = new Thickness(2, 4, 2, 4) };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(30) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(18) });
+        row.Children.Add(ControlIcon(icon, 20));
+        var text = new StackPanel { Margin = new Thickness(9, 0, 4, 0) };
+        var title = ControlText(name, 12); title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis; title.MaxWidth = 208;
+        text.Children.Add(title);
+        var description = ControlText(state, 10); description.Foreground = ControlBrush(connected ? "#86D7EA" : "#94A6B7"); description.Margin = new Thickness(0, 4, 0, 0); text.Children.Add(description);
+        Grid.SetColumn(text, 1); row.Children.Add(text);
+        var chevron = ControlIcon("M2,1 L8,7 L2,13", 7); Grid.SetColumn(chevron, 2); row.Children.Add(chevron); return row;
     }
     private async Task ToggleDetailRadio(RadioKind kind, long version)
     {
