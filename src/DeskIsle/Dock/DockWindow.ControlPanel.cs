@@ -141,9 +141,9 @@ public partial class DockBar
         var path = new System.Windows.Shapes.Path
         {
             Data = Geometry.Parse(kind == RadioKind.WiFi
-                ? "M2,8 Q13,-2 24,8 M5.5,13 Q13,5 20.5,13 M9.5,17 Q13,13.5 16.5,17"
+                ? "M2,9 Q13,-5 24,9 M5,14 Q13,3 21,14 M9,18 Q13,11 17,18"
                 : "M11,3 Q11,2 12,3 L19,8.5 Q19.5,9 19,9.5 L7,19 M11,23 Q11,24 12,23 L19,17.5 Q19.5,17 19,16.5 L7,7 M11,3 L11,23"),
-            Stroke = ControlBrush("#BDEAF3"), StrokeThickness = kind == RadioKind.WiFi ? 2.6 : 1.9,
+            Stroke = ControlBrush("#BDEAF3"), StrokeThickness = kind == RadioKind.WiFi ? 2.9 : 1.9,
             StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
             StrokeLineJoin = PenLineJoin.Round, Stretch = Stretch.None
         };
