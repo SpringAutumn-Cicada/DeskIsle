@@ -112,20 +112,21 @@ public partial class DockBar
         };
         Grid.SetColumn(panelVolume, 1); volumeRow.Children.Add(panelVolume);
         panelVolumeText = ControlText("—", 11); panelVolumeText.FontFamily = new FontFamily("Cascadia Mono, Consolas"); panelVolumeText.HorizontalAlignment = HorizontalAlignment.Right; Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
-        controlContent.Children.Add(new Border { Child = volumeRow, CornerRadius = new CornerRadius(15), BorderBrush = ControlBrush("#345D788C"), BorderThickness = new Thickness(1), Background = ControlBrush("#0D83BDD7"), Margin = new Thickness(0, 12, 0, 10) });
+        controlContent.Children.Add(new Border { Child = volumeRow, CornerRadius = new CornerRadius(15), BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Margin = new Thickness(0, 12, 0, 10) });
         var tools = new UniformGrid { Columns = 3 };
         tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,7 L6,7 M9,7 L10,7 M13,7 L14,7", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
         tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,13 L8,13 Q9,13 10,9 Q11,5 12,12 Q13,20 15,13 Q16,11 17,12 L19,12", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
         tools.Children.Add(ControlButton(ToolContent("M9,3 Q12,1 15,3 L15,5 L18,7 L20,7 L22,11 L20,13 L20,16 L17,20 L14,19 L11,21 L7,19 L7,17 L4,15 L2,12 L4,9 L4,6 L8,5 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
         foreach (Button tool in tools.Children) tool.Style = (Style)FindResource("PanelTool");
+        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 2, 2, 8) });
         controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
     }
     private static StackPanel ToolContent(string path, string title)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        var icon = ControlIcon(path, 20); icon.StrokeThickness = 1.4; icon.Margin = new Thickness(0, 0, 6, 0); panel.Children.Add(icon);
-        var label = ControlText(title, 10); label.HorizontalAlignment = HorizontalAlignment.Center;
+        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        var icon = ControlIcon(path, 25); icon.StrokeThickness = 1.5; icon.Margin = new Thickness(0, 0, 0, 9); panel.Children.Add(icon);
+        var label = ControlText(title, 11); label.HorizontalAlignment = HorizontalAlignment.Center;
         panel.Children.Add(label); return panel;
     }
     private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()
@@ -164,7 +165,7 @@ public partial class DockBar
             {
                 var state = await DockWireless.Read(kind);
                 if (closed || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
-                view.Toggle.Background = ControlBrush(state.On ? "#234B6171" : "#0D67869B");
+                view.Toggle.Background = ControlBrush(state.On ? "#234E60" : "#293642");
                 view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
                 view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
             }
@@ -200,16 +201,23 @@ public partial class DockBar
         var title = ControlText(kind == RadioKind.WiFi ? "Wi-Fi" : "蓝牙", 16); title.FontWeight = FontWeights.SemiBold; title.Margin = new Thickness(6, 0, 0, 0); Grid.SetColumn(title, 1); heading.Children.Add(title);
         var toggle = ControlButton("开关", () => _ = ToggleDetailRadio(kind, version), "切换无线开关"); Grid.SetColumn(toggle, 2); heading.Children.Add(toggle);
         controlContent.Children.Add(heading);
-        var list = new StackPanel(); var scroll = new ScrollViewer { Content = list, MaxHeight = 280, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 10, 2, 6) });
+        var list = new StackPanel();
+        var scroll = new ScrollViewer { Content = list, MaxHeight = 256, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 2, 0, 6), PanningMode = PanningMode.VerticalOnly };
+        scroll.Resources.Add(typeof(ScrollBar), FindResource("SoftScrollBar"));
         controlContent.Children.Add(scroll);
         controlContent.Children.Add(controlMessage!); SetPanelMessage("正在读取…");
-        controlContent.Children.Add(ControlButton(kind == RadioKind.WiFi ? "更多 Wi-Fi 设置  ›" : "更多蓝牙设置  ›", () => { CloseSystemPanel(); controller.Launch(kind == RadioKind.WiFi ? "ms-settings:network-wifi" : "ms-settings:bluetooth"); }));
-        controlContent.Children.Add(ControlButton("刷新", () => _ = ShowRadioDetails(kind)));
+        var footer = new Grid { Margin = new Thickness(0, 8, 0, 0) }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = new GridLength(40) });
+        var settings = ControlButton(DeviceRow(kind == RadioKind.WiFi ? "更多 Wi-Fi 设置" : "更多蓝牙设置", "", "M9,3 Q12,1 15,3 L15,5 L18,7 L20,7 L22,11 L20,13 L20,16 L17,20 L14,19 L11,21 L7,19 L7,17 L4,15 L2,12 L4,9 L4,6 L8,5 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12", false), () => { CloseSystemPanel(); controller.Launch(kind == RadioKind.WiFi ? "ms-settings:network-wifi" : "ms-settings:bluetooth"); }, "打开系统无线设置");
+        settings.Style = (Style)FindResource("PanelListAction"); footer.Children.Add(settings);
+        var refresh = ControlButton(ControlIcon("M20,8 A9,9 0 1 0 21,15 M20,3 L20,9 L14,9", 17), () => _ = ShowRadioDetails(kind), "刷新设备列表");
+        refresh.Style = (Style)FindResource("PanelTool"); refresh.ToolTip = "刷新"; Grid.SetColumn(refresh, 1); footer.Children.Add(refresh);
+        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 4, 2, 0) }); controlContent.Children.Add(footer);
         try
         {
             var state = await DockWireless.Read(kind);
             if (version != panelVersion || closed) return;
-            toggle.Content = state.On ? "已开启" : "已关闭"; toggle.IsEnabled = state.Available && !state.Locked;
+            toggle.Content = PowerState(state.On); toggle.ToolTip = state.On ? "点击关闭" : "点击开启"; toggle.IsEnabled = state.Available && !state.Locked;
             if (!state.Available || !state.On) { SetPanelMessage(!state.Available ? "没有可用设备" : "无线已关闭，请先开启"); return; }
             if (kind == RadioKind.WiFi)
             {
@@ -217,7 +225,7 @@ public partial class DockBar
                 if (version != panelVersion || closed) return;
                 SetPanelMessage(networks.Length == 0 ? "未发现网络" : "");
                 foreach (var network in networks)
-                    list.Children.Add(ControlButton(DeviceRow(network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17", network.Connected), () => _ = ConnectNetwork(network, version), network.Name));
+                    AddDeviceButton(list, network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", WiFiShape(network.Signal), network.Connected, () => _ = ConnectNetwork(network, version));
             }
             else
             {
@@ -225,10 +233,26 @@ public partial class DockBar
                 if (version != panelVersion || closed) return;
                 SetPanelMessage(devices.Length == 0 ? "暂无已配对设备，请在更多蓝牙设置中添加。" : "");
                 foreach (var device in devices)
-                    list.Children.Add(ControlButton(DeviceRow(device.Name, device.Connected ? "已连接" : "已配对", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23", device.Connected), () => { CloseSystemPanel(); controller.Launch("ms-settings:bluetooth"); }, device.Name));
+                    AddDeviceButton(list, device.Name, device.Connected ? "已连接" : "已配对", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23", device.Connected, () => { CloseSystemPanel(); controller.Launch("ms-settings:bluetooth"); });
             }
         }
         catch (Exception ex) when (WirelessError(ex)) { if (version == panelVersion) SetPanelMessage("无法读取列表，请使用下方系统设置。Wi-Fi 扫描可能需要位置访问许可。"); }
+    }
+    private static string WiFiShape(byte signal) => "M12,21 L12,21.1" + (signal >= 1 ? " M9,17 Q12,14 15,17" : "") + (signal >= 3 ? " M5,12 Q12,5 19,12" : "") + (signal >= 4 ? " M1,7 Q12,-2 23,7" : "");
+    private static StackPanel PowerState(bool on)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        row.Children.Add(new System.Windows.Shapes.Ellipse { Width = 5, Height = 5, Fill = ControlBrush(on ? "#8BDCEA" : "#899BA9"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        row.Children.Add(ControlText(on ? "开启" : "关闭", 11)); return row;
+    }
+    private void AddDeviceButton(StackPanel list, string name, string state, string icon, bool connected, Action action)
+    {
+        var button = ControlButton(DeviceRow(name, state, icon, connected), action, name);
+        button.Style = (Style)FindResource("PanelListAction");
+        button.ToolTip = name;
+        if (connected) button.Background = ControlBrush("#243F50");
+        list.Children.Add(button);
+        list.Children.Add(new Border { Height = .5, Background = ControlBrush("#203F5667"), Margin = new Thickness(48, 0, 12, 0) });
     }
     private static Grid DeviceRow(string name, string state, string icon, bool connected)
     {
@@ -238,7 +262,7 @@ public partial class DockBar
         var text = new StackPanel { Margin = new Thickness(9, 0, 4, 0) };
         var title = ControlText(name, 12); title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis; title.MaxWidth = 208;
         text.Children.Add(title);
-        var description = ControlText(state, 10); description.Foreground = ControlBrush(connected ? "#86D7EA" : "#94A6B7"); description.Margin = new Thickness(0, 4, 0, 0); text.Children.Add(description);
+        var description = ControlText(state, 10); description.Foreground = ControlBrush(connected ? "#86D7EA" : "#94A6B7"); description.Margin = new Thickness(0, 4, 0, 0); if (!string.IsNullOrEmpty(state)) text.Children.Add(description);
         Grid.SetColumn(text, 1); row.Children.Add(text);
         var chevron = ControlIcon("M2,1 L8,7 L2,13", 7); Grid.SetColumn(chevron, 2); row.Children.Add(chevron); return row;
     }
