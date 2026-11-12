@@ -13,6 +13,7 @@ internal static class DockNative
     [DllImport("user32.dll")] internal static extern bool UnhookWinEvent(nint hook);
     internal delegate bool EnumProc(nint window, nint param);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumProc callback, nint param);
+    [DllImport("user32.dll")] internal static extern bool IsWindowEnabled(nint window);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint window);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint window);
     [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window, uint flags);

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Runtime.InteropServices;
 using System.Windows;
 namespace DeskIsle.Dock;
@@ -49,24 +48,9 @@ internal sealed partial class DockController
         nint handle = 0; uint owner = 0;
         foreach (var window in remembered.Where(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!DockNative.IsWindow(window.Handle) || !Uncloaked(window.Handle) || DockNative.GetWindow(window.Handle, 4) != 0) continue;
+            if (!DockNative.IsWindow(window.Handle) || !DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle) || !Uncloaked(window.Handle) || DockNative.GetWindow(window.Handle, 4) != 0) continue;
             DockNative.GetWindowThreadProcessId(window.Handle, out var pid);
             if (ids.Contains(pid)) { handle = window.Handle; owner = pid; break; }
-        }
-        // WeChat recreates its main window after closing to the tray. Do not reveal arbitrary Qt/helper windows.
-        if (handle == 0 && ids.Count > 0 && Path.GetFileNameWithoutExtension(pin.Executable).ToLowerInvariant() is "weixin" or "wechat")
-        {
-            DockNative.EnumWindows((window, _) =>
-            {
-                DockNative.GetWindowThreadProcessId(window, out var pid);
-                if (!ids.Contains(pid) || !Uncloaked(window) || DockNative.GetWindow(window, 4) != 0 || (DockNative.GetWindowLong(window, -20) & 0x80) != 0) return true;
-                var title = new StringBuilder(256); DockNative.GetWindowText(window, title, title.Capacity);
-                var text = title.ToString().Trim();
-                var cls = DockNative.Class(window);
-                if ((text is "微信" or "WeChat" or "Weixin") && (cls.StartsWith("Qt", StringComparison.Ordinal) || cls.StartsWith("WeChat", StringComparison.Ordinal)))
-                { handle = window; owner = pid; return false; }
-                return true;
-            }, 0);
         }
         return new(ids.Count > 0, uncertain, handle, owner);
     }
@@ -82,22 +66,55 @@ internal sealed partial class DockController
             if (app.Handle != 0 && DockNative.IsWindow(app.Handle))
             {
                 DockNative.GetWindowThreadProcessId(app.Handle, out var pid);
-                if (pid == app.ProcessId)
+                if (pid == app.ProcessId && DockNative.IsWindowVisible(app.Handle) && DockNative.IsWindowEnabled(app.Handle))
                 {
-                    DockNative.ShowWindowAsync(app.Handle, DockNative.IsIconic(app.Handle) ? 9 : 5);
+                    if (DockNative.IsIconic(app.Handle)) DockNative.ShowWindowAsync(app.Handle, 9);
                     DockNative.SetForegroundWindow(app.Handle);
                     settle.Start(); return;
                 }
             }
             if (app.Running || app.Uncertain)
             {
-                MessageBox.Show("应用已在后台运行，或当前权限无法确认其主窗口。请使用上层 Dock 的后台应用入口，打开原生托盘恢复。需要另开实例时，可右键选择“打开新窗口”。", "DeskIsle Dock");
+                await RestoreThroughTray(pin);
                 return;
             }
             if (launchIfMissing) Launch(pin.Path);
             else settle.Start();
         }
+        catch (Exception ex) when (Recoverable(ex))
+        { MessageBox.Show("应用恢复未完成，请从原生托盘打开：" + ex.Message, "DeskIsle Dock"); }
         finally { opening.Remove(key); }
+    }
+    private CancellationTokenSource? trayRestore;
+    private async Task RestoreThroughTray(DockPin pin)
+    {
+        if (disposed || lease == null || trayRestore != null) return;
+        var openedNative = !lease.NativeMode;
+        if (openedNative) ToggleNative();
+        if (Path.GetFileNameWithoutExtension(pin.Executable ?? pin.Path).ToLowerInvariant() is not ("wechat" or "weixin")) return;
+        using var request = new CancellationTokenSource();
+        trayRestore = request;
+        try
+        {
+            await Task.Delay(120, request.Token);
+            if (disposed || lease == null || !lease.NativeMode) return;
+            var invoked = await DockTrayActivation.TryWeChat(DockNative.Taskbars(), request.Token);
+            if (!invoked || disposed || lease == null || request.IsCancellationRequested) return;
+            // Only return to Dock after the application has actually exposed an enabled main window.
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                await Task.Delay(120, request.Token);
+                if (disposed || lease == null || !lease.NativeMode) return;
+                var restored = await Task.Run(DockApps.Windows);
+                if (request.IsCancellationRequested) return;
+                if (!restored.Any(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle))) continue;
+                if (openedNative) ToggleNative();
+                settle.Start(); return;
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally { if (ReferenceEquals(trayRestore, request)) trayRestore = null; }
+        // Unknown shell layouts or unavailable InvokePattern leave native tray open for manual restore.
     }
     private static readonly HashSet<string> TrayClients = new(StringComparer.OrdinalIgnoreCase)
     { "WeChat", "Weixin", "QQ", "TIM", "WXWork", "DingTalk", "Telegram", "OneDrive" };

@@ -143,6 +143,7 @@ internal sealed partial class DockController : IDisposable
     }
     internal void ToggleNative()
     {
+        trayRestore?.Cancel();
         if (lease == null) return;
         var native = !lease.NativeMode;
         lease.Native(native);
@@ -273,6 +274,7 @@ internal sealed partial class DockController : IDisposable
     private static bool Recoverable(Exception ex) => ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException or System.Text.Json.JsonException;
     private void Stop()
     {
+        trayRestore?.Cancel();
         pointer.Stop(); refresh.Stop(); settle.Stop();
         StopAttention();
         if (windowHook != 0) { DockNative.UnhookWinEvent(windowHook); windowHook = 0; }

@@ -225,6 +225,8 @@ public partial class DockBar : Window
             var root = DockNative.GetAncestor(foreground, 3);
             var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
+            if (view.Pin != null && view.Windows.All(w => !DockNative.IsWindowVisible(w.Handle) || !DockNative.IsWindowEnabled(w.Handle)))
+            { controller.OpenPinned(view.Pin); return; }
             if (active != null)
             {
                 splitGroups.Observe(view.Windows);
@@ -354,8 +356,13 @@ public partial class DockBar : Window
         previewDelay.Stop();
         var previous = preview; preview = null; previous?.Close();
     }
-    private static void Activate(DockWindow window)
+    private void Activate(DockWindow window)
     {
+        if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle))
+        {
+            if (window.Executable is { } path) controller.OpenPinned(new DockPin(path, path, window.Title), false);
+            return;
+        }
         if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);
         DockNative.SetForegroundWindow(window.Handle);
     }
