@@ -39,11 +39,12 @@
 <Grid x:Name="NetworkKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeLineJoin="Round" x:Name="NetworkGlyph" Data="M1,11 A14,14 0 0 1 23,11 M4.5,15 A9.5,9.5 0 0 1 19.5,15 M8,19 A5,5 0 0 1 16,19 M12,23 L12,23.2" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="22" Height="22" Stretch="Uniform"/></Grid>
 <Grid x:Name="AudioKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeEndLineCap="Round" StrokeStartLineCap="Round" StrokeLineJoin="Round" x:Name="AudioGlyph" Data="M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17 M20,3 Q30,12 20,21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" Width="34" Height="24" Stretch="None"><Path.LayoutTransform><ScaleTransform ScaleX="0.70" ScaleY="0.70"/></Path.LayoutTransform></Path></Grid>
 <Grid x:Name="BatteryKey" Width="34" Height="28">
-<Viewbox Width="28" Height="18" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center"><Grid Width="32" Height="20">
-<Path x:Name="BatteryGlyph" Data="M5,2 L23,2 Q27,2 27,6 L27,14 Q27,18 23,18 L5,18 Q1,18 1,14 L1,6 Q1,2 5,2 Z M28,7 Q31,7 31,9 L31,11 Q31,13 28,13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.9" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-<TextBlock x:Name="BatteryText" Text="—" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="11" FontWeight="Bold" Margin="1,2,5,2" TextAlignment="Center" Typography.NumeralAlignment="Tabular" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-</Grid></Viewbox>
-<Path x:Name="ChargingGlyph" Data="M5,0 L1,6 L5,6 L1,12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="5" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
+<Viewbox Width="31" Height="25" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"><Canvas Width="34" Height="28">
+<Rectangle Canvas.Left="2" Canvas.Top="7" Width="27" Height="17" RadiusX="4" RadiusY="4" Fill="#142331"/>
+<Border Canvas.Left="4" Canvas.Top="9" Width="23" Height="13" CornerRadius="2.5"><Border.Clip><RectangleGeometry Rect="0,0,23,13" RadiusX="2.5" RadiusY="2.5"/></Border.Clip><Rectangle x:Name="BatteryFill" Width="0" Height="13" HorizontalAlignment="Left" Fill="#8BEAF0"/></Border>
+<Path x:Name="BatteryGlyph" Data="M6,7 L25,7 Q29,7 29,11 L29,20 Q29,24 25,24 L6,24 Q2,24 2,20 L2,11 Q2,7 6,7 Z M30,12 L32,12 L32,19 L30,19" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+<Path x:Name="ChargingGlyph" Data="M18,1 L11,14 L16,14 L13,26 L23,11 L18,11 Z" Fill="#F2FBFF" Stroke="#142331" StrokeThickness="1.4" StrokeLineJoin="Round" Visibility="Collapsed"/>
+</Canvas></Viewbox>
 </Grid>
 </StackPanel></Button>
 </StackPanel></Border>

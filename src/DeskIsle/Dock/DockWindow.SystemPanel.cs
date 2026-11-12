@@ -50,13 +50,11 @@ public partial class DockBar
             var powerAvailable = DockPower.GetSystemPowerStatus(out var power);
             BatteryKey.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 128) != 0 ? Visibility.Collapsed : Visibility.Visible;
             ChargingGlyph.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 8) != 0 ? Visibility.Visible : Visibility.Collapsed;
-            // Follow the same foreground and hover colour as the other status icons.
-            BatteryGlyph.ClearValue(System.Windows.Shapes.Shape.StrokeProperty);
-            BatteryGlyph.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding("Foreground") { Source = StatusKey });
-            BatteryText.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = StatusKey });
-            ChargingGlyph.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding("Foreground") { Source = StatusKey });
-            BatteryGlyph.Fill = Brushes.Transparent;
-            BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}" : "—";
+            var knownCharge = powerAvailable && power.Percent <= 100;
+            BatteryFill.Width = knownCharge ? 23 * power.Percent / 100.0 : 0;
+            BatteryFill.Fill = new SolidColorBrush(knownCharge && power.Percent <= 20
+                ? Color.FromRgb(255, 204, 119) : Color.FromRgb(139, 234, 240));
+            BatteryGlyph.Opacity = knownCharge ? 1 : .5;
             BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
             if (systemPopup?.IsOpen == true && radioViews.Count > 0) await RefreshRadioViews();
