@@ -20,7 +20,7 @@ internal sealed class ControlBubble : Decorator
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
-        double left = 8, top = 8, right = ActualWidth - 8, bottom = ActualHeight - 18, radius = 22;
+        double left = 8, top = 8, right = ActualWidth - 8, bottom = ActualHeight - 18, radius = 18;
         if (right - left < 60 || bottom - top < 40) return;
         var pointer = ActualWidth / 2;
         var shape = new StreamGeometry();
@@ -41,7 +41,7 @@ internal sealed class ControlBubble : Decorator
             g.QuadraticBezierTo(new Point(left, top), new Point(left + radius, top), true, false);
         }
         shape.Freeze();
-        var fill = new LinearGradientBrush(Color.FromArgb(253, 31, 43, 55), Color.FromArgb(253, 28, 38, 49), new Point(0, 0), new Point(1, 1));
-        dc.DrawGeometry(fill, new Pen(new SolidColorBrush(Color.FromArgb(170, 117, 153, 173)), 1), shape);
+        var fill = new LinearGradientBrush(Color.FromArgb(253, 39, 47, 56), Color.FromArgb(253, 23, 29, 36), new Point(0, 0), new Point(1, 1));
+        dc.DrawGeometry(fill, new Pen(new SolidColorBrush(Color.FromArgb(170, 136, 158, 176)), 1), shape);
     }
 }
