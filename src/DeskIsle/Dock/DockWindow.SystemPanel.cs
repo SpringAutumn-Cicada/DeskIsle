@@ -80,14 +80,13 @@ public partial class DockBar
     }
     private static Geometry VolumeGeometry(float level, bool muted)
     {
-        // Keep identical bounds so waves changing never make the speaker body jump in size.
-        const string bounds = "M0,0 M32,24 ";
+        var percent = (int)Math.Round(Math.Clamp(level, 0, 1) * 100);
         const string speaker = "M3,8 L8,8 L14,3 Q15,2 15,4 L15,20 Q15,22 14,21 L8,16 L3,16 Q2,16 2,15 L2,9 Q2,8 3,8 Z ";
-        var waves = muted || level <= 0 ? "M20,8 L28,16 M28,8 L20,16" :
-            level <= .33f ? "M19,9 Q23,12 19,15" :
-            level <= .66f ? "M19,9 Q23,12 19,15 M23,6 Q30,12 23,18" :
+        var waves = muted || percent == 0 ? "M20,8 L28,16 M28,8 L20,16" :
+            percent <= 33 ? "M19,9 Q23,12 19,15" :
+            percent <= 66 ? "M19,9 Q23,12 19,15 M23,6 Q30,12 23,18" :
             "M19,9 Q23,12 19,15 M23,6 Q30,12 23,18 M27,3 Q37,12 27,21";
-        var geometry = Geometry.Parse(bounds + speaker + waves); geometry.Freeze(); return geometry;
+        var geometry = Geometry.Parse(speaker + waves); geometry.Freeze(); return geometry;
     }
     private void CloseSystemPanel()
     {

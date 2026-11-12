@@ -20,7 +20,8 @@ public partial class DockBar
     private Button ControlButton(object content, Action action, string? accessibleName = null)
     {
         var button = new Button { Content = content, Style = (Style)FindResource("PanelAction") };
-        System.Windows.Automation.AutomationProperties.SetName(button, accessibleName ?? content.ToString() ?? "控制");
+        var label = accessibleName ?? (content is StackPanel stack ? stack.Children.OfType<TextBlock>().LastOrDefault()?.Text : null) ?? content.ToString() ?? "控制";
+        System.Windows.Automation.AutomationProperties.SetName(button, label);
         button.Click += (_, _) => action();
         return button;
     }
@@ -97,6 +98,8 @@ public partial class DockBar
         var volumeRow = new Grid { Margin = new Thickness(8, 2, 8, 2) };
         volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(36) }); volumeRow.ColumnDefinitions.Add(new()); volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(42) });
         panelMuteGlyph = ControlIcon("M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17", 21);
+        panelMuteGlyph.Stretch = Stretch.None; panelMuteGlyph.Width = 34; panelMuteGlyph.Height = 24;
+        panelMuteGlyph.LayoutTransform = new ScaleTransform(.64, .64);
         panelMute = ControlButton(panelMuteGlyph, () => { DockAudio.Access(v => { v.GetMute(out var mute); v.SetMute(!mute, 0); }); ReadAudio(); }, "静音或取消静音");
         panelMute.Style = (Style)FindResource("PanelTool"); panelMute.Padding = new Thickness(6); volumeRow.Children.Add(panelMute);
         panelVolume = new Slider { Style = (Style)FindResource("PanelVolumeSlider"), Minimum = 0, Maximum = 100, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Foreground = ControlBrush("#42BFE8") };
