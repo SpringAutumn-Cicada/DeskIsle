@@ -78,7 +78,7 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; CloseSystemPanel(); statusTick.Stop(); foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); clockTick.Stop(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; CancelRevealFrame(); CloseSystemPanel(); statusTick.Stop(); foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); clockTick.Stop(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();

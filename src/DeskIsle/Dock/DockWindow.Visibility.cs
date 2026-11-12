@@ -9,6 +9,12 @@ public partial class DockBar
     private readonly TranslateTransform visibilityOffset = new();
     private bool wantedVisible, fadingOut;
     private long visibilityVersion;
+    private EventHandler? revealFrame;
+    internal void CancelRevealFrame()
+    {
+        if (revealFrame == null) return;
+        CompositionTarget.Rendering -= revealFrame; revealFrame = null;
+    }
     internal bool IsHiding => fadingOut;
 
     internal void RevealAnimated()
@@ -16,15 +22,28 @@ public partial class DockBar
         if (closed) return;
         if (wantedVisible && IsVisible) return;
         var wasVisible = IsVisible;
+        CancelRevealFrame();
         wantedVisible = true; fadingOut = false;
         var version = ++visibilityVersion;
         DockAssembly.RenderTransform = visibilityOffset;
         if (!wasVisible)
         {
-            BeginAnimation(OpacityProperty, null); Opacity = 0;
-            visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null); visibilityOffset.Y = 8;
+            Opacity = 0; BeginAnimation(OpacityProperty, null);
+            visibilityOffset.Y = 8; visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null);
             // The layered window is transparent until layout and native placement are ready.
             Show(); UpdateLayout(); Place();
+            // Keep the first composed frame transparent, then animate from the prepared layout.
+            var frames = 0;
+            revealFrame = (_, _) =>
+            {
+                if (closed || version != visibilityVersion || !wantedVisible) { CancelRevealFrame(); return; }
+                if (++frames < 2) return;
+                CancelRevealFrame();
+                UpdateLayout(); Place();
+                AnimateVisibility(1, 0, 180, version, false);
+            };
+            CompositionTarget.Rendering += revealFrame;
+            return;
         }
         AnimateVisibility(1, 0, 180, version, false);
     }
@@ -32,11 +51,13 @@ public partial class DockBar
     internal void HideAnimated(bool immediate = false)
     {
         if (closed) return;
+        CancelRevealFrame();
         if (immediate)
         {
             ++visibilityVersion; wantedVisible = false; fadingOut = false;
+            Opacity = 0; visibilityOffset.Y = 6;
             BeginAnimation(OpacityProperty, null); visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null);
-            Opacity = 0; visibilityOffset.Y = 6; Hide(); return;
+            Hide(); return;
         }
         if (!IsVisible || fadingOut) return;
         wantedVisible = false; fadingOut = true;
@@ -47,8 +68,10 @@ public partial class DockBar
     {
         var currentOpacity = Opacity;
         var currentOffset = visibilityOffset.Y;
-        BeginAnimation(OpacityProperty, null); Opacity = currentOpacity;
-        visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null); visibilityOffset.Y = currentOffset;
+        // Set the base value while the old clock still holds its current frame.
+        // Removing a clock must never briefly expose the old (often zero) base value.
+        Opacity = currentOpacity; BeginAnimation(OpacityProperty, null);
+        visibilityOffset.Y = currentOffset; visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null);
         if (!SystemParameters.ClientAreaAnimation)
         {
             Opacity = opacity; visibilityOffset.Y = offset; fadingOut = false;
@@ -61,8 +84,9 @@ public partial class DockBar
         fade.Completed += (_, _) =>
         {
             if (closed || version != visibilityVersion) return;
-            BeginAnimation(OpacityProperty, null); Opacity = opacity;
-            visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null); visibilityOffset.Y = offset;
+            Opacity = opacity; visibilityOffset.Y = offset;
+            BeginAnimation(OpacityProperty, null);
+            visibilityOffset.BeginAnimation(TranslateTransform.YProperty, null);
             fadingOut = false;
             if (hide && !wantedVisible) Hide();
         };

@@ -196,7 +196,7 @@ internal sealed partial class DockController : IDisposable
         if (bar == null || lease == null || lease.NativeMode) return;
         if (bar.WindowState == WindowState.Minimized) bar.WindowState = WindowState.Normal;
         bar.Place(); bar.RevealAnimated();
-        DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x40);
+        DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
         awaySince = Environment.TickCount64;
     }
     private void PointerTick(object? sender, EventArgs e)
