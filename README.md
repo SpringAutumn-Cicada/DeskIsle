@@ -194,3 +194,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.7：针对 WinUI 隐藏栏在旧托管 UIA 下返回空树的问题，增加原生 CUIAutomation8 和 Composition bridge 读取通道，细化读取阶段诊断。详见 [WinUI 托盘原生读取修复](docs/WinUI托盘原生读取修复.md)。
 
 1.11.8：取消关闭到托盘后的后台恢复，删除托盘识别、隐藏栏展开、目标选择和诊断代码。Dock 仅预览并激活正常窗口（含最小化窗口），无窗口时固定图标沿用普通启动。日常请使用最小化保留 Dock 切换。详见 [取消托盘恢复](docs/取消托盘后台恢复.md)。
+
+1.11.9：显示桌面改为原创小机器人矢量按钮，移除其右侧分界线，与状态区组成协调的紧凑组合，同时保持独立点击。详见 [机器人显示桌面按钮](docs/机器人显示桌面按钮.md)。

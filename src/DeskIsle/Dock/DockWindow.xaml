@@ -18,8 +18,22 @@
 <Border Width="1" Background="#506077" Margin="6,8"/>
 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center"><StackPanel x:Name="Apps" Orientation="Horizontal"/></ScrollViewer>
 <Border Width="1" Background="#506077" Margin="8,8"/>
-<Button Style="{StaticResource ControlKey}" Width="54" Height="52" ToolTip="显示桌面（Win+D）" AutomationProperties.Name="显示桌面" Click="ShowDesktopClick"><Grid Width="48" Height="46"><Border CornerRadius="15" Background="#18386677" BorderBrush="#6075BED9" BorderThickness="1"/><Path StrokeEndLineCap="Round" StrokeStartLineCap="Round" StrokeLineJoin="Round" Data="M8,14 L8,8 L16,8 M32,38 L40,38 L40,32" Stroke="#6CE5ED" StrokeThickness="1.2"/><Path StrokeEndLineCap="Round" StrokeStartLineCap="Round" StrokeLineJoin="Round" Data="M5,3 L19,3 Q22,3 22,6 L22,14 Q22,17 19,17 L5,17 Q2,17 2,14 L2,6 Q2,3 5,3 Z M12,17 L12,22 M7,22 L17,22" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.7" Width="23" Height="23" Stretch="Uniform"/></Grid></Button>
-<Border Width="1" Background="#506077" Margin="8,8"/>
+<!-- One visual family, two separate click targets: desktop companion and system status. -->
+<Border CornerRadius="21" Background="#092E5367" Padding="3,1" VerticalAlignment="Center">
+<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+<Button Style="{StaticResource ControlKey}" Width="46" Height="46" Margin="0,0,5,0" ToolTip="显示桌面（Win+D）" AutomationProperties.Name="显示桌面" Click="ShowDesktopClick">
+<Grid Width="40" Height="40">
+<Border CornerRadius="14" Background="#22365B70" BorderBrush="#304F8399" BorderThickness="0.7"/>
+<!-- Original asymmetric antenna, rounded visor, eyes and floating lower body. -->
+<Canvas Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center">
+<Path Data="M16,8 L16,4 L21,4" Stroke="#74D9E8" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+<Ellipse Width="3" Height="3" Canvas.Left="20" Canvas.Top="2.5" Fill="#91E7EF"/>
+<Path Data="M9,9 Q5,9 5,14 L5,21 Q5,25 10,25 L22,25 Q27,25 27,21 L27,14 Q27,9 23,9 Z" Fill="#183C738A" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeLineJoin="Round"/>
+<Path Data="M2,16 L2,20 M30,16 L30,20" Stroke="#79C8DA" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+<Path Data="M11,15 L11,18 M21,15 L21,18" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+<Path Data="M14,21 Q16,22 18,21 M12,28 L20,28" Stroke="#74D9E8" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+</Canvas>
+</Grid></Button>
 <Button x:Name="StatusKey" Style="{StaticResource ControlKey}" Width="112" ToolTip="网络、蓝牙与音量控制" AutomationProperties.Name="打开控制中心" Click="QuickSettingsClick">
 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 <Grid x:Name="NetworkKey" Width="28" Height="28" Margin="0,0,6,0"><Path StrokeLineJoin="Round" x:Name="NetworkGlyph" Data="M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="20" Height="20" Stretch="Uniform"/></Grid>
@@ -32,4 +46,5 @@
 <Path x:Name="ChargingGlyph" Data="M5,0 L1,6 L5,6 L1,12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="5" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
 </Grid>
 </StackPanel></Button>
+</StackPanel></Border>
 </StackPanel></Border></StackPanel></Window>
