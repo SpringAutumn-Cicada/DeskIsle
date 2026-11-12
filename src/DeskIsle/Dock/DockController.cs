@@ -73,6 +73,7 @@ internal sealed partial class DockController : IDisposable
                 }
                 Settings.Enabled = true;
                 bar!.Surface.Opacity = Settings.Opacity;
+                bar.TerminalSurface.Opacity = Settings.Opacity;
                 RegisterKey(); pointer.Start(); refresh.Start();
                 _ = Refresh();
                 Reveal();
@@ -223,6 +224,7 @@ internal sealed partial class DockController : IDisposable
             if (disposed || lease == null) return;
             if (!requested.SequenceEqual(Settings.Pins, StringComparer.OrdinalIgnoreCase)) return;
             windows = snapshot; pins = nextPins; resolvedPaths = requested;
+            RememberApplications();
             bar?.SetApps(pins, windows);
         }
         catch (Exception ex) when (Recoverable(ex)) { /* Preserve last snapshot; try again on the next event/tick. */ }

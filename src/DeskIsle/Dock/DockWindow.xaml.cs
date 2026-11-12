@@ -39,12 +39,13 @@ public partial class DockBar : Window
     private readonly DispatcherTimer previewDelay = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private WindowPreview? preview;
     private AppView? hoveredView;
-    internal bool Interacting => dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled;
+    internal bool Interacting => dragging || menuOpen || preview?.IsVisible == true || previewDelay.IsEnabled || systemPopup?.IsOpen == true;
     internal DockBar(DockController controller)
     {
         this.controller = controller;
         InitializeComponent();
         Surface.Opacity = controller.Settings.Opacity;
+        InitializeSystemPanel();
         UpdateClock();
         clockTick.Tick += (_, _) => UpdateClock();
         IsVisibleChanged += (_, _) => { if (IsVisible) { UpdateClock(); clockTick.Start(); } else clockTick.Stop(); };
@@ -53,7 +54,7 @@ public partial class DockBar : Window
             previewDelay.Stop();
             if (hoveredView is { } view && view.Button.IsMouseOver && !dragging && !menuOpen) ShowPreview(view);
         };
-        IsVisibleChanged += (_, _) => { if (!IsVisible) ClosePreview(); };
+        IsVisibleChanged += (_, _) => { if (!IsVisible) { ClosePreview(); CloseSystemPanel(); } };
         SizeChanged += (_, _) => Place();
         DpiChanged += (_, _) =>
         {
@@ -77,14 +78,15 @@ public partial class DockBar : Window
         return 0;
     }
     protected override void OnClosed(EventArgs e)
-    { closed = true; foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); clockTick.Stop(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
+    { closed = true; CloseSystemPanel(); statusTick.Stop(); foreach (var view in views.Values) view.Indicator.BeginAnimation(OpacityProperty, null); clockTick.Stop(); ClosePreview(); source?.RemoveHook(MouseActivation); base.OnClosed(e); }
     internal void Place()
     {
         var primary = DockNative.Primary();
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(0, b.X - a.X - 350);
+        Scroller.MaxWidth = Math.Max(0, b.X - a.X - 200);
+        DockAssembly.MaxWidth = Math.Max(100, b.X - a.X - 16);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;
     }
@@ -244,7 +246,7 @@ public partial class DockBar : Window
                 var recent = view.Windows.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? view.Windows.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? view.Windows[0];
                 view.RecentWindow = recent.Handle; Activate(recent);
             }
-            else if (view.Pin != null) controller.Launch(view.Pin.Path);
+            else if (view.Pin != null) controller.OpenPinned(view.Pin);
         };
         button.PreviewMouseLeftButtonDown += (_, e) => { pressedForeground = controller.ForegroundForClick(); down = e.GetPosition(this); dragPin = view.Pin?.Path; };
         button.PreviewMouseMove += (_, e) =>
@@ -340,6 +342,7 @@ public partial class DockBar : Window
     {
         var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle)).ToArray();
         if (closed || !IsVisible || live.Length == 0) return;
+        CloseSystemPanel();
         ClosePreview();
         hoveredView = view;
         preview = new WindowPreview(this, view.Button, live, view.Image.Source,

@@ -18,7 +18,7 @@ public partial class DockBar
         var wasVisible = IsVisible;
         wantedVisible = true; fadingOut = false;
         var version = ++visibilityVersion;
-        Surface.RenderTransform = visibilityOffset;
+        DockAssembly.RenderTransform = visibilityOffset;
         if (!wasVisible)
         {
             BeginAnimation(OpacityProperty, null); Opacity = 0;
