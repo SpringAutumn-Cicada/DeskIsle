@@ -85,7 +85,7 @@ public partial class DockBar : Window
         var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var a = scale.Transform(new Point(primary.Monitor.Left, primary.Monitor.Top));
         var b = scale.Transform(new Point(primary.Monitor.Right, primary.Monitor.Bottom));
-        Scroller.MaxWidth = Math.Max(0, b.X - a.X - 200);
+        Scroller.MaxWidth = Math.Max(0, b.X - a.X - 230);
         DockAssembly.MaxWidth = Math.Max(100, b.X - a.X - 16);
         Left = a.X + (b.X - a.X - ActualWidth) / 2;
         Top = b.Y - ActualHeight - 12;

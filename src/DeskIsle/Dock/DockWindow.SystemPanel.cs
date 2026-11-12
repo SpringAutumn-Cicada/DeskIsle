@@ -55,6 +55,7 @@ public partial class DockBar
             BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}" : "—";
             BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
+            await RefreshBackgroundApps();
         }
         finally { statusBusy = false; }
     }
@@ -91,33 +92,5 @@ public partial class DockBar
         CloseSystemPanel(); ClosePreview();
         if (!DockNative.OpenQuickSettings())
             MessageBox.Show("系统未接受快捷设置快捷键，请按 Win+A 打开。", "DeskIsle");
-    }
-    private async void BackgroundClick(object sender, RoutedEventArgs e)
-    {
-        if (systemPopup?.PlacementTarget == BackgroundKey && systemPopup.IsOpen) { CloseSystemPanel(); return; }
-        var panel = new StackPanel { Width = 260 };
-        panel.Children.Add(PanelText("后台应用"));
-        var loading = PanelText("正在读取…"); panel.Children.Add(loading);
-        panel.Children.Add(PanelButton("切换原生任务栏 · 查看完整托盘", () => { CloseSystemPanel(); controller.ToggleNative(); }));
-        OpenSystemPanel(BackgroundKey, panel);
-        var popup = systemPopup;
-        var apps = await controller.BackgroundApps();
-        if (closed || systemPopup != popup || popup?.IsOpen != true) return;
-        panel.Children.Remove(loading);
-        if (apps.Length == 0) panel.Children.Insert(1, PanelText("暂无可识别的后台应用。其他托盘图标请使用原生托盘入口。"));
-        else foreach (var app in apps)
-        {
-            var button = PanelButton(app.Name + " · 后台运行", () => { CloseSystemPanel(); controller.OpenPinned(app); });
-            var icon = views.Values.FirstOrDefault(v => string.Equals(v.Pin?.Executable ?? v.IconPath, app.Executable, StringComparison.OrdinalIgnoreCase))?.Image.Source;
-            if (icon != null)
-            {
-                var row = new StackPanel { Orientation = Orientation.Horizontal };
-                row.Children.Add(new Image { Source = icon, Width = 22, Height = 22, Margin = new Thickness(0, 0, 10, 0) });
-                row.Children.Add(new TextBlock { Text = app.Name, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis });
-                button.Content = row;
-            }
-            panel.Children.Insert(panel.Children.Count - 1, button);
-        }
-        panel.Children.Add(PanelText("此处显示已固定或本次识别过的后台应用，不代替完整系统托盘。"));
     }
 }

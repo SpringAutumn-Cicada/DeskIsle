@@ -70,7 +70,7 @@ internal sealed partial class DockController
         }
         return new(ids.Count > 0, uncertain, handle, owner);
     }
-    internal async void OpenPinned(DockPin pin)
+    internal async void OpenPinned(DockPin pin, bool launchIfMissing = true)
     {
         var key = pin.Executable ?? pin.Path;
         if (!opening.Add(key)) return;
@@ -94,13 +94,60 @@ internal sealed partial class DockController
                 MessageBox.Show("应用已在后台运行，或当前权限无法确认其主窗口。请使用上层 Dock 的后台应用入口，打开原生托盘恢复。需要另开实例时，可右键选择“打开新窗口”。", "DeskIsle Dock");
                 return;
             }
-            Launch(pin.Path);
+            if (launchIfMissing) Launch(pin.Path);
+            else settle.Start();
         }
         finally { opening.Remove(key); }
     }
+    private static readonly HashSet<string> TrayClients = new(StringComparer.OrdinalIgnoreCase)
+    { "WeChat", "Weixin", "QQ", "TIM", "WXWork", "DingTalk", "Telegram", "OneDrive" };
+    private static bool BackgroundCandidate(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.Equals("ApplicationFrameHost", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("msedgewebview2", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("crashpad", StringComparison.OrdinalIgnoreCase)) return false;
+        var systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        return string.IsNullOrEmpty(systemDirectory) || !path.StartsWith(systemDirectory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+    private static string BackgroundName(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.Equals("WeChat", StringComparison.OrdinalIgnoreCase) || name.Equals("Weixin", StringComparison.OrdinalIgnoreCase)) return "微信";
+        try { return FileVersionInfo.GetVersionInfo(path).FileDescription is { Length: > 0 } description ? description : name; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException) { return name; }
+    }
     internal async Task<DockPin[]> BackgroundApps()
     {
-        var candidates = knownApplications.Values.Where(p => !windows.Any(w => string.Equals(w.Executable, p.Executable, StringComparison.OrdinalIgnoreCase))).ToArray();
-        return await Task.Run(() => candidates.Where(p => FindRunning(p, []).Running).ToArray());
+        var candidates = knownApplications.Values.Where(p => p.Executable != null && BackgroundCandidate(p.Executable))
+            .ToDictionary(p => p.Executable!, StringComparer.OrdinalIgnoreCase);
+        var visible = windows.Where(w => w.Executable != null).Select(w => w.Executable!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = candidates.Keys.Select(path => Path.GetFileNameWithoutExtension(path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = await Task.Run(() =>
+        {
+            var live = new Dictionary<string, DockPin>(StringComparer.OrdinalIgnoreCase);
+            // One process snapshot per refresh; only inspect executable paths for known application names.
+            foreach (var process in Process.GetProcesses())
+            {
+                using (process)
+                {
+                    try
+                    {
+                        if (process.Id == Environment.ProcessId || (!names.Contains(process.ProcessName) && !TrayClients.Contains(process.ProcessName))) continue;
+                        var path = process.MainModule?.FileName;
+                        if (path == null || !BackgroundCandidate(path)) continue;
+                        // Tray clients remain available while their main window is open, like the native notification area.
+                        if (visible.Contains(path) && !TrayClients.Contains(process.ProcessName)) continue;
+                        if (candidates.TryGetValue(path, out var pin)) live[path] = pin;
+                        else if (TrayClients.Contains(process.ProcessName)) live[path] = new(path, path, BackgroundName(path));
+                    }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException or ArgumentException) { }
+                }
+            }
+            return live.Values.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Executable, StringComparer.OrdinalIgnoreCase).ToArray();
+        });
+        if (disposed || lease == null) return [];
+        foreach (var app in result) knownApplications[app.Executable!] = app;
+        return result;
     }
 }
