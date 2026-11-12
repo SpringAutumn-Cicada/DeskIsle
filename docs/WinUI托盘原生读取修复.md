@@ -9,3 +9,10 @@
 - 源码依据：[Microsoft UI Automation 原始树说明](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-treeoverview)、[微软 WinSDK 接口定义](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/UIAutomationClient.h)。
 - 开发验证：只读查看诊断与窗口结构；不代表恢复通过。未运行测试、lint、独立类型检查或 Windows 交互验收。
 - 遗留验收：原生通道在此 Windows 版本能否取得实际图标、微信/钉钉关闭到托盘后的反复图标与预览恢复、多实例选择及权限差异。未经实际操作，不能将这些项目写为通过。
+
+## 发布交付
+
+- 功能提交 e4b826f、64f31e6。最终代码完成后重新发布，版本 1.11.7，Windows x64 自包含便携包。
+- 发布构建成功；ZIP 405 项 CRC 校验通过，主程序、恢复任务栏脚本及 WinRT 依赖存在。
+- 已复制到 `E:\桌面\DeskIsle-1.11.7-win-x64.zip`，旧版本保留；源包和副本 SHA-256 一致：`95d69c6d8e30952fc9d3916f80552b01da92d70e0c9637a4c042c543689e2caa`。
+- 未运行自动测试或 Windows 功能交互验收；上述只读诊断不等于应用恢复验收通过。
