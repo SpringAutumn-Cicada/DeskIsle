@@ -13,3 +13,9 @@ Wi-Fi 列表通过 Windows WiFiAdapter 请求访问并扫描，标记已连接�
 接入 Windows Runtime 官方 API，将应用目标平台明确为 net10.0-windows10.0.19041.0；仍面向 Win11 x64 自包含交付。参考：微软 Radio.RequestAccessAsync、WiFiAdapter 和 BluetoothDevice 官方文档。没有改动全局 SDK 配置。
 
 开发验证仅人工审阅，未执行测试、lint、独立类型检查或 Windows/浏览器交互验收。最终按持续授权发布便携包并验证 ZIP 与复制哈希，不能据此记为功能验收通过。
+
+## 最终交付
+
+功能提交 b3979ea、0b5ba97。版本 1.11.0 Windows x64 自包含 Release 发布成功，项目依赖还原成功。ZIP 405 项 CRC 校验通过，主程序、恢复任务栏脚本和 WinRT.Runtime.dll 存在。已复制 `E:\桌面\DeskIsle-1.11.0-win-x64.zip`，源包与副本 SHA256 一致：`ee111838921f959e1b5090b630a1a5d8ff852c6debdbe5d1604c57073358d84c`。
+
+未运行测试、lint、独立类型检查或 Windows/浏览器交互验收。用户验收待进行：单层比例与高DPI、控制卡开合、两个无线开关、权限拒绝/硬件缺失、网络扫描及已有凭据连接、蓝牙列表与系统配对入口、音量静音和三工具键。蓝牙设备连接/配对委托系统，不宣称实现所有蓝牙协议的直接连接。未合并、未推送。
