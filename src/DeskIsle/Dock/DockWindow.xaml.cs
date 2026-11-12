@@ -365,7 +365,7 @@ public partial class DockBar : Window
     {
         if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle))
         {
-            // Hidden windows are preview-only: neither relaunch nor force-show application internals.
+            if (window.Executable is { } path) controller.OpenPinned(new DockPin(path, path, window.Title), false);
             return;
         }
         if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);

@@ -70,7 +70,7 @@ internal sealed partial class DockController
             }
             if (app.Running || app.Uncertain)
             {
-                ShowBackgroundPreview(pin);
+                await RestoreBackground(pin);
                 return;
             }
             if (launchIfMissing) Launch(pin.Path);
@@ -98,9 +98,41 @@ internal sealed partial class DockController
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { return false; }
     }
-    private void ShowBackgroundPreview(DockPin pin)
+    private CancellationTokenSource? restoring;
+    private async Task RestoreBackground(DockPin pin)
     {
-        settle.Start();
-        bar?.PreviewApplication(pin.Executable);
+        if (lease == null || restoring != null) return;
+        if (Path.GetFileNameWithoutExtension(pin.Executable ?? pin.Path).ToLowerInvariant() is not ("wechat" or "weixin"))
+        { bar?.PreviewApplication(pin.Executable); return; }
+        using var request = new CancellationTokenSource();
+        restoring = request;
+        var currentLease = lease;
+        try
+        {
+            bar?.HideAnimated(true);
+            currentLease.SetTrayAccess(true);
+            await Task.Delay(150, request.Token);
+            if (disposed || request.IsCancellationRequested) return;
+            var invoked = await DockTrayActivation.TryWeChat(DockNative.Taskbars(), request.Token);
+            if (!invoked) { MessageBox.Show("未能找到可点击的微信托盘图标，未启动新实例。", "DeskIsle"); return; }
+            for (int i = 0; i < 12; i++)
+            {
+                await Task.Delay(150, request.Token);
+                var live = await Task.Run(DockApps.Windows);
+                if (request.IsCancellationRequested || disposed) return;
+                var window = live.FirstOrDefault(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle));
+                if (window == null) continue;
+                if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindowAsync(window.Handle, 9);
+                DockNative.SetForegroundWindow(window.Handle); settle.Start(); return;
+            }
+            MessageBox.Show("微信托盘已响应点击，但尚未发现可操作的主窗口。", "DeskIsle");
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            currentLease.SetTrayAccess(false);
+            if (!disposed && ReferenceEquals(lease, currentLease) && !currentLease.NativeMode) Reveal();
+            if (ReferenceEquals(restoring, request)) restoring = null;
+        }
     }
 }
