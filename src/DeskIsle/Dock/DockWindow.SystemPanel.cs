@@ -43,8 +43,8 @@ public partial class DockBar
             NetworkGlyph.Data = Geometry.Parse(network.Item1 switch
             {
                 1 => "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22",
-                2 => "M2,3 L22,3 L22,16 L2,16 Z M12,16 L12,22 M6,22 L18,22",
-                _ => "M2,3 L22,3 L22,16 L2,16 Z M8,20 L16,20 M3,1 L22,23"
+                2 => "M5,3 L19,3 Q22,3 22,6 L22,13 Q22,16 19,16 L5,16 Q2,16 2,13 L2,6 Q2,3 5,3 Z M12,16 L12,21 M7,21 L17,21",
+                _ => "M5,3 L19,3 Q22,3 22,6 L22,13 Q22,16 19,16 L5,16 Q2,16 2,13 L2,6 Q2,3 5,3 Z M8,21 L16,21 M3,1 L22,23"
             });
             NetworkKey.Opacity = network.Item1 > 0 ? 1 : .55;
             var powerAvailable = DockPower.GetSystemPowerStatus(out var power);

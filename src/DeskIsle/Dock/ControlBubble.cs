@@ -6,8 +6,6 @@ namespace DeskIsle.Dock;
 // One continuous outline avoids a seam where the pointer meets the glass panel.
 internal sealed class ControlBubble : Decorator
 {
-    private double anchorX = double.NaN;
-    internal double AnchorX { get => anchorX; set { if (anchorX == value) return; anchorX = value; InvalidateVisual(); } }
     protected override Size MeasureOverride(Size available)
     {
         Child?.Measure(new Size(Math.Max(0, available.Width - 48), Math.Max(0, available.Height - 58)));
@@ -24,7 +22,7 @@ internal sealed class ControlBubble : Decorator
         base.OnRender(dc);
         double left = 8, top = 8, right = ActualWidth - 8, bottom = ActualHeight - 18, radius = 22;
         if (right - left < 60 || bottom - top < 40) return;
-        var pointer = Math.Clamp(double.IsFinite(anchorX) ? anchorX : ActualWidth / 2, left + 30, right - 30);
+        var pointer = ActualWidth / 2;
         var shape = new StreamGeometry();
         using (var g = shape.Open())
         {

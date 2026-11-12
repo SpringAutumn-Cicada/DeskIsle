@@ -46,7 +46,6 @@ public partial class DockBar
                 var screenRight = transform.Transform(new Point(monitor.Right, monitor.Bottom)).X;
                 x = Math.Clamp(x, screenLeft - start.X + 8, Math.Max(screenLeft - start.X + 8, screenRight - start.X - size.Width - 8));
             }
-            shell.AnchorX = target.Width / 2 - x;
             // The bubble has 8 DIP transparent shadow padding below the pointer: keep its tip 18 DIP above Dock.
             return [new CustomPopupPlacement(new Point(x, -size.Height - 10), PopupPrimaryAxis.Horizontal)];
         };
