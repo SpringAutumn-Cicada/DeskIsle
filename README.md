@@ -216,3 +216,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.18：返回机器人在深色描边之外增加细浅蓝外沿，保持深浅背景下完整轮廓可见，造型和操作不变。详见 [机器人深色背景轮廓](docs/机器人深色背景轮廓.md)。
 
 1.11.19：商店版 Windows Terminal 从版本化 WindowsApps 路径启动时改用用户 wt.exe 别名，沿用默认 Ubuntu/其他终端配置，工作目录使用用户目录。详见 [WSL终端启动入口修复](docs/WSL终端启动入口修复.md)。
+
+1.11.20：按 C 紧凑原生方案降低控制弹窗，无线横排分段卡以青色底表示开启，删除额外滑动开关，音量与工具键去框；机器人不变。详见 [C紧凑控制面板](docs/C紧凑控制面板.md)。
