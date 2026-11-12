@@ -223,7 +223,7 @@ public partial class DockBar : Window
             ClosePreview();
             var foreground = pressedForeground != 0 ? pressedForeground : controller.ForegroundForClick();
             var root = DockNative.GetAncestor(foreground, 3);
-            var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && !DockNative.IsIconic(w.Handle));
+            var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle) && DockNative.IsWindowEnabled(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
             if (view.Pin != null && view.Windows.All(w => !DockNative.IsWindowVisible(w.Handle) || !DockNative.IsWindowEnabled(w.Handle)))
             { controller.OpenPinned(view.Pin); return; }
@@ -232,7 +232,7 @@ public partial class DockBar : Window
                 splitGroups.Observe(view.Windows);
                 view.MinimizedPair = splitGroups.Find(view.Windows);
                 // Snapshot the whole app group before minimizing its foreground window.
-                foreach (var handle in view.Windows.Select(w => w.Handle).Distinct().Where(handle => DockNative.IsWindow(handle) && !DockNative.IsIconic(handle)).ToArray())
+                foreach (var handle in view.Windows.Select(w => w.Handle).Distinct().Where(handle => DockNative.IsWindow(handle) && DockNative.IsWindowVisible(handle) && !DockNative.IsIconic(handle)).ToArray())
                     DockNative.PostMessage(handle, 0x0112, 0xF020, 0);
             }
             else if (view.MinimizedPair is { } pair &&
@@ -245,7 +245,8 @@ public partial class DockBar : Window
             else if (view.Windows.Length == 1) Activate(view.Windows[0]);
             else if (view.Windows.Length > 1)
             {
-                var recent = view.Windows.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? view.Windows.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? view.Windows[0];
+                var visible = view.Windows.Where(w => DockNative.IsWindowVisible(w.Handle) && DockNative.IsWindowEnabled(w.Handle)).ToArray();
+                var recent = visible.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? visible.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? visible.FirstOrDefault() ?? view.Windows[0];
                 view.RecentWindow = recent.Handle; Activate(recent);
             }
             else if (view.Pin != null) controller.OpenPinned(view.Pin);

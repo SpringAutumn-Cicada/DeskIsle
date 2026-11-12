@@ -105,30 +105,37 @@ internal sealed partial class DockController
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { return false; }
     }
     private CancellationTokenSource? restoring;
+    // Only keep a user-confirmed association after a successful restore, for the same live process set.
+    private readonly Dictionary<string, (string Processes, string Target)> confirmedTrayTargets = new(StringComparer.OrdinalIgnoreCase);
     private async Task RestoreBackground(DockPin pin, uint[] processIds)
     {
         if (lease == null || restoring != null || processIds.Length == 0) return;
         using var request = new CancellationTokenSource();
         restoring = request;
         var currentLease = lease;
+        var appKey = pin.Executable ?? pin.Path;
+        var processKey = string.Join(",", processIds.Order());
+        string? selectedTarget = confirmedTrayTargets.TryGetValue(appKey, out var confirmed) && confirmed.Processes == processKey ? confirmed.Target : null;
         try
         {
             bar?.HideAnimated(true);
             currentLease.SetTrayAccess(true);
             await Task.Delay(150, request.Token);
             if (disposed || request.IsCancellationRequested) return;
-            var outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token);
+            var outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token, selectedTarget);
             var invoked = outcome.Invoked;
             if (!invoked)
             {
                 DockRestoreDiagnostics.Write(pin, outcome.Stage, processIds, outcome.Candidates);
                 request.Token.ThrowIfCancellationRequested();
-                var selection = SelectTrayTarget(outcome.Candidates);
+                confirmedTrayTargets.Remove(appKey);
+                var selection = SelectTrayTarget(outcome.Candidates, request.Token);
+                selectedTarget = selection;
                 if (selection == null || request.IsCancellationRequested) return;
                 outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token, selection);
                 if (!outcome.Invoked) { DockRestoreDiagnostics.Write(pin, outcome.Stage, processIds, outcome.Candidates); MessageBox.Show("托盘恢复未完成，已保存诊断记录。未启动新实例。", "DeskIsle"); return; }
             }
-            for (int i = 0; i < 12; i++)
+            for (int i = 0; i < 20; i++)
             {
                 await Task.Delay(150, request.Token);
                 var live = await Task.Run(DockApps.Windows);
@@ -141,9 +148,11 @@ internal sealed partial class DockController
                 var foreground = DockNative.GetForegroundWindow();
                 DockNative.GetWindowThreadProcessId(foreground, out var foregroundPid);
                 if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle) || !processIds.Contains(foregroundPid)) continue;
+                if (selectedTarget != null) confirmedTrayTargets[appKey] = (processKey, selectedTarget);
                 DockRestoreDiagnostics.Write(pin, "restored-and-foreground", processIds, []);
                 settle.Start(); return;
             }
+            confirmedTrayTargets.Remove(appKey);
             DockRestoreDiagnostics.Write(pin, "action-sent-no-active-window", processIds, outcome.Candidates);
             MessageBox.Show("托盘动作已发出，但未确认应用主窗口恢复并获得前台。已保存诊断记录。", "DeskIsle");
         }

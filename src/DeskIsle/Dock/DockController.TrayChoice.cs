@@ -8,7 +8,7 @@ internal sealed partial class DockController
         try { System.IO.Directory.CreateDirectory(DockRestoreDiagnostics.Folder); Launch(DockRestoreDiagnostics.Folder); }
         catch (Exception ex) when (Recoverable(ex)) { MessageBox.Show("无法打开诊断目录：" + ex.Message, "DeskIsle"); }
     }
-    private string? SelectTrayTarget(DockTrayActivation.Candidate[] candidates)
+    private string? SelectTrayTarget(DockTrayActivation.Candidate[] candidates, CancellationToken token)
     {
         if (candidates.Length == 0)
         {
@@ -28,6 +28,8 @@ internal sealed partial class DockController
         panel.Children.Add(new ScrollViewer { Content = list, MaxHeight = 320, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var cancel = new Button { Content = "取消", Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(8) };
         cancel.Click += (_, _) => dialog.Close(); panel.Children.Add(cancel);
-        dialog.ShowDialog(); return selected;
+        using var registration = token.Register(() => dialog.Dispatcher.BeginInvoke(new Action(() => { if (dialog.IsVisible) dialog.Close(); })));
+        if (token.IsCancellationRequested) return null;
+        dialog.ShowDialog(); return token.IsCancellationRequested ? null : selected;
     }
 }
