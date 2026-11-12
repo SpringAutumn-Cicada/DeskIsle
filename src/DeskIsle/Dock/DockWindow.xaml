@@ -18,11 +18,8 @@
 <Button Style="{StaticResource TerminalKey}" ToolTip="Dock 设置" AutomationProperties.Name="Dock 设置" Click="SettingsClick"><Path Data="M4,2 L4,22 M12,2 L12,22 M20,2 L20,22 M1,7 L7,7 M9,16 L15,16 M17,9 L23,9" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="20" Height="20" Stretch="Uniform"/></Button>
 </StackPanel>
 <Border Grid.Column="1" Width="1" Height="24" Background="#506077"/>
-<Grid Grid.Column="2" Width="136" VerticalAlignment="Center">
-<Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
-<StackPanel x:Name="BackgroundAppsRow" Orientation="Horizontal" HorizontalAlignment="Center"/>
-<TextBlock x:Name="BackgroundEmpty" Text="后台" FontSize="11" Foreground="#728597" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
-<Button x:Name="BackgroundKey" Grid.Column="1" Style="{StaticResource TerminalKey}" Width="24" ToolTip="更多后台应用与原生托盘" AutomationProperties.Name="更多后台应用与原生托盘" Click="BackgroundClick"><TextBlock Text="⋯" FontSize="20" VerticalAlignment="Center"/></Button>
+<Grid Grid.Column="2" Width="48" VerticalAlignment="Center">
+<Button x:Name="BackgroundKey" Style="{StaticResource TerminalKey}" ToolTip="后台应用" AutomationProperties.Name="打开后台应用" Click="BackgroundClick"><Path Data="M2,15 L12,5 L22,15" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" Width="20" Height="14" Stretch="Uniform"/></Button>
 </Grid>
 <Border Grid.Column="3" Width="1" Height="24" Background="#506077"/>
 <Button x:Name="StatusKey" Grid.Column="4" Style="{StaticResource TerminalKey}" Width="128" ToolTip="网络、音量与电源 · 打开系统快捷设置（Win+A）" AutomationProperties.Name="打开系统快捷设置" Click="QuickSettingsClick">

@@ -53,18 +53,8 @@ public partial class DockBar
                 System.Windows.Automation.AutomationProperties.SetName(view.Button, "恢复后台应用 " + app.Name);
                 if (!backgroundOrder.Contains(id, StringComparer.OrdinalIgnoreCase)) backgroundOrder.Add(id);
             }
-            var desired = backgroundOrder.Take(4).Select(id => backgroundViews[id].Button).ToArray();
-            for (var i = BackgroundAppsRow.Children.Count - 1; i >= 0; i--)
-                if (!desired.Any(button => ReferenceEquals(button, BackgroundAppsRow.Children[i]))) BackgroundAppsRow.Children.RemoveAt(i);
-            for (var i = 0; i < desired.Length; i++)
-            {
-                if (i < BackgroundAppsRow.Children.Count && ReferenceEquals(BackgroundAppsRow.Children[i], desired[i])) continue;
-                BackgroundAppsRow.Children.Remove(desired[i]); BackgroundAppsRow.Children.Insert(i, desired[i]);
-            }
-            BackgroundEmpty.Visibility = desired.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-            BackgroundKey.ToolTip = backgroundOrder.Count > 4 ? $"另有 {backgroundOrder.Count - 4} 个后台应用 · 原生托盘" : "更多后台应用与原生托盘";
-            if (changed && systemPopup?.PlacementTarget == BackgroundKey) CloseSystemPanel();
-            foreach (var id in backgroundOrder.Take(4)) LoadBackgroundIcon(backgroundViews[id]);
+            BackgroundKey.ToolTip = backgroundOrder.Count > 0 ? $"后台应用（{backgroundOrder.Count}）" : "后台应用与原生托盘";
+            if (changed && systemPopup?.PlacementTarget == BackgroundKey) ShowBackgroundPanel();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
         { BackgroundKey.ToolTip = "后台应用暂不可读取 · 可打开原生托盘"; }
@@ -98,11 +88,15 @@ public partial class DockBar
     private void BackgroundClick(object sender, RoutedEventArgs e)
     {
         if (systemPopup?.PlacementTarget == BackgroundKey && systemPopup.IsOpen) { CloseSystemPanel(); return; }
+        ShowBackgroundPanel();
+    }
+    private void ShowBackgroundPanel()
+    {
         var panel = new StackPanel { Width = 224 };
-        var extra = backgroundOrder.Skip(4).Select(id => backgroundViews[id]).ToArray();
+        var extra = backgroundOrder.Select(id => backgroundViews[id]).ToArray();
         if (extra.Length > 0)
         {
-            panel.Children.Add(PanelText("更多后台应用"));
+            panel.Children.Add(PanelText("后台应用"));
             var grid = new WrapPanel();
             foreach (var view in extra)
             {
@@ -120,7 +114,7 @@ public partial class DockBar
             }
             panel.Children.Add(new ScrollViewer { Content = grid, MaxHeight = 200, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         }
-        else panel.Children.Add(PanelText(backgroundOrder.Count == 0 ? "暂无可识别的后台应用" : "后台应用已在栏中显示"));
+        else panel.Children.Add(PanelText("暂无可识别的后台应用"));
         panel.Children.Add(PanelButton("打开完整原生托盘", () => { CloseSystemPanel(); controller.ToggleNative(); }));
         OpenSystemPanel(BackgroundKey, panel);
     }
