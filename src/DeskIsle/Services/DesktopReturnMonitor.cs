@@ -7,7 +7,7 @@ namespace DeskIsle.Services;
 public sealed class DesktopReturnMonitor : IDisposable
 {
     private readonly Dispatcher dispatcher;
-    private readonly Action recover;
+    private readonly Action<bool> recover;
     private readonly WinEventProc callback;
     private readonly List<nint> hooks = [];
     private readonly DispatcherTimer settle;
@@ -15,7 +15,7 @@ public sealed class DesktopReturnMonitor : IDisposable
     private int retries;
     private bool disposed;
     public bool Available => hooks.Count >= 2;
-    public DesktopReturnMonitor(Dispatcher dispatcher, Action recover)
+    public DesktopReturnMonitor(Dispatcher dispatcher, Action<bool> recover)
     {
         this.dispatcher = dispatcher;
         this.recover = recover;
@@ -25,7 +25,7 @@ public sealed class DesktopReturnMonitor : IDisposable
         settle.Tick += (_, _) =>
         {
             if (disposed) { StopRecovery(); return; }
-            recover();
+            recover(false); // Settling checks repair state without repainting healthy surfaces.
             RecoveryTrace.Mark("retry");
             if (++retries >= 2) StopRecovery();
             else settle.Interval = TimeSpan.FromMilliseconds(250);
@@ -55,7 +55,7 @@ public sealed class DesktopReturnMonitor : IDisposable
             queued = false;
             if (disposed) return;
             RecoveryTrace.Mark("dispatch");
-            recover();
+            recover(true);
             RecoveryTrace.Mark("recover");
             // Keep the original bounded schedule during event bursts. A WPF frame
             // is not proof that Explorer/DWM has finished the desktop transition.

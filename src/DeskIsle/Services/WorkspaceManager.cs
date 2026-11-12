@@ -65,12 +65,12 @@ public sealed class WorkspaceManager : IDisposable
             TryStartupHide();
         }
     }
-    private void RecoverDesktopCards()
+    private void RecoverDesktopCards(bool repaint)
     {
         if (Exiting) return;
         var desktop = DesktopReturnMonitor.ForegroundDesktop();
         // If another application owns the foreground, cards only refresh their existing surfaces.
-        foreach (var window in windows.Values.ToArray()) window.RecoverOnDesktop(desktop);
+        foreach (var window in windows.Values.ToArray()) window.RecoverOnDesktop(desktop, repaint);
     }
     private void Open(CardState card)
     {

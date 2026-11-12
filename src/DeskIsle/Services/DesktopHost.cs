@@ -42,7 +42,9 @@ public sealed class DesktopHost
             if (previous != 0 && (GetWindowLongPtr(previous, -20).ToInt64() & 0x8) != 0) previous = 0;
             if (previous != handle) SetWindowPos(handle, previous, 0, 0, 0, 0, 0x0213);
         }
-        if (!repaint && !changed) return; // An idle fallback check must not continuously redraw cards.
+        // Healthy cards need no repaint when Explorer exposes the desktop.
+        // Only redraw a card whose visibility or Z-order actually needed repair.
+        if (!changed) return;
         window.InvalidateVisual();
         RedrawWindow(handle, 0, 0, 0x0081); // invalidate this window and its children, asynchronously
     }
