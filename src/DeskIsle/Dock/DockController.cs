@@ -142,7 +142,6 @@ internal sealed partial class DockController : IDisposable
     }
     internal void ToggleNative()
     {
-        restoring?.Cancel();
         if (lease == null) return;
         var native = !lease.NativeMode;
         lease.Native(native);
@@ -160,7 +159,7 @@ internal sealed partial class DockController : IDisposable
     }
     private void PointerTick(object? sender, EventArgs e)
     {
-        if (lease == null || bar == null || restoring != null) return;
+        if (lease == null || bar == null) return;
         UpdateAttention();
         if (Environment.TickCount64 < attentionUntil && !lease.NativeMode)
         {
@@ -224,8 +223,7 @@ internal sealed partial class DockController : IDisposable
             if (disposed || lease == null) return;
             if (!requested.SequenceEqual(Settings.Pins, StringComparer.OrdinalIgnoreCase)) return;
             windows = snapshot; pins = nextPins; resolvedPaths = requested;
-            RememberApplications();
-            bar?.SetApps(pins, PreviewWindows());
+            bar?.SetApps(pins, windows);
         }
         catch (Exception ex) when (Recoverable(ex)) { /* Preserve last snapshot; try again on the next event/tick. */ }
         finally
@@ -273,7 +271,6 @@ internal sealed partial class DockController : IDisposable
     private static bool Recoverable(Exception ex) => ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException or System.Text.Json.JsonException;
     private void Stop()
     {
-        restoring?.Cancel();
         pointer.Stop(); refresh.Stop(); settle.Stop();
         StopAttention();
         if (windowHook != 0) { DockNative.UnhookWinEvent(windowHook); windowHook = 0; }

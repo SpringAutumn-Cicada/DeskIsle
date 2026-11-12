@@ -225,8 +225,8 @@ public partial class DockBar : Window
             var root = DockNative.GetAncestor(foreground, 3);
             var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle) && DockNative.IsWindowEnabled(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
-            if (view.Pin != null && view.Windows.All(w => !DockNative.IsWindowVisible(w.Handle) || !DockNative.IsWindowEnabled(w.Handle)))
-            { controller.OpenPinned(view.Pin); return; }
+            if (view.Pin != null && view.Windows.All(w => !DockNative.IsWindow(w.Handle) || !DockNative.IsWindowVisible(w.Handle)))
+            { controller.Launch(view.Pin.Path); return; }
             if (active != null)
             {
                 splitGroups.Observe(view.Windows);
@@ -249,7 +249,7 @@ public partial class DockBar : Window
                 var recent = visible.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? visible.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? visible.FirstOrDefault() ?? view.Windows[0];
                 view.RecentWindow = recent.Handle; Activate(recent);
             }
-            else if (view.Pin != null) controller.OpenPinned(view.Pin);
+            else if (view.Pin != null) controller.Launch(view.Pin.Path);
         };
         button.PreviewMouseLeftButtonDown += (_, e) => { pressedForeground = controller.ForegroundForClick(); down = e.GetPosition(this); dragPin = view.Pin?.Path; };
         button.PreviewMouseMove += (_, e) =>
@@ -287,7 +287,6 @@ public partial class DockBar : Window
     private void FillMenu(ContextMenu menu, AppView view)
     {
         menu.Items.Clear();
-        Add(menu, "打开恢复诊断目录", () => controller.OpenRestoreDiagnostics());
         Add(menu, "打开新窗口", () => { if (view.Pin != null) controller.Launch(view.Pin.Path); else if (view.IconPath != null) controller.Launch(view.IconPath); });
         if (view.Pin is { } pin)
         {
@@ -349,7 +348,7 @@ public partial class DockBar : Window
     }
     private void ShowPreview(AppView view)
     {
-        var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle)).ToArray();
+        var live = view.Windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
         if (closed || !IsVisible || live.Length == 0) return;
         CloseSystemPanel();
         ClosePreview();
@@ -365,11 +364,7 @@ public partial class DockBar : Window
     }
     private void Activate(DockWindow window)
     {
-        if (!DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle))
-        {
-            if (window.Executable is { } path) controller.OpenPinned(new DockPin(path, path, window.Title), false);
-            return;
-        }
+        if (!DockNative.IsWindow(window.Handle) || !DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle)) return;
         if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);
         DockNative.SetForegroundWindow(window.Handle);
     }

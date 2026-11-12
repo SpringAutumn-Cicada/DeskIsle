@@ -192,3 +192,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.6：修正 Explorer 托盘项目匹配、真实双击与同目标默认动作回退，改善微信等应用关闭到托盘后的图标/预览恢复。详见 [关闭到托盘恢复修正](docs/关闭到托盘恢复修正.md)。
 
 1.11.7：针对 WinUI 隐藏栏在旧托管 UIA 下返回空树的问题，增加原生 CUIAutomation8 和 Composition bridge 读取通道，细化读取阶段诊断。详见 [WinUI 托盘原生读取修复](docs/WinUI托盘原生读取修复.md)。
+
+1.11.8：取消关闭到托盘后的后台恢复，删除托盘识别、隐藏栏展开、目标选择和诊断代码。Dock 仅预览并激活正常窗口（含最小化窗口），无窗口时固定图标沿用普通启动。日常请使用最小化保留 Dock 切换。详见 [取消托盘恢复](docs/取消托盘后台恢复.md)。
