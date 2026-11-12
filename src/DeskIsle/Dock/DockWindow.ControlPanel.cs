@@ -91,8 +91,8 @@ public partial class DockBar
         if (controlContent == null) return;
         NewPanelPage();
         var top = new Grid(); top.ColumnDefinitions.Add(new()); top.ColumnDefinitions.Add(new());
-        AddRadio(top, 0, RadioKind.WiFi, "Wi-Fi", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22");
-        AddRadio(top, 1, RadioKind.Bluetooth, "蓝牙", "M8,1 L18,8 L3,19 M8,23 L18,16 L3,5 M8,1 L8,23");
+        AddRadio(top, 0, RadioKind.WiFi, "Wi-Fi");
+        AddRadio(top, 1, RadioKind.Bluetooth, "蓝牙");
         controlContent.Children.Add(top);
         var volumeRow = new Grid { Margin = new Thickness(8, 2, 8, 2) };
         volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(36) }); volumeRow.ColumnDefinitions.Add(new()); volumeRow.ColumnDefinitions.Add(new() { Width = new GridLength(42) });
@@ -112,21 +112,39 @@ public partial class DockBar
         Grid.SetColumn(panelVolume, 1); volumeRow.Children.Add(panelVolume);
         panelVolumeText = ControlText("—", 11); panelVolumeText.FontFamily = new FontFamily("Cascadia Mono, Consolas"); panelVolumeText.HorizontalAlignment = HorizontalAlignment.Right; Grid.SetColumn(panelVolumeText, 2); volumeRow.Children.Add(panelVolumeText);
         controlContent.Children.Add(new Border { Child = volumeRow, CornerRadius = new CornerRadius(15), BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Margin = new Thickness(0, 12, 0, 10) });
-        var tools = new UniformGrid { Columns = 3 };
-        tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,7 L6,7 M9,7 L10,7 M13,7 L14,7", "原生任务栏"), () => { CloseSystemPanel(); controller.ToggleNative(); }));
-        tools.Children.Add(ControlButton(ToolContent("M6,3 L18,3 Q22,3 22,7 L22,17 Q22,21 18,21 L6,21 Q2,21 2,17 L2,7 Q2,3 6,3 Z M5,13 L8,13 Q9,13 10,9 Q11,5 12,12 Q13,20 15,13 Q16,11 17,12 L19,12", "任务管理器"), () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
-        tools.Children.Add(ControlButton(ToolContent("M9,3 Q12,1 15,3 L15,5 L18,7 L20,7 L22,11 L20,13 L20,16 L17,20 L14,19 L11,21 L7,19 L7,17 L4,15 L2,12 L4,9 L4,6 L8,5 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12", "设置"), () => { CloseSystemPanel(); controller.Configure(); }));
-        foreach (Button tool in tools.Children) tool.Style = (Style)FindResource("PanelTool");
-        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 2, 2, 8) });
+        var tools = new UniformGrid { Columns = 3, Height = 36 };
+        tools.Children.Add(ToolButton("M6,4 L18,4 Q22,4 22,8 L22,16 Q22,20 18,20 L6,20 Q2,20 2,16 L2,8 Q2,4 6,4 Z M3,15 L21,15 M7,18 L11,18 M14,18 L17,18", "原生任务栏", () => { CloseSystemPanel(); controller.ToggleNative(); }));
+        tools.Children.Add(ToolButton("M7,3 L17,3 Q22,3 22,8 L22,16 Q22,21 17,21 L7,21 Q2,21 2,16 L2,8 Q2,3 7,3 Z M6,13 L9,13 Q10,13 11,8 Q12,5 13,13 Q14,19 15,13 L18,13", "任务管理器", () => { CloseSystemPanel(); TaskManagerClick(this, new RoutedEventArgs()); }));
+        tools.Children.Add(ToolButton("M9,3 Q12,1 15,3 L15,5 L18,7 L20,7 L22,11 L20,13 L20,16 L17,20 L14,19 L11,21 L7,19 L7,17 L4,15 L2,12 L4,9 L4,6 L8,5 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12", "设置", () => { CloseSystemPanel(); controller.Configure(); }));
+        controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 0, 2, 6) });
         controlContent.Children.Add(tools); controlContent.Children.Add(controlMessage!);
         ReadAudio(); _ = RefreshRadioViews();
     }
-    private static StackPanel ToolContent(string path, string title)
+    private Button ToolButton(string path, string title, Action action)
     {
-        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-        var icon = ControlIcon(path, 20); icon.StrokeThickness = 1.5; icon.Margin = new Thickness(0, 0, 0, 4); panel.Children.Add(icon);
-        var label = ControlText(title, 11); label.HorizontalAlignment = HorizontalAlignment.Center;
-        panel.Children.Add(label); return panel;
+        var icon = ControlIcon(path, 19); icon.StrokeThickness = 1.55;
+        var button = ControlButton(icon, action, title);
+        button.ToolTip = title;
+        button.Style = (Style)FindResource("PanelCompactTool");
+        return button;
+    }
+    private static Grid RadioIcon(RadioKind kind)
+    {
+        // Fixed canvas keeps Bluetooth from stretching into the full Wi-Fi width.
+        var glyph = new Grid { Width = 26, Height = 26, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var path = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse(kind == RadioKind.WiFi
+                ? "M3,9 Q13,0 23,9 M6.5,13 Q13,7 19.5,13 M10,17 Q13,14.5 16,17"
+                : "M11,3 Q11,2 12,3 L19,8.5 Q19.5,9 19,9.5 L7,19 M11,23 Q11,24 12,23 L19,17.5 Q19.5,17 19,16.5 L7,7 M11,3 L11,23"),
+            Stroke = ControlBrush("#BDEAF3"), StrokeThickness = 1.65,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round, Stretch = Stretch.None
+        };
+        glyph.Children.Add(path);
+        if (kind == RadioKind.WiFi)
+            glyph.Children.Add(new System.Windows.Shapes.Ellipse { Width = 3, Height = 3, Fill = ControlBrush("#BDEAF3"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(11.5, 20, 0, 0) });
+        return glyph;
     }
     private static System.Windows.Shapes.Path ControlIcon(string geometry, double size = 20) => new()
     {
@@ -134,12 +152,12 @@ public partial class DockBar
         StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
         Width = size, Height = size, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
     };
-    private void AddRadio(Grid parent, int column, RadioKind kind, string title, string geometry)
+    private void AddRadio(Grid parent, int column, RadioKind kind, string title)
     {
         var split = new Grid();
         split.ColumnDefinitions.Add(new()); split.ColumnDefinitions.Add(new() { Width = new GridLength(30) });
         var row = new Grid(); row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new());
-        row.Children.Add(ControlIcon(geometry, 22));
+        row.Children.Add(RadioIcon(kind));
         var copy = new StackPanel { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         row.ColumnDefinitions.Add(new() { Width = new GridLength(10) });
         var indicator = new System.Windows.Shapes.Ellipse { Width = 4, Height = 4, Fill = ControlBrush("#718391"), VerticalAlignment = VerticalAlignment.Center };
