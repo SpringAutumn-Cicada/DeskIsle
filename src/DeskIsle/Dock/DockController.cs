@@ -124,9 +124,13 @@ internal sealed partial class DockController : IDisposable
         button.LostMouseCapture += (_, _) => { pressed = false; };
         // Keyboard/accessibility invocation still uses Button.Click; captured mouse gestures do not.
         button.Click += (_, _) => { if (!pressed) ToggleNative(); };
-        returnButton.Show(); PlaceReturn(); returnButton.Hide();
-        messages = HwndSource.FromHwnd(new WindowInteropHelper(returnButton).Handle);
+        // Initialize the native tool window before its first show. ShowActivated=false
+        // alone does not prevent a later mouse click from activating this window.
+        var returnHandle = new WindowInteropHelper(returnButton).EnsureHandle();
+        DockNative.SetWindowLong(returnHandle, -20, DockNative.GetWindowLong(returnHandle, -20) | 0x08000000 | 0x80);
+        messages = HwndSource.FromHwnd(returnHandle);
         messages.AddHook(WindowMessage);
+        returnButton.Show(); PlaceReturn(); returnButton.Hide();
         RegisterAttention();
         changeCallback = (_, eventId, window, objectId, childId, _, _) =>
         {
@@ -147,6 +151,7 @@ internal sealed partial class DockController : IDisposable
     }
     private nint WindowMessage(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (message == 0x21) { handled = true; return 3; } // MA_NOACTIVATE, same as Dock
         HandleAttentionMessage(message, wParam, lParam);
         if (message == 0x0312 && wParam == 1) { ToggleNative(); handled = true; }
         if (message is 0x007E or 0x02E0) { bar?.Place(); PlaceReturn(); }

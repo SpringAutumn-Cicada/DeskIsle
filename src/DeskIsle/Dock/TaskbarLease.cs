@@ -45,9 +45,13 @@ internal sealed class TaskbarLease : IDisposable
     {
         if (!active) return;
         NativeMode = show;
-        foreach (var bar in DockNative.Taskbars()) DockNative.ShowWindowAsync(bar, show ? 4 : 0);
         hidden.Clear();
-        if (!show) Reconcile();
+        if (show)
+        {
+            foreach (var bar in DockNative.Taskbars())
+                if (!DockNative.IsWindowVisible(bar)) DockNative.ShowWindowAsync(bar, 4);
+        }
+        else Reconcile(); // one hide request per taskbar, not hide + reconciliation twice
     }
     internal void Reconcile()
     {
