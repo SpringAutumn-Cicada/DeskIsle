@@ -10,10 +10,7 @@ public partial class DockBar
 {
     private readonly DispatcherTimer statusTick = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
     private Popup? systemPopup;
-    private bool statusBusy, updatingVolume;
-    private Slider? volumeSlider;
-    private TextBlock? volumeLabel;
-    private Button? muteButton;
+    private bool statusBusy;
     private void InitializeSystemPanel()
     {
         TerminalSurface.Opacity = controller.Settings.Opacity;
@@ -42,7 +39,7 @@ public partial class DockBar
                 catch (NetworkInformationException) { return (-1, "网络状态暂不可用"); }
             });
             if (closed) return;
-            NetworkKey.ToolTip = network.Item2 + " · 点击打开网络设置";
+            NetworkKey.ToolTip = network.Item2 + " · 系统快捷设置";
             NetworkGlyph.Data = Geometry.Parse(network.Item1 switch
             {
                 1 => "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,22",
@@ -52,10 +49,11 @@ public partial class DockBar
             NetworkKey.Opacity = network.Item1 > 0 ? 1 : .55;
             var powerAvailable = DockPower.GetSystemPowerStatus(out var power);
             BatteryKey.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 128) != 0 ? Visibility.Collapsed : Visibility.Visible;
-            BatteryGlyph.Data = Geometry.Parse("M1,5 L21,5 L21,19 L1,19 Z M21,9 L24,9 L24,15 L21,15" + (powerAvailable && power.Flags != 255 && (power.Flags & 8) != 0 ? " M12,7 L8,13 L14,13 L10,17" : ""));
-            BatteryKey.Foreground = powerAvailable && power.Percent <= 20 && power.AC == 0 ? Brushes.SandyBrown : new SolidColorBrush(Color.FromRgb(180, 217, 237));
-            BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}%" : "—";
-            BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + ((power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
+            ChargingGlyph.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 8) != 0 ? Visibility.Visible : Visibility.Collapsed;
+            var batteryColor = powerAvailable && power.Percent <= 20 && power.AC == 0 ? Brushes.SandyBrown : new SolidColorBrush(Color.FromRgb(180, 217, 237));
+            BatteryGlyph.Stroke = batteryColor; BatteryText.Foreground = batteryColor; ChargingGlyph.Stroke = batteryColor;
+            BatteryText.Text = powerAvailable && power.Percent <= 100 ? $"{power.Percent}" : "—";
+            BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
         }
         finally { statusBusy = false; }
@@ -65,29 +63,21 @@ public partial class DockBar
         float level = 0; bool muted = false;
         var available = DockAudio.Access(v => { v.GetMasterVolumeLevelScalar(out level); v.GetMute(out muted); });
         AudioKey.Opacity = available ? 1 : .5;
-        AudioKey.ToolTip = available ? muted ? "已静音" : $"音量 {Math.Round(level * 100)}%" : "音频设备暂不可用 · 点击打开声音设置";
+        AudioKey.ToolTip = available ? muted ? "已静音" : $"音量 {Math.Round(level * 100)}%" : "音频设备暂不可用 · 系统快捷设置";
         AudioGlyph.Data = Geometry.Parse(muted || !available
             ? "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,8 L24,16 M24,8 L17,16"
             : "M2,8 L7,8 L13,3 L13,21 L7,16 L2,16 Z M17,7 Q23,12 17,17 M20,3 Q30,12 20,21");
-        if (volumeSlider != null) volumeSlider.IsEnabled = available;
-        if (muteButton != null) muteButton.IsEnabled = available;
-        updatingVolume = true;
-        if (volumeSlider != null && !volumeSlider.IsMouseCaptureWithin) volumeSlider.Value = level * 100;
-        if (volumeLabel != null) volumeLabel.Text = available ? $"{Math.Round(level * 100)}%" : "不可用";
-        if (muteButton != null) muteButton.Content = muted ? "取消静音" : "静音";
-        updatingVolume = false;
     }
     private void CloseSystemPanel()
     {
         if (systemPopup != null) systemPopup.IsOpen = false;
-        systemPopup = null; volumeSlider = null; volumeLabel = null; muteButton = null;
+        systemPopup = null;
     }
     private void OpenSystemPanel(Button anchor, UIElement content)
     {
         CloseSystemPanel(); ClosePreview();
         var border = new Border { Background = new SolidColorBrush(Color.FromRgb(32, 38, 50)), BorderBrush = new SolidColorBrush(Color.FromRgb(88, 130, 151)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(14), Child = content };
         systemPopup = new Popup { Child = border, PlacementTarget = anchor, Placement = PlacementMode.Top, VerticalOffset = -12, AllowsTransparency = true, StaysOpen = false };
-        systemPopup.Closed += (_, _) => { volumeSlider = null; volumeLabel = null; muteButton = null; };
         systemPopup.IsOpen = true;
     }
     private static TextBlock PanelText(string text) => new() { Text = text, Foreground = Brushes.LightSteelBlue, Margin = new Thickness(0, 4, 0, 10), TextWrapping = TextWrapping.Wrap, MaxWidth = 270 };
@@ -96,18 +86,11 @@ public partial class DockBar
         var button = new Button { Content = text, Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 3, 0, 3), HorizontalContentAlignment = HorizontalAlignment.Left, Foreground = Brushes.LightSteelBlue, Background = new SolidColorBrush(Color.FromRgb(43, 57, 73)), BorderBrush = Brushes.Transparent };
         button.Click += (_, _) => action(); return button;
     }
-    private void NetworkClick(object sender, RoutedEventArgs e) { CloseSystemPanel(); controller.Launch("ms-settings:network-status"); }
-    private void BatteryClick(object sender, RoutedEventArgs e) { CloseSystemPanel(); controller.Launch("ms-settings:batterysaver"); }
-    private void AudioClick(object sender, RoutedEventArgs e)
+    private void QuickSettingsClick(object sender, RoutedEventArgs e)
     {
-        if (systemPopup?.PlacementTarget == AudioKey && systemPopup.IsOpen) { CloseSystemPanel(); return; }
-        var panel = new StackPanel { Width = 240 };
-        var label = PanelText("音量"); panel.Children.Add(label);
-        var slider = new Slider { Minimum = 0, Maximum = 100, TickFrequency = 1, Margin = new Thickness(2, 8, 2, 12) }; panel.Children.Add(slider);
-        var mute = PanelButton("静音", () => { DockAudio.Access(v => { v.GetMute(out var value); v.SetMute(!value, 0); }); ReadAudio(); }); panel.Children.Add(mute);
-        panel.Children.Add(PanelButton("声音设置", () => { CloseSystemPanel(); controller.Launch("ms-settings:sound"); }));
-        OpenSystemPanel(AudioKey, panel); volumeSlider = slider; volumeLabel = label; muteButton = mute; ReadAudio();
-        slider.ValueChanged += (_, _) => { if (!updatingVolume) { DockAudio.Access(v => v.SetMasterVolumeLevelScalar((float)(slider.Value / 100), 0)); ReadAudio(); } };
+        CloseSystemPanel(); ClosePreview();
+        if (!DockNative.OpenQuickSettings())
+            MessageBox.Show("系统未接受快捷设置快捷键，请按 Win+A 打开。", "DeskIsle");
     }
     private async void BackgroundClick(object sender, RoutedEventArgs e)
     {

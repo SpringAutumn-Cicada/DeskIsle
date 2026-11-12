@@ -44,10 +44,12 @@ internal static class DockNative
         [FieldOffset(12)] public uint Flags;
     }
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
-    internal static bool ShowDesktop()
+    internal static bool ShowDesktop() => SendWindowsKey(0x44);
+    internal static bool OpenQuickSettings() => SendWindowsKey(0x41);
+    private static bool SendWindowsKey(ushort key)
     {
-        var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = 0x44 },
-            new Input { Type = 1, Key = 0x44, Flags = 2 }, new Input { Type = 1, Key = 0x5B, Flags = 2 } };
+        var inputs = new[] { new Input { Type = 1, Key = 0x5B }, new Input { Type = 1, Key = key },
+            new Input { Type = 1, Key = key, Flags = 2 }, new Input { Type = 1, Key = 0x5B, Flags = 2 } };
         var sent = SendInput(4, inputs, Marshal.SizeOf<Input>());
         if (sent != 4) SendInput(2, [inputs[2], inputs[3]], Marshal.SizeOf<Input>());
         return sent == 4;
