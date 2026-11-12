@@ -12,7 +12,10 @@ internal static class ReturnDockHead
 <Border x:Name="Light" CornerRadius="12" Background="#2254D8EC" Opacity="0"/>
 <Viewbox Width="29" Height="29"><Canvas Width="34" Height="34">
 <Canvas.Effect><DropShadowEffect Color="#0B1722" BlurRadius="2.5" ShadowDepth=".7" Opacity=".4"/></Canvas.Effect>
-<!-- Dark under-strokes keep exposed antenna and ears visible on light surfaces. -->
+<!-- A fine light rim surrounds the dark outline, so both light and dark surfaces retain the silhouette. -->
+<Path Data="M16,8 L17,3 L22,3 M2,17 L2,22 M32,17 L32,22 M10,10 L23,10 Q29,10 29,16 L29,22 Q29,27 23,27 L10,27 Q5,27 5,22 L5,16 Q5,10 10,10 Z" Stroke="#AEDAE6" StrokeThickness="4.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+<Ellipse Canvas.Left="20" Canvas.Top=".5" Width="5" Height="5" Fill="#AEDAE6"/>
+<!-- Preserve the dark under-strokes and opaque face from the light-background version. -->
 <Path Data="M16,8 L17,3 L22,3 M2,17 L2,22 M32,17 L32,22" Stroke="#263E50" StrokeThickness="3.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
 <Path Data="M16,8 L17,3 L22,3" Stroke="#82E3EB" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
 <Ellipse Canvas.Left="20.5" Canvas.Top="1" Width="4" Height="4" Fill="#9BEFF3" Stroke="#263E50" StrokeThickness=".7"/>
