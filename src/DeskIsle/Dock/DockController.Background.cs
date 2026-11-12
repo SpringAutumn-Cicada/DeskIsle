@@ -135,9 +135,18 @@ internal sealed partial class DockController
                 outcome = await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token, selection);
                 if (!outcome.Invoked) { DockRestoreDiagnostics.Write(pin, outcome.Stage, processIds, outcome.Candidates); MessageBox.Show("托盘恢复未完成，已保存诊断记录。未启动新实例。", "DeskIsle"); return; }
             }
-            for (int i = 0; i < 20; i++)
+            // Retain the exact resolved target for the alternate UIA action as well.
+            selectedTarget ??= (outcome.Candidates.Count(c => c.Score >= 100) == 1 ? outcome.Candidates.Single(c => c.Score >= 100).Key : null)
+                ?? (outcome.Candidates.Count(c => c.Score >= 50) == 1 ? outcome.Candidates.Single(c => c.Score >= 50).Key : null);
+            for (int i = 0; i < 30; i++)
             {
                 await Task.Delay(150, request.Token);
+                if (i == 10 && selectedTarget != null)
+                {
+                    // Some providers require Invoke rather than mouse input. Retry only the same icon,
+                    // after waiting for the first action, never a different application or a new process.
+                    await DockTrayActivation.TryActivate(DockNative.Taskbars(), pin, processIds, request.Token, selectedTarget, invokeOnly: true);
+                }
                 var live = await Task.Run(DockApps.Windows);
                 if (request.IsCancellationRequested || disposed) return;
                 var window = live.FirstOrDefault(w => string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase) && DockNative.IsWindowEnabled(w.Handle));

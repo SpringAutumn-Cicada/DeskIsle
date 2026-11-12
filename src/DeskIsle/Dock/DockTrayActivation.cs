@@ -11,7 +11,7 @@ internal static class DockTrayActivation
     internal sealed record Candidate(string Key, string Name, string ClassName, int ProcessId, bool HasInvoke, bool HasPoint, int Score);
     internal sealed record Outcome(bool Invoked, string Stage, Candidate[] Candidates);
     private sealed record Target(AutomationElement Element, Candidate Info);
-    internal static async Task<Outcome> TryActivate(nint[] taskbars, DockPin app, uint[] processIds, CancellationToken request, string? selection = null)
+    internal static async Task<Outcome> TryActivate(nint[] taskbars, DockPin app, uint[] processIds, CancellationToken request, string? selection = null, bool invokeOnly = false)
     {
         if (!workerSlot.Wait(0)) return new(false, "worker-busy", []);
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(request);
@@ -43,15 +43,20 @@ internal static class DockTrayActivation
                     {
                         token.ThrowIfCancellationRequested();
                         var root = AutomationElement.FromHandle(hwnd);
-                        // Only an exact accessible chevron name may trigger expansion.
+                        // Expand only an exact accessible chevron name or the shell chevron ID.
                         var buttons = root?.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
                         if (buttons == null) continue;
                         foreach (AutomationElement button in buttons)
                         {
-                            if (!IsChevron(button.Current.Name) || button.Current.IsOffscreen) continue;
+                            var chevron = button.Current;
+                            if ((!IsChevron(chevron.Name) && chevron.AutomationId != "SystemTrayChevron") || chevron.IsOffscreen) continue;
                             if (!Perform(button, token, false)) continue;
-                            await Task.Delay(200, token).ConfigureAwait(false);
-                            CollectOverflow(targets, aliases, processIds, token);
+                            for (var attempt = 0; attempt < 8; attempt++)
+                            {
+                                await Task.Delay(100, token).ConfigureAwait(false);
+                                CollectOverflow(targets, aliases, processIds, token);
+                                if (Choose(targets, selection) != null) break;
+                            }
                             break;
                         }
                     }
@@ -60,7 +65,7 @@ internal static class DockTrayActivation
                 var candidates = targets.DistinctBy(t => t.Info.Key).Take(64).Select(t => t.Info).ToArray();
                 if (selected == null) return new Outcome(false, targets.Count == 0 ? "no-accessible-tray-items" : "ownership-ambiguous", candidates);
                 token.ThrowIfCancellationRequested();
-                return new Outcome(Perform(selected.Element, token, true), "tray-default-action", candidates);
+                return new Outcome(Perform(selected.Element, token, true, invokeOnly), invokeOnly ? "tray-invoke-action" : "tray-double-click", candidates);
             }
             catch (Exception ex) when (ex is COMException or ElementNotAvailableException or ElementNotEnabledException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException)
             { return new Outcome(false, "uia-" + ex.GetType().Name, targets.Select(t => t.Info).Take(64).ToArray()); }
@@ -83,6 +88,9 @@ internal static class DockTrayActivation
             if (info.FileDescription is { Length: > 0 } description) names.Add(description);
         }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or ArgumentException) { }
+        var executable = System.IO.Path.GetFileNameWithoutExtension(app.Executable ?? app.Path);
+        if (executable.Equals("Weixin", StringComparison.OrdinalIgnoreCase) || executable.Equals("WeChat", StringComparison.OrdinalIgnoreCase))
+            names.AddRange(["微信", "Weixin", "WeChat"]);
         return names.Where(n => n.Length >= 2 && n.Length <= 80).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
     private static bool IsChevron(string name) => name.Trim() is "显示隐藏的图标" or "隐藏的图标菜单" or "Show hidden icons" or "Hidden icon menu";
@@ -90,10 +98,12 @@ internal static class DockTrayActivation
     {
         var unique = targets.DistinctBy(t => t.Info.Key).ToArray();
         if (selection != null) return unique.SingleOrDefault(t => t.Info.Key == selection);
-        // Explorer usually owns all UIA elements: process ID  of Explorer is NOT app ownership.
-        // Only a provider exposing the actual target PID is sufficient for automatic invocation.
+        // Explorer hosts notification buttons, so its PID cannot identify the application.
+        // A single exact product/name match inside the tray is also a usable target.
         var owned = unique.Where(t => t.Info.Score >= 100).ToArray();
-        return owned.Length == 1 ? owned[0] : null;
+        if (owned.Length > 0) return owned.Length == 1 ? owned[0] : null;
+        var named = unique.Where(t => t.Info.Score >= 50).ToArray();
+        return named.Length == 1 ? named[0] : null;
     }
     private static void CollectOverflow(List<Target> targets, string[] aliases, uint[] pids, CancellationToken token)
     {
@@ -114,25 +124,37 @@ internal static class DockTrayActivation
             token.ThrowIfCancellationRequested();
             var info = element.Current;
             if (string.IsNullOrWhiteSpace(info.Name) || IsChevron(info.Name)) continue;
-            var score = pids.Contains((uint)info.ProcessId) ? 100 : aliases.Any(a => info.Name.Equals(a, StringComparison.OrdinalIgnoreCase) || info.Name.StartsWith(a + " ", StringComparison.OrdinalIgnoreCase)) ? 50 : 0;
+            var score = pids.Contains((uint)info.ProcessId) ? 100 : aliases.Any(a => info.Name.Equals(a, StringComparison.OrdinalIgnoreCase) || NameMatches(info.Name, a)) ? 50 : 0;
             var key = DockRestoreDiagnostics.Hash(info.AutomationId + "|" + info.Name + "|" + info.ClassName + "|" + info.ProcessId);
             targets.Add(new(element, new(key, info.Name, info.ClassName, info.ProcessId,
                 element.TryGetCurrentPattern(InvokePattern.Pattern, out _), element.TryGetClickablePoint(out _), score)));
         }
     }
-    private static bool Perform(AutomationElement element, CancellationToken token, bool twice)
+    private static bool NameMatches(string name, string alias)
+    {
+        if (!name.StartsWith(alias, StringComparison.OrdinalIgnoreCase) || name.Length <= alias.Length) return false;
+        var boundary = name[alias.Length];
+        return char.IsWhiteSpace(boundary) || boundary is ':' or '：' or '(' or '（' or '[' or '【' or '-' or '·' or ',' or '，' or '\n' or '\r';
+    }
+    private static bool Perform(AutomationElement element, CancellationToken token, bool twice, bool invokeOnly = false)
     {
         token.ThrowIfCancellationRequested();
-        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var action))
-        { token.ThrowIfCancellationRequested(); ((InvokePattern)action).Invoke(); return true; }
-        if (element.TryGetClickablePoint(out var point))
+        // A notification icon may expose Invoke but only restore on an actual double click.
+        if (!invokeOnly && element.TryGetClickablePoint(out var point))
         {
             token.ThrowIfCancellationRequested();
             var hit = AutomationElement.FromPoint(point);
             // Do not inject a click if a dialog or another window now covers the tray item.
-            if (!Automation.Compare(hit, element)) return false;
-            return Click(point.X, point.Y, twice);
+            var walker = TreeWalker.RawViewWalker;
+            var belongs = false;
+            for (var i = 0; hit != null && i < 8; i++, hit = walker.GetParent(hit))
+                if (Automation.Compare(hit, element)) { belongs = true; break; }
+            if (belongs && Click(point.X, point.Y, twice)) return true;
         }
+        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var action))
+        { token.ThrowIfCancellationRequested(); ((InvokePattern)action).Invoke(); return true; }
+        if (!twice && element.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var expand))
+        { token.ThrowIfCancellationRequested(); ((ExpandCollapsePattern)expand).Expand(); return true; }
         return false;
     }
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
