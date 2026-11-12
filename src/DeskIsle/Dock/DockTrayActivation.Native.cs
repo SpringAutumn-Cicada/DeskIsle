@@ -14,7 +14,9 @@ internal static partial class DockTrayActivation
         var nodesRead = 0;
         void Scan(nint hwnd, bool overflow)
         {
-            var root = client.Keep(client.Automation.ElementFromHandle(hwnd));
+            NativeElement root;
+            try { root = client.Keep(client.Automation.ElementFromHandle(hwnd)); }
+            catch (COMException) { return; }
             var pending = new Stack<(NativeElement Element, bool Tray, int Depth)>();
             pending.Push((root, overflow, 0));
             var visited = 0;
@@ -61,19 +63,23 @@ internal static partial class DockTrayActivation
         {
             Scan(hwnd, overflow);
             // Some shell builds expose the provider only on the composition child HWND.
+            var bridges = new List<nint>();
             EnumChildWindows(hwnd, (child, _) =>
             {
-                if (DockNative.Class(child) == "Windows.UI.Composition.DesktopWindowContentBridge") Scan(child, overflow);
+                if (DockNative.Class(child) == "Windows.UI.Composition.DesktopWindowContentBridge") bridges.Add(child);
                 return !token.IsCancellationRequested;
             }, 0);
+            foreach (var bridge in bridges) { token.ThrowIfCancellationRequested(); Scan(bridge, overflow); }
         }
         void ScanOverflow()
         {
+            var roots = new List<nint>();
             DockNative.EnumWindows((hwnd, _) =>
             {
-                if (DockNative.Class(hwnd) is "NotifyIconOverflowWindow" or "TopLevelWindowForOverflowXamlIsland" or "SystemTray_Main") ScanIsland(hwnd, true);
+                if (DockNative.Class(hwnd) is "NotifyIconOverflowWindow" or "TopLevelWindowForOverflowXamlIsland" or "SystemTray_Main") roots.Add(hwnd);
                 return !token.IsCancellationRequested;
             }, 0);
+            foreach (var root in roots) { token.ThrowIfCancellationRequested(); ScanIsland(root, true); }
         }
         (NativeElement Element, Candidate Info)? ChooseNative()
         {
