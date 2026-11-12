@@ -14,7 +14,7 @@ internal static class DockRestoreDiagnostics
         {
             Directory.CreateDirectory(Folder);
             // No paths, window titles, tooltip text, chat content or credentials are written.
-            var record = new { Version = "1.11.6", Time = DateTimeOffset.Now, OS = Environment.OSVersion.VersionString,
+            var record = new { Version = "1.11.7", Time = DateTimeOffset.Now, OS = Environment.OSVersion.VersionString,
                 App = Path.GetFileName(app.Executable ?? app.Path), Stage = stage, ProcessIds = pids,
                 Candidates = candidates.Select(c => new { c.Key, c.ClassName, c.ProcessId, c.HasInvoke, c.HasPoint, c.Score }) };
             File.WriteAllText(Path.Combine(Folder, "last-restore.json"), JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));

@@ -5,7 +5,7 @@ namespace DeskIsle.Dock;
 
 // Invoke the real Explorer-owned tray button so the application handles its own hidden state.
 // Never reconstruct private tray callbacks or force-show an application's hidden HWND.
-internal static class DockTrayActivation
+internal static partial class DockTrayActivation
 {
     private static readonly SemaphoreSlim workerSlot = new(1);
     internal sealed record Candidate(string Key, string Name, string ClassName, int ProcessId, bool HasInvoke, bool HasPoint, int Score);
@@ -15,14 +15,20 @@ internal static class DockTrayActivation
     {
         if (!workerSlot.Wait(0)) return new(false, "worker-busy", []);
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(request);
-        cancellation.CancelAfter(TimeSpan.FromSeconds(4));
+        cancellation.CancelAfter(TimeSpan.FromSeconds(10));
         var token = cancellation.Token;
         var work = Task.Run(async () =>
         {
             var targets = new List<Target>();
+            Outcome? native = null;
             try
             {
                 var aliases = Aliases(app);
+                {
+                    try { native = await ActivateNative(taskbars, aliases, processIds, selection, invokeOnly, token).ConfigureAwait(false); }
+                    catch (COMException) { native = new(false, "native-provider-unavailable", []); }
+                    if (native.Invoked || native.Candidates.Length > 0) return native;
+                }
                 foreach (var hwnd in taskbars)
                 {
                     token.ThrowIfCancellationRequested();
@@ -63,7 +69,7 @@ internal static class DockTrayActivation
                     selected = Choose(targets, selection);
                 }
                 var candidates = targets.DistinctBy(t => t.Info.Key).Take(64).Select(t => t.Info).ToArray();
-                if (selected == null) return new Outcome(false, targets.Count == 0 ? "no-accessible-tray-items" : "ownership-ambiguous", candidates);
+                if (selected == null) return new Outcome(false, targets.Count == 0 ? "managed-empty/" + native?.Stage : "ownership-ambiguous", candidates);
                 token.ThrowIfCancellationRequested();
                 return new Outcome(Perform(selected.Element, token, true, invokeOnly), invokeOnly ? "tray-invoke-action" : "tray-double-click", candidates);
             }
@@ -71,7 +77,7 @@ internal static class DockTrayActivation
             { return new Outcome(false, "uia-" + ex.GetType().Name, targets.Select(t => t.Info).Take(64).ToArray()); }
             finally { cancellation.Dispose(); workerSlot.Release(); }
         });
-        try { return await work.WaitAsync(TimeSpan.FromSeconds(4)); }
+        try { return await work.WaitAsync(TimeSpan.FromSeconds(10)); }
         catch (TimeoutException)
         {
             try { cancellation.Cancel(); } catch (ObjectDisposedException) { }

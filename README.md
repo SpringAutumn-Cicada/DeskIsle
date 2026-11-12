@@ -190,3 +190,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.5：预览每页最多 7 张卡片，翻页箭头移至左右居中；无线卡显示实际连接状态，以图形反馈开关，收窄底部工具区。详见 [七窗预览与连接状态](docs/七窗预览与连接状态.md)。
 
 1.11.6：修正 Explorer 托盘项目匹配、真实双击与同目标默认动作回退，改善微信等应用关闭到托盘后的图标/预览恢复。详见 [关闭到托盘恢复修正](docs/关闭到托盘恢复修正.md)。
+
+1.11.7：针对 WinUI 隐藏栏在旧托管 UIA 下返回空树的问题，增加原生 CUIAutomation8 和 Composition bridge 读取通道，细化读取阶段诊断。详见 [WinUI 托盘原生读取修复](docs/WinUI托盘原生读取修复.md)。
