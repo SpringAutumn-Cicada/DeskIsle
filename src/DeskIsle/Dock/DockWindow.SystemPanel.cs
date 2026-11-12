@@ -49,7 +49,9 @@ public partial class DockBar
             NetworkKey.Opacity = network.Item1 > 0 ? 1 : .55;
             var powerAvailable = DockPower.GetSystemPowerStatus(out var power);
             BatteryKey.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 128) != 0 ? Visibility.Collapsed : Visibility.Visible;
-            ChargingGlyph.Visibility = powerAvailable && power.Flags != 255 && (power.Flags & 8) != 0 ? Visibility.Visible : Visibility.Collapsed;
+            // ACLineStatus remains useful when firmware pauses charging or omits the charging bit.
+            var externalPower = powerAvailable && (power.AC == 1 || power.Flags != 255 && (power.Flags & 8) != 0);
+            ChargingGlyph.Visibility = externalPower ? Visibility.Visible : Visibility.Collapsed;
             var knownCharge = powerAvailable && power.Percent <= 100;
             BatteryFill.Width = knownCharge ? 23 * power.Percent / 100.0 : 0;
             BatteryFill.Fill = new SolidColorBrush(knownCharge && power.Percent <= 20

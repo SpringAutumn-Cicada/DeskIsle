@@ -42,7 +42,8 @@
 <Viewbox Width="31" Height="25" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"><Canvas Width="34" Height="28">
 <Rectangle Canvas.Left="2" Canvas.Top="7" Width="27" Height="17" RadiusX="4" RadiusY="4" Fill="#142331"/>
 <Border Canvas.Left="4" Canvas.Top="9" Width="23" Height="13" CornerRadius="2.5"><Border.Clip><RectangleGeometry Rect="0,0,23,13" RadiusX="2.5" RadiusY="2.5"/></Border.Clip><Rectangle x:Name="BatteryFill" Width="0" Height="13" HorizontalAlignment="Left" Fill="#8BEAF0"/></Border>
-<Path x:Name="BatteryGlyph" Data="M6,7 L25,7 Q29,7 29,11 L29,20 Q29,24 25,24 L6,24 Q2,24 2,20 L2,11 Q2,7 6,7 Z M30,12 L32,12 L32,19 L30,19" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+<Rectangle Canvas.Left="29" Canvas.Top="12" Width="4" Height="7" RadiusX="1" RadiusY="1" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+<Path x:Name="BatteryGlyph" Data="M6,7 L25,7 Q29,7 29,11 L29,20 Q29,24 25,24 L6,24 Q2,24 2,20 L2,11 Q2,7 6,7 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
 <Path x:Name="ChargingGlyph" Data="M18,1 L11,14 L16,14 L13,26 L23,11 L18,11 Z" Fill="#F2FBFF" Stroke="#142331" StrokeThickness="1.4" StrokeLineJoin="Round" Visibility="Collapsed"/>
 </Canvas></Viewbox>
 </Grid>
