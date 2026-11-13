@@ -23,6 +23,7 @@
 </Grid>
 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
 <Border Style="{StaticResource SettingCard}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="悬浮应用栏" FontSize="14" FontWeight="SemiBold"/><TextBlock Text="启动时自动开启；此开关控制本次运行" Foreground="#93A4BC" FontSize="11" Margin="0,5,10,0"/></StackPanel><CheckBox x:Name="EnabledToggle" Grid.Column="1" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="启用悬浮 Dock"/></Grid></Border>
+<Border Style="{StaticResource SettingCard}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="登录后立即启动" FontSize="14" FontWeight="SemiBold"/><TextBlock Text="跟随当前程序位置；关闭后恢复原有自启方式" Foreground="#93A4BC" FontSize="11" Margin="0,5,10,0"/></StackPanel><CheckBox x:Name="LoginToggle" Grid.Column="1" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="登录后立即启动"/></Grid></Border>
 <Border Style="{StaticResource SettingCard}"><StackPanel>
 <Grid><TextBlock Text="唤出等待" FontSize="12"/><TextBlock x:Name="RevealValue" HorizontalAlignment="Right" Foreground="#8DD9CE" FontSize="12"/></Grid>
 <Slider x:Name="RevealSlider" Minimum="0" Maximum="1000" SmallChange="10" LargeChange="50" TickFrequency="10" IsSnapToTickEnabled="True" ValueChanged="ValuesChanged" AutomationProperties.Name="唤出等待毫秒"/>

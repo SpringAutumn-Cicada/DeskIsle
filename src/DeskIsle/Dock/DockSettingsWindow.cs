@@ -5,6 +5,7 @@ namespace DeskIsle.Dock;
 internal partial class DockSettingsWindow : Window
 {
     private readonly DockController controller;
+    private bool? loginEnabled;
     internal DockSettingsWindow(DockController controller)
     {
         this.controller = controller;
@@ -15,6 +16,9 @@ internal partial class DockSettingsWindow : Window
         HideSlider.Value = controller.Settings.HideMs;
         OpacitySlider.Value = controller.Settings.Opacity;
         HotKeyEditor.Text = ((char)controller.Settings.HotKey).ToString();
+        try { loginEnabled = DeskIsle.Services.LoginStartup.Enabled(); LoginToggle.IsChecked = loginEnabled; }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.IO.IOException)
+        { LoginToggle.IsEnabled = false; ErrorText.Text = "无法读取登录启动设置：" + ex.Message; ErrorText.Visibility = Visibility.Visible; }
         UpdateValues();
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
     }
@@ -42,6 +46,16 @@ internal partial class DockSettingsWindow : Window
         controller.Settings.HideMs = (int)HideSlider.Value;
         controller.Settings.Opacity = OpacitySlider.Value;
         controller.Settings.HotKey = text[0];
+        try
+        {
+            if (loginEnabled.HasValue && loginEnabled.Value != (LoginToggle.IsChecked == true))
+            {
+                DeskIsle.Services.LoginStartup.Set(LoginToggle.IsChecked == true);
+                loginEnabled = LoginToggle.IsChecked == true;
+            }
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.IO.IOException)
+        { ErrorText.Text = "登录启动设置未完成：" + ex.Message; ErrorText.Visibility = Visibility.Visible; return; }
         if (controller.Apply(EnabledToggle.IsChecked == true)) Close();
     }
 }
