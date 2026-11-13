@@ -35,7 +35,7 @@ internal static class ShellDesktopView
             Marshal.ThrowExceptionForHR(Method<QueryView>(browser, 15)(browser, out view));
             if (view == 0) return false;
             var folderId = new Guid("1AF3A467-214F-4298-908E-06B03E0B39F9");
-            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(view, ref folderId, out folder));
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(view, in folderId, out folder));
             if (folder == 0) return false;
             // SDK IFolderView2 extends IFolderView: SetCurrentFolderFlags 24, GetCurrentFolderFlags 25.
             if (visible.HasValue)
@@ -44,7 +44,7 @@ internal static class ShellDesktopView
             actualVisible = (flags & NoIcons) == 0;
             return !visible.HasValue || actualVisible == visible.Value;
         }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException or ArgumentException or System.IO.IOException or UnauthorizedAccessException)
         { StartupDiagnostics.Mark("desktop-view-error=" + ex.GetType().Name); return false; }
         finally
         {
