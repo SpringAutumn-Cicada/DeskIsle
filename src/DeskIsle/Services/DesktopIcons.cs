@@ -2,36 +2,57 @@ using System.IO;
 using System.Runtime.InteropServices;
 namespace DeskIsle.Services;
 
-/// <summary>Only changes Explorer's icon-view visibility, never file attributes or registry settings.</summary>
+/// <summary>Changes Shell folder flags, keeping the desktop view alive for native file operations.</summary>
 public sealed class DesktopIcons : IDisposable
 {
     private readonly string marker = Path.Combine(CardStore.DataDirectory, "restore-desktop-icons");
     private bool hiddenByUs;
     public bool RecoveryPending => File.Exists(marker);
+    private const string ShellMarker = "DeskIsle desktop folder flags v2";
+    private bool? visibleCache;
+    private long checkedAt;
     public bool? Visible
     {
-        get { var view = FindView(); return view == 0 ? null : IsWindowVisible(view); }
+        get
+        {
+            if (Environment.TickCount64 - checkedAt >= 1000 || checkedAt == 0)
+            {
+                visibleCache = ShellDesktopView.Access(null, out var visible) ? visible : null;
+                checkedAt = Environment.TickCount64;
+            }
+            return visibleCache;
+        }
     }
     public bool Hide()
     {
-        var view = FindView();
-        if (view == 0) return false;
-        if (!IsWindowVisible(view)) return true;
+        if (!ShellDesktopView.Access(null, out var visible)) return false;
+        if (!visible) return true;
         Directory.CreateDirectory(CardStore.DataDirectory);
-        File.WriteAllText(marker, "DeskIsle hid the desktop icon view; show it to recover.");
-        ShowWindow(view, 0);
-        if (IsWindowVisible(view)) { File.Delete(marker); return false; }
+        File.WriteAllText(marker, ShellMarker);
+        if (!ShellDesktopView.Access(false, out _))
+        {
+            // Keep recovery information if the call partly succeeded; never force-hide HWNDs.
+            return false;
+        }
         hiddenByUs = true;
+        visibleCache = false; checkedAt = Environment.TickCount64;
+        StartupDiagnostics.Mark("desktop-icons-hidden-via-shell");
         return true;
     }
     public bool Restore()
     {
-        var view = FindView();
-        if (view == 0) return false;
-        ShowWindow(view, 5);
-        if (!IsWindowVisible(view)) return false;
+        // Only migrate the legacy version's raw ShowWindow hiding; new hides never use it.
+        if (File.Exists(marker) && File.ReadAllText(marker) != ShellMarker)
+        {
+            var oldView = FindView();
+            if (oldView == 0) return false;
+            ShowWindow(oldView, 5);
+        }
+        if (!ShellDesktopView.Access(true, out _)) return false;
         hiddenByUs = false;
+        visibleCache = true; checkedAt = Environment.TickCount64;
         if (File.Exists(marker)) File.Delete(marker);
+        StartupDiagnostics.Mark("desktop-icons-restored-via-shell");
         return true;
     }
     public void Dispose()
