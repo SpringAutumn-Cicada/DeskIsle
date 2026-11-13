@@ -8,10 +8,9 @@ internal sealed partial class DockController
     [DllImport("user32.dll")] private static extern bool DeregisterShellHookWindow(nint window);
     private uint shellMessage;
     private bool shellRegistered;
-    private long attentionUntil;
     private readonly HashSet<nint> attentionWindows = [];
     private readonly Dictionary<nint, string> attentionKeys = [];
-    private readonly Dictionary<string, long> lastAttention = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> attentionStarted = new(StringComparer.OrdinalIgnoreCase);
 
     private void RegisterAttention()
     {
@@ -42,10 +41,10 @@ internal sealed partial class DockController
             attentionWindows.Add(window);
             attentionKeys[window] = key;
             var now = Environment.TickCount64;
-            if (!lastAttention.ContainsKey(key))
+            if (!attentionStarted.ContainsKey(key))
             {
-                lastAttention[key] = now;
-                attentionUntil = now + 5000;
+                attentionStarted[key] = now;
+                DeskIsle.Services.StartupDiagnostics.Mark($"attention-pending pid={pid} native={lease.NativeMode}");
                 // A manually selected native taskbar remains in charge until the user returns.
                 if (!lease.NativeMode) Reveal();
             }
@@ -58,21 +57,29 @@ internal sealed partial class DockController
     {
         var foreground = DockNative.GetForegroundWindow();
         var active = windows.FirstOrDefault(w => w.Handle == foreground);
-        attentionWindows.RemoveWhere(handle => !DockNative.IsWindow(handle) || handle == foreground ||
-            (active?.Executable != null && windows.Any(w => w.Handle == handle &&
-                string.Equals(w.Executable, active.Executable, StringComparison.OrdinalIgnoreCase))));
-        if (attentionWindows.Count == 0) attentionUntil = 0;
+        DockNative.GetWindowThreadProcessId(foreground, out var foregroundPid);
+        var cleared = attentionWindows.RemoveWhere(handle =>
+        {
+            if (!DockNative.IsWindow(handle)) return true;
+            // A failed Dock click never clears state: the application must actually be foreground.
+            if (DockNative.IsIconic(foreground)) return false;
+            DockNative.GetWindowThreadProcessId(handle, out var pid);
+            return handle == foreground || (foregroundPid != 0 && pid == foregroundPid) ||
+                (active?.Executable != null && attentionKeys.TryGetValue(handle, out var key) &&
+                 string.Equals(key, active.Executable, StringComparison.OrdinalIgnoreCase));
+        });
+        if (cleared > 0) DeskIsle.Services.StartupDiagnostics.Mark($"attention-cleared count={cleared} remaining={attentionWindows.Count}");
         foreach (var handle in attentionKeys.Keys.Where(handle => !attentionWindows.Contains(handle)).ToArray()) attentionKeys.Remove(handle);
         var pendingApps = attentionKeys.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var key in lastAttention.Keys.Where(key => !pendingApps.Contains(key)).ToArray()) lastAttention.Remove(key);
+        foreach (var key in attentionStarted.Keys.Where(key => !pendingApps.Contains(key)).ToArray()) attentionStarted.Remove(key);
         var strong = attentionWindows.Where(handle => attentionKeys.TryGetValue(handle, out var key)
-            && lastAttention.TryGetValue(key, out var started) && Environment.TickCount64 - started < 5000).ToArray();
+            && attentionStarted.TryGetValue(key, out var started) && Environment.TickCount64 - started < 5000).ToArray();
         bar?.SetAttention(attentionWindows, strong);
     }
     private void StopAttention()
     {
         if (shellRegistered && messages != null) DeregisterShellHookWindow(messages.Handle);
-        shellRegistered = false; shellMessage = 0; attentionUntil = 0;
-        attentionWindows.Clear(); attentionKeys.Clear(); lastAttention.Clear();
+        shellRegistered = false; shellMessage = 0;
+        attentionWindows.Clear(); attentionKeys.Clear(); attentionStarted.Clear();
     }
 }

@@ -241,9 +241,10 @@ internal sealed partial class DockController : IDisposable
             awaySince = Environment.TickCount64;
             return;
         }
-        if (Environment.TickCount64 < attentionUntil && !lease.NativeMode)
+        if (attentionWindows.Count > 0 && !lease.NativeMode)
         {
-            if (!bar.IsVisible || bar.IsHiding) Reveal();
+            // Pending attention holds the Dock open, including over a full-screen application.
+            if (!bar.IsVisible || bar.IsHiding || DockNative.IsIconic(new WindowInteropHelper(bar).Handle) || !DockNative.IsWindowVisible(new WindowInteropHelper(bar).Handle)) Reveal();
             awaySince = Environment.TickCount64;
             return;
         }
