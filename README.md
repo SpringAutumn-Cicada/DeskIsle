@@ -244,3 +244,5 @@ WSL 可通过 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpat
 1.11.32：弹窗工具栏机器人下移 2 DIP，其他布局不变。
 
 2.0.0：显示桌面时只修复异常卡片，避免对正常卡片重复强制重绘；延迟恢复仅检查状态。详见 [显示桌面按需恢复](docs/显示桌面按需恢复.md)。
+
+2.0.1：增加启动耗时诊断、等待 Explorer 就绪后启用 Dock、异步窗口恢复及登录启动设置。详见 [启动与窗口恢复](docs/启动与窗口恢复.md)。

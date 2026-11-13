@@ -6,6 +6,7 @@ namespace DeskIsle.Dock;
 internal static class WindowActivation
 {
     private static readonly HashSet<nint> pending = [];
+    [DllImport("user32.dll")] private static extern nint GetLastActivePopup(nint window);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool ShowWindowAsync(nint window, int command);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool PostMessage(nint window, uint message, nint wParam, nint lParam);
     [DllImport("kernel32.dll")] private static extern nint OpenProcess(uint access, bool inherit, uint pid);
@@ -25,7 +26,7 @@ internal static class WindowActivation
         if (!DockNative.IsWindow(handle) || !pending.Add(handle)) return;
         try
         {
-            var target = DockNative.GetWindow(handle, 5); // Last active owned dialog may be the usable window.
+            var target = GetLastActivePopup(handle); // Last active owned dialog may be the usable window.
             if (DockNative.IsWindowEnabled(handle)) target = handle;
             if (target == 0 || !DockNative.IsWindowEnabled(target)) target = handle;
             DockNative.GetWindowThreadProcessId(target, out var pid);
@@ -51,8 +52,8 @@ internal static class WindowActivation
                 break;
             }
             StartupDiagnostics.Mark($"activate-result accepted={activated} minimized={DockNative.IsIconic(target)} foreground={DockNative.GetForegroundWindow() == target}");
-            if (DockNative.IsIconic(target))
-                MessageBox.Show("未能恢复此窗口。若该程序以管理员权限运行，Windows 可能限制普通权限 Dock 控制它；请先通过原生任务栏恢复。", "DeskIsle Dock");
+            if (DockNative.IsIconic(target) || DockNative.GetForegroundWindow() != target)
+                MessageBox.Show("未能将此窗口恢复到前台。若该程序以管理员权限运行，Windows 可能限制普通权限 Dock 控制它；请先通过原生任务栏恢复。", "DeskIsle Dock");
         }
         finally { pending.Remove(handle); }
     }
