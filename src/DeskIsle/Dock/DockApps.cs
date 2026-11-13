@@ -10,7 +10,7 @@ namespace DeskIsle.Dock;
 
 internal sealed record DockWindow(nint Handle, string Title, string? Executable);
 internal sealed record DockPin(string Path, string? Executable, string Name);
-internal static class DockApps
+internal static partial class DockApps
 {
     internal static ProcessStartInfo LaunchInfo(string path)
     {
@@ -50,8 +50,8 @@ internal static class DockApps
             if (!IsAppWindow(w)) return true;
             DockNative.GetWindowThreadProcessId(w, out var pid);
             var text = new StringBuilder(1024); DockNative.GetWindowText(w, text, text.Capacity);
-            string? path = null;
-            try { using var process = Process.GetProcessById((int)pid); path = process.MainModule?.FileName; }
+            string? path = ProcessImage(pid);
+            try { using var process = Process.GetProcessById((int)pid); path ??= process.MainModule?.FileName; }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { }
             list.Add(new(w, text.ToString(), path)); return true;
         }, 0);
@@ -86,10 +86,11 @@ internal static class DockApps
     [DllImport("ole32.dll")] private static extern void CoUninitialize();
     [DllImport("user32.dll")] private static extern nint SendMessageTimeout(nint window, uint message, nint wParam, nint lParam, uint flags, uint timeout, out nint result);
     [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] private static extern nint GetClassLongPtr(nint window, int index);
-    internal static ImageSource? WindowIcon(nint window)
+    internal static ImageSource? WindowIcon(nint window, int pixels = 96)
     {
-        SendMessageTimeout(window, 0x7F, 1, 0, 2, 100, out var icon);
+        SendMessageTimeout(window, 0x7F, 1, (nint)Math.Max(96, pixels * 96 / 36), 2, 100, out var icon);
         if (icon == 0) icon = GetClassLongPtr(window, -14);
+        if (icon == 0) SendMessageTimeout(window, 0x7F, 2, 0, 2, 100, out icon);
         if (icon == 0) return null;
         // The window owns this HICON. Freeze a copy without destroying the borrowed handle.
         var source = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
@@ -103,12 +104,12 @@ internal static class DockApps
     }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint PrivateExtractIcons(string path, int index, int width, int height, out nint icon, out uint id, uint count, uint flags);
-    private static ImageSource? ExecutableIcon(string path, int pixels)
+    private static ImageSource? ExecutableIcon(string path, int pixels, int index = 0)
     {
         nint icon = 0;
         try
         {
-            var count = PrivateExtractIcons(path, 0, pixels, pixels, out icon, out _, 1, 0);
+            var count = PrivateExtractIcons(path, index, pixels, pixels, out icon, out _, 1, 0);
             if (count != 1 || icon == 0) return null;
             var image = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             image.Freeze(); return image;

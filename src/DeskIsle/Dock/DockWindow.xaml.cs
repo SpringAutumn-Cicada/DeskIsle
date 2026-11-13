@@ -309,7 +309,7 @@ public partial class DockBar : Window
         var path = view.IconPath;
         if (path == null && windows.Length == 0) return;
         var pixels = (int)Math.Clamp(Math.Ceiling(36 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.12), 96, 256);
-        var key = (path ?? $"window:{windows[0].Handle}") + "|" + pixels;
+        var key = DockApps.IconCacheKey(path, windows) + "|" + pixels;
         if (view.IconKey == key || Environment.TickCount64 < view.IconRetryAt) return;
         view.IconKey = key;
         var version = ++view.IconVersion;
@@ -321,7 +321,7 @@ public partial class DockBar : Window
                 try
                 {
                     if (closed || version != view.IconVersion) return;
-                    icon = await Task.Run(() => path != null ? DockApps.Icon(path, pixels) ?? (windows.Length > 0 ? DockApps.WindowIcon(windows[0].Handle) : null) : DockApps.WindowIcon(windows[0].Handle));
+                    icon = await Task.Run(() => DockApps.ApplicationIcon(path, windows, pixels));
                 }
                 finally { iconSlots.Release(); }
             }
