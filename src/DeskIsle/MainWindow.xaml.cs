@@ -298,6 +298,7 @@ public partial class MainWindow : Window
         if (sender is Button { ContextMenu: { } menu } button)
         { menu.PlacementTarget = button; menu.IsOpen = true; }
     }
+    private void ResetCardOpacity(object sender, RoutedEventArgs e) => OpacitySlider.Value = CardState.DefaultBackgroundOpacity;
     private void OpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (Surface != null) Surface.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * e.NewValue), 36, 41, 53));
