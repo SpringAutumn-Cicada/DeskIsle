@@ -125,8 +125,7 @@ public partial class DockBar
         FrameworkElement icon;
         if (title == "原生任务栏")
         {
-            icon = ReturnDockHead.Icon(27);
-            icon.RenderTransform = new TranslateTransform(0, 2);
+            icon = NativeTaskbarIcon();
         }
         else if (title == "任务管理器") icon = ControlIcon("M2,13 L7,13 L10,5 L14,21 L17,11 L22,11", 23);
         else icon = ControlIcon(path, 23);
@@ -134,6 +133,23 @@ public partial class DockBar
         button.ToolTip = title;
         button.Style = (Style)FindResource("PanelCompactTool");
         return button;
+    }
+    private static Viewbox NativeTaskbarIcon()
+    {
+        var brush = ControlBrush("#BDEAF3");
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse("M5,2 L19,2 Q22,2 22,5 L22,19 Q22,22 19,22 L5,22 Q2,22 2,19 L2,5 Q2,2 5,2 Z M2,16 L22,16"),
+            Stroke = brush, StrokeThickness = 1.8, StrokeLineJoin = PenLineJoin.Round
+        });
+        foreach (var left in new[] { 5.0, 10.5, 16.0 })
+        {
+            var tile = new System.Windows.Shapes.Rectangle { Width = 3, Height = 2.7, RadiusX = .6, RadiusY = .6, Fill = brush };
+            Canvas.SetLeft(tile, left); Canvas.SetTop(tile, 17.7);
+            canvas.Children.Add(tile);
+        }
+        return new Viewbox { Width = 27, Height = 27, Child = canvas, Stretch = Stretch.Uniform };
     }
     private static Grid RadioIcon(RadioKind kind)
     {
