@@ -27,12 +27,16 @@ public sealed class DesktopReturnMonitor : IDisposable
             if (disposed) { StopRecovery(); return; }
             recover(false); // Settling checks repair state without repainting healthy surfaces.
             RecoveryTrace.Mark("retry");
-            if (++retries >= 2) StopRecovery();
-            else settle.Interval = TimeSpan.FromMilliseconds(250);
+            if (++retries >= 10) StopRecovery();
+            else settle.Interval = TimeSpan.FromMilliseconds(100);
         };
         AddHook(0x0003, 0x0003); // foreground changed, including a foreground application closing
         AddHook(0x0017, 0x0017); // minimize ended
         AddHook(0x0020, 0x0020); // desktop switch
+        // Win+D can minimize our cards after the foreground event has already fired.
+        // Observe our own minimize-start events without including our foreground/reorder repairs.
+        var ownMinimize = SetWinEventHook(0x0016, 0x0016, 0, callback, (uint)Environment.ProcessId, 0, 0);
+        if (ownMinimize != 0) hooks.Add(ownMinimize);
         AddHook(0x8004, 0x8004); // Explorer desktop Z-order changed
     }
     private void AddHook(uint first, uint last)
@@ -50,12 +54,12 @@ public sealed class DesktopReturnMonitor : IDisposable
         // Keep native callback short and coalesce the transition burst on the WPF dispatcher.
         if (queued || dispatcher.HasShutdownStarted) return;
         queued = true;
-        dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
         {
             queued = false;
             if (disposed) return;
             RecoveryTrace.Mark("dispatch");
-            recover(true);
+            recover(eventId == 0x0003);
             RecoveryTrace.Mark("recover");
             // Keep the original bounded schedule during event bursts. A WPF frame
             // is not proof that Explorer/DWM has finished the desktop transition.

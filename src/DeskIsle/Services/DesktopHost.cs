@@ -45,6 +45,7 @@ public sealed class DesktopHost
         // Healthy cards need no repaint when Explorer exposes the desktop.
         // Only redraw a card whose visibility or Z-order actually needed repair.
         if (!changed) return;
+        StartupDiagnostics.Mark("desktop-card-state-repaired");
         window.InvalidateVisual();
         RedrawWindow(handle, 0, 0, 0x0081); // invalidate this window and its children, asynchronously
     }
