@@ -8,6 +8,10 @@ internal static class LoginStartup
     private static string TaskName => "DeskIsle-Login-" + WindowsIdentity.GetCurrent().User!.Value;
     private static string BackupDirectory => Path.Combine(CardStore.DataDirectory, "startup-backup");
     private static string BackupLinks => Path.Combine(BackupDirectory, "links");
+    // COM interop can translate ERROR_FILE_NOT_FOUND into FileNotFoundException.
+    // Only a missing task is a normal disabled state; permission/service errors must surface.
+    private static bool MissingTask(Exception ex) =>
+        (ex is COMException or FileNotFoundException) && ex.HResult == unchecked((int)0x80070002);
     internal static bool Enabled()
     {
         dynamic service = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
@@ -16,7 +20,7 @@ internal static class LoginStartup
             service.Connect();
             dynamic folder = service.GetFolder("\\");
             try { dynamic task = folder.GetTask(TaskName); try { return (bool)task.Enabled; } finally { Marshal.FinalReleaseComObject(task); } }
-            catch (COMException ex) when (ex.HResult == unchecked((int)0x80070002)) { return false; }
+            catch (Exception ex) when (MissingTask(ex)) { return false; }
             finally { Marshal.FinalReleaseComObject(folder); }
         }
         finally { Marshal.FinalReleaseComObject(service); }
@@ -33,7 +37,7 @@ internal static class LoginStartup
             {
                 string? previous = null;
                 try { dynamic old = folder.GetTask(TaskName); try { previous = (string)old.Xml; } finally { Marshal.FinalReleaseComObject(old); } }
-                catch (COMException ex) when (ex.HResult == unchecked((int)0x80070002)) { }
+                catch (Exception ex) when (MissingTask(ex)) { }
                 if (previous != null) File.WriteAllText(Path.Combine(BackupDirectory, $"task-{DateTime.Now:yyyyMMddHHmmssfff}.xml"), previous);
                 if (!enabled)
                 {
