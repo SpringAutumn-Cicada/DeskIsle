@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => host.SetHandle(this);
         fileSync.Tick += (_, _) => { RebuildFileWatchers(); SyncFiles(null, EventArgs.Empty); };
         eventSync.Tick += (_, _) => { eventSync.Stop(); eventSync.Interval = TimeSpan.FromMilliseconds(40); SyncFiles(null, EventArgs.Empty); };
+        ContentRendered += (_, _) => StartupDiagnostics.Mark("card-first-content-rendered");
         Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { monitor.Start(); } };
         Closing += (_, e) => { if (HasPendingCreation) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
         monitor.Tick += (_, _) =>

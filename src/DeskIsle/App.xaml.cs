@@ -15,15 +15,17 @@ public partial class App : Application
             catch (Exception ex) { MessageBox.Show(ex.Message, "恢复任务栏"); }
             Shutdown(); return;
         }
+        StartupDiagnostics.Mark("process-start");
         instance = new Mutex(true, "Local\\DeskIsle-" + System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value, out var created);
         if (!created)
         {
-            MessageBox.Show("DeskIsle 已在运行，请先退出已有窗口。", "DeskIsle");
+            if (!e.Args.Contains("--login")) MessageBox.Show("DeskIsle 已在运行，请先退出已有窗口。", "DeskIsle");
             Shutdown(); return;
         }
         base.OnStartup(e);
         workspace = new WorkspaceManager();
         workspace.Start();
+        StartupDiagnostics.Mark("workspace-started");
     }
     protected override void OnExit(ExitEventArgs e)
     {

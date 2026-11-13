@@ -39,6 +39,7 @@ public partial class DockBar
                 if (closed || version != visibilityVersion || !wantedVisible) { CancelRevealFrame(); return; }
                 if (++frames < 2) return;
                 CancelRevealFrame();
+                DeskIsle.Services.StartupDiagnostics.Mark("dock-reveal-frame-ready");
                 UpdateLayout(); Place();
                 AnimateVisibility(1, 0, 180, version, false);
             };
