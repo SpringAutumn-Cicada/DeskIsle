@@ -16,6 +16,12 @@ public partial class MainWindow
     private readonly List<FileSystemWatcher> fileWatchers = [];
     private readonly DispatcherTimer eventSync = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(40) };
 
+    internal void RequestFileSync()
+    {
+        if (closing) return;
+        ++viewVersion; // In-flight snapshots cannot replace newer grouping changes.
+        ScheduleFileSync();
+    }
     private void ScheduleFileSync()
     {
         if (closing) return;
@@ -37,6 +43,7 @@ public partial class MainWindow
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             Interlocked.Exchange(ref eventQueued, 0);
+            workspace.NotifyDesktopMutation();
             ScheduleFileSync();
         }));
     }

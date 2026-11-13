@@ -35,6 +35,7 @@ public sealed partial class WorkspaceManager : IDisposable
     public WorkspaceManager(string? dataDirectory = null, bool desktopIntegration = true)
     {
         DesktopIntegration = desktopIntegration;
+        defaultSettle.Tick += async (_, _) => { defaultSettle.Stop(); await SyncDefaultDesktop(); };
         store = new WorkspaceStore(dataDirectory);
         state = store.Load();
         Warning = store.Warning;
@@ -122,7 +123,7 @@ public sealed partial class WorkspaceManager : IDisposable
         FileMoveInProgress = true;
         return true;
     }
-    public void EndFileMove() => FileMoveInProgress = false;
+    public void EndFileMove() { FileMoveInProgress = false; if (DesktopIntegration) NotifyDesktopMutation(); }
     private string? migrationBackup;
     public string[] PendingDesktopPaths => state.Cards.SelectMany(card => card.References).Where(path => !DesktopFiles.IsCardPath(path)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path.Length).ToArray();
     public IReadOnlyDictionary<string, string> ImportedPaths => new Dictionary<string, string>(state.ImportedPaths, StringComparer.OrdinalIgnoreCase);
@@ -206,6 +207,7 @@ public sealed partial class WorkspaceManager : IDisposable
         if (windows.Values.Any(w => w.HasPendingCreation)) { MessageBox.Show("正在处理文件，请完成后再退出。", "DeskIsle"); return; }
         Exiting = true;
         CancelStartupHide();
+        defaultSettle.Stop();
         dock?.Dispose();
         desktopReturn?.Dispose();
         foreach (var window in windows.Values.ToArray()) window.Close();
@@ -217,6 +219,7 @@ public sealed partial class WorkspaceManager : IDisposable
     public void Dispose()
     {
         CancelStartupHide();
+        defaultSettle.Stop();
         dock?.Dispose();
         desktopReturn?.Dispose();
         if (DesktopIntegration) DesktopIcons.Dispose();

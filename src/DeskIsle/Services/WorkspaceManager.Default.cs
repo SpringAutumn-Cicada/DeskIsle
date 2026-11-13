@@ -4,6 +4,15 @@ namespace DeskIsle.Services;
 public sealed partial class WorkspaceManager
 {
     private bool scanningDesktop;
+    private long desktopChangedAt;
+    private readonly System.Windows.Threading.DispatcherTimer defaultSettle = new(System.Windows.Threading.DispatcherPriority.Background)
+        { Interval = TimeSpan.FromMilliseconds(750) };
+    internal void NotifyDesktopMutation()
+    {
+        if (Exiting) return;
+        desktopChangedAt = Environment.TickCount64;
+        defaultSettle.Stop(); defaultSettle.Start();
+    }
     public bool IsDefaultCard(Guid id) => state.DefaultCardId == id;
     public void SetDefaultCard(Guid id)
     {
@@ -33,7 +42,7 @@ public sealed partial class WorkspaceManager
     }
     public async Task SyncDefaultDesktop()
     {
-        if (scanningDesktop || Exiting || store.ReadOnly || FileMoveInProgress || windows.Values.Any(w => w.HasPendingCreation || w.IsReordering)) return;
+        if (Environment.TickCount64 - desktopChangedAt < 700 || scanningDesktop || Exiting || store.ReadOnly || FileMoveInProgress || windows.Values.Any(w => w.HasPendingCreation || w.IsReordering)) return;
         scanningDesktop = true;
         try
         {
@@ -53,7 +62,11 @@ public sealed partial class WorkspaceManager
             state.SeenDesktopPaths = paths.ToList();
             try { Save(); }
             catch { target.References = previousReferences; state.SeenDesktopPaths = previousSeen; throw; }
-            if (added.Length > 0) await RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
+            if (added.Length > 0 && windows.TryGetValue(target.Id, out var window))
+            {
+                StartupDiagnostics.Mark($"default-desktop-added count={added.Length}");
+                window.RequestFileSync();
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { StartupDiagnostics.Mark("default-desktop-sync-error=" + ex.GetType().Name); }

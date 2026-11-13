@@ -21,10 +21,10 @@ public partial class MainWindow
         if (!closing && report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
         if (!closing && warning != null) Status.Text = warning;
     }
-    internal async Task RefreshAfterFileMove(string source, string destination)
+    internal Task RefreshAfterFileMove(string source, string destination)
     {
-        if (closing) return;
-        // All current cards are desktop groups; arbitrary directory browsing is removed.
-        await LoadReferences();
+        // Watchers stay installed and unchanged cards retain their existing controls.
+        RequestFileSync();
+        return Task.CompletedTask;
     }
 }
