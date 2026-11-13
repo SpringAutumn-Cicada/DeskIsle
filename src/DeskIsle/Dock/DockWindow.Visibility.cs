@@ -6,6 +6,7 @@ namespace DeskIsle.Dock;
 
 public partial class DockBar
 {
+    internal event Action? RevealReady;
     private readonly TranslateTransform visibilityOffset = new();
     private bool wantedVisible, fadingOut;
     private long visibilityVersion;
@@ -42,11 +43,13 @@ public partial class DockBar
                 DeskIsle.Services.StartupDiagnostics.Mark("dock-reveal-frame-ready");
                 UpdateLayout(); Place();
                 AnimateVisibility(1, 0, 180, version, false);
+                RevealReady?.Invoke();
             };
             CompositionTarget.Rendering += revealFrame;
             return;
         }
         AnimateVisibility(1, 0, 180, version, false);
+        RevealReady?.Invoke();
     }
 
     internal void HideAnimated(bool immediate = false)

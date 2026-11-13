@@ -15,6 +15,8 @@ internal sealed partial class DockController : IDisposable
     internal DockSettings Settings { get; }
     private readonly DispatcherTimer pointer = new() { Interval = TimeSpan.FromMilliseconds(80) };
     private readonly DispatcherTimer refresh = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(3) };
+    private readonly DispatcherTimer startupRetry = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+    private int startupAttempts;
     private TaskbarLease? lease;
     private DockBar? bar;
     private Window? returnButton;
@@ -39,6 +41,7 @@ internal sealed partial class DockController : IDisposable
     internal DockController()
     {
         Settings = store.Load();
+        startupRetry.Tick += (_, _) => TryStartup();
         pointer.Tick += PointerTick;
         refresh.Tick += async (_, _) => await Refresh();
         settle.Tick += async (_, _) => { settle.Stop(); await Refresh(); };
@@ -49,7 +52,28 @@ internal sealed partial class DockController : IDisposable
     {
         if (store.Warning != null) MessageBox.Show(store.Warning, "DeskIsle Dock");
         // Explicit product behavior: every launch starts Dock, even after a previous session disabled it.
-        if (!store.ReadOnly) Apply(true);
+        if (!store.ReadOnly) { startupAttempts = 0; TryStartup(); }
+    }
+    private void TryStartup()
+    {
+        if (disposed) { startupRetry.Stop(); return; }
+        ++startupAttempts;
+        // Both the taskbar and stale recovery must be ready before attempting takeover.
+        try
+        {
+            if (DockNative.Taskbars().Length > 0 && TaskbarLease.Restore(true))
+            {
+                startupRetry.Stop();
+                DeskIsle.Services.StartupDiagnostics.Mark("explorer-ready");
+                Apply(true); return;
+            }
+        }
+        catch (Exception ex) when (Recoverable(ex))
+        { DeskIsle.Services.StartupDiagnostics.Mark("explorer-recovery-error=" + ex.GetType().Name); }
+        if (startupAttempts < 60) { startupRetry.Start(); return; }
+        startupRetry.Stop();
+        DeskIsle.Services.StartupDiagnostics.Mark("explorer-wait-timeout");
+        MessageBox.Show("等待桌面就绪超时，已保留原生任务栏。可在卡片菜单的 Dock 设置中重新启用。", "DeskIsle Dock");
     }
     internal void Configure()
     {
@@ -60,6 +84,7 @@ internal sealed partial class DockController : IDisposable
     }
     internal bool Apply(bool enabled)
     {
+        startupRetry.Stop();
         try
         {
             if (store.ReadOnly) throw new IOException("Dock 配置处于保护模式，不能启用接管。");
@@ -90,7 +115,9 @@ internal sealed partial class DockController : IDisposable
     private void CreateWindows()
     {
         lastExternalForeground = DockNative.GetForegroundWindow();
-        bar = new(this) { Opacity = 0 }; bar.Show(); bar.Place(); bar.HideAnimated(true);
+        bar = new(this) { Opacity = 0 };
+        bar.RevealReady += () => lease?.BeginTakeover();
+        bar.Show(); bar.Place(); bar.HideAnimated(true);
         var button = ReturnDockHead.Create();
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };
         var menu = new ContextMenu(); DockBar.Add(menu, "关闭 Dock 并恢复任务栏", () => Apply(false)); button.ContextMenu = menu;
@@ -324,7 +351,7 @@ internal sealed partial class DockController : IDisposable
     private static bool Recoverable(Exception ex) => ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException or System.Text.Json.JsonException;
     private void Stop()
     {
-        pointer.Stop(); refresh.Stop(); settle.Stop();
+        startupRetry.Stop(); pointer.Stop(); refresh.Stop(); settle.Stop();
         StopAttention();
         if (windowHook != 0) { DockNative.UnhookWinEvent(windowHook); windowHook = 0; }
         if (foregroundHook != 0) { DockNative.UnhookWinEvent(foregroundHook); foregroundHook = 0; }

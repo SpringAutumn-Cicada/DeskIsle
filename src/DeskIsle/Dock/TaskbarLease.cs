@@ -8,7 +8,7 @@ internal sealed class TaskbarLease : IDisposable
 {
     internal sealed record Recovery(int Pid, long Started, bool Visible);
     internal static string Marker => Path.Combine(CardStore.DataDirectory, "taskbar-recovery.json");
-    private bool active;
+    private bool active, takeoverReady;
     private bool visible;
     private readonly HashSet<nint> hidden = [];
     private Process? guard;
@@ -33,13 +33,19 @@ internal sealed class TaskbarLease : IDisposable
             active = true;
             showCallback = (_, _, window, objectId, childId, _, _) =>
             {
-                if (active && !NativeMode && objectId == 0 && childId == 0 && DockNative.Class(window) == "Shell_TrayWnd")
+                if (active && takeoverReady && !NativeMode && objectId == 0 && childId == 0 && DockNative.Class(window) == "Shell_TrayWnd")
                     DockNative.ShowWindowAsync(window, 0);
             };
             showHook = DockNative.SetWinEventHook(0x8002, 0x8002, 0, showCallback, 0, 0, 2);
-            Reconcile();
         }
         catch { Restore(false); throw; }
+    }
+    internal void BeginTakeover()
+    {
+        if (!active || takeoverReady) return;
+        takeoverReady = true;
+        DeskIsle.Services.StartupDiagnostics.Mark("taskbar-takeover-ready");
+        Reconcile();
     }
     internal void Native(bool show)
     {
@@ -55,7 +61,7 @@ internal sealed class TaskbarLease : IDisposable
     }
     internal void Reconcile()
     {
-        if (!active || NativeMode) return;
+        if (!active || !takeoverReady || NativeMode) return;
         // Called by the low-frequency Shell reconciliation, not every pointer tick.
         foreach (var bar in DockNative.Taskbars())
             if (hidden.Add(bar) || DockNative.IsWindowVisible(bar)) DockNative.ShowWindowAsync(bar, 0);
