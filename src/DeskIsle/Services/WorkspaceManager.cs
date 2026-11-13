@@ -72,7 +72,7 @@ public sealed partial class WorkspaceManager : IDisposable
     {
         if (Exiting) return;
         var desktop = DesktopReturnMonitor.ForegroundDesktop();
-        // If another application owns the foreground, cards only refresh their existing surfaces.
+        // Repair desktop placement only; ordinary foreground/dialog changes do not repaint cards.
         foreach (var window in windows.Values.ToArray()) window.RecoverOnDesktop(desktop, repaint);
     }
     private void Open(CardState card)

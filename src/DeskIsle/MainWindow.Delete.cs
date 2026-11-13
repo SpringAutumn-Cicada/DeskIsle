@@ -44,6 +44,7 @@ public partial class MainWindow
         { MessageBox.Show(this, "删除未完成，请检查文件占用、权限或目录连接。原引用保留，可刷新后重试。", "DeskIsle"); }
         finally { if (operationStarted) workspace.EndFileMove(); deletingItem = false; }
         if (closing) return;
+        if (Status.Text == "正在移入回收站…") Status.Text = "";
         if (directory == null) RequestFileSync(); else await LoadFolder();
         SaveCard();
     }

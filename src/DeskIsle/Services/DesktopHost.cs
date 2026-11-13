@@ -20,17 +20,9 @@ public sealed class DesktopHost
         // Never recreate closed windows, activate cards, or show cards on a different virtual desktop.
         if (handle == 0 || !IsWindow(handle) || window.Visibility != Visibility.Visible) return;
         if (DwmGetWindowAttribute(handle, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return;
-        if (desktop == 0)
-        {
-            // A full-screen app can close onto a smaller app, leaving wallpaper exposed.
-            // Refresh already-visible cards without changing visibility, focus or Z-order.
-            if (repaint && IsWindowVisible(handle) && !IsIconic(handle))
-            {
-                window.InvalidateVisual();
-                RedrawWindow(handle, 0, 0, 0x0081);
-            }
-            return;
-        }
+        // Ordinary foreground transitions (including Explorer's New/rename dialogs) must not
+        // invalidate every WPF card. Native composition handles exposing unchanged surfaces.
+        if (desktop == 0) return;
         var changed = false;
         if (IsIconic(handle) || !IsWindowVisible(handle)) { ShowWindow(handle, 4); changed = true; } // SW_SHOWNOACTIVATE
         if (!IsAboveDesktop(desktop))

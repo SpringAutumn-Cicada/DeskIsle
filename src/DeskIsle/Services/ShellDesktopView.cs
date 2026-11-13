@@ -30,10 +30,13 @@ internal static class ShellDesktopView
             var service = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837"); // SID_STopLevelBrowser
             var browserId = new Guid("000214E2-0000-0000-C000-000000000046");
             Marshal.ThrowExceptionForHR(((ServiceProvider)desktop).QueryService(in service, in browserId, out browser));
+            if (browser == 0) return false;
             // SDK IShellBrowser: IUnknown(3), IOleWindow(2), QueryActiveShellView at slot 15.
             Marshal.ThrowExceptionForHR(Method<QueryView>(browser, 15)(browser, out view));
+            if (view == 0) return false;
             var folderId = new Guid("1AF3A467-214F-4298-908E-06B03E0B39F9");
             Marshal.ThrowExceptionForHR(Marshal.QueryInterface(view, ref folderId, out folder));
+            if (folder == 0) return false;
             // SDK IFolderView2 extends IFolderView: SetCurrentFolderFlags 24, GetCurrentFolderFlags 25.
             if (visible.HasValue)
                 Marshal.ThrowExceptionForHR(Method<SetFlags>(folder, 24)(folder, NoIcons, visible.Value ? 0 : NoIcons));
