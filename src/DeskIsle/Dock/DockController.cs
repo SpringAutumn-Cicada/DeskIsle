@@ -75,12 +75,28 @@ internal sealed partial class DockController : IDisposable
         DeskIsle.Services.StartupDiagnostics.Mark("explorer-wait-timeout");
         MessageBox.Show("等待桌面就绪超时，已保留原生任务栏。可在卡片菜单的 Dock 设置中重新启用。", "DeskIsle Dock");
     }
+    private bool configureQueued;
     internal void Configure()
     {
-        if (settingsWindow != null) { settingsWindow.Activate(); return; }
-        settingsWindow = new(this);
-        settingsWindow.Closed += (_, _) => settingsWindow = null;
-        settingsWindow.Show();
+        if (configureQueued || disposed) return;
+        configureQueued = true;
+        // Let the invoking ContextMenu/Popup release mouse capture and restore focus first.
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            configureQueued = false;
+            if (disposed) return;
+            if (settingsWindow == null)
+            {
+                settingsWindow = new(this);
+                settingsWindow.Closed += (_, _) => settingsWindow = null;
+            }
+            if (settingsWindow.WindowState == WindowState.Minimized) settingsWindow.WindowState = WindowState.Normal;
+            settingsWindow.Show();
+            settingsWindow.Topmost = true;
+            settingsWindow.Activate();
+            settingsWindow.Topmost = false;
+            settingsWindow.Focus();
+        }));
     }
     internal bool Apply(bool enabled)
     {

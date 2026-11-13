@@ -16,11 +16,21 @@ internal partial class DockSettingsWindow : Window
         HideSlider.Value = controller.Settings.HideMs;
         OpacitySlider.Value = controller.Settings.Opacity;
         HotKeyEditor.Text = ((char)controller.Settings.HotKey).ToString();
-        try { loginEnabled = DeskIsle.Services.LoginStartup.Enabled(); LoginToggle.IsChecked = loginEnabled; }
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.IO.IOException)
-        { LoginToggle.IsEnabled = false; ErrorText.Text = "无法读取登录启动设置：" + ex.Message; ErrorText.Visibility = Visibility.Visible; }
+        LoginToggle.IsEnabled = false;
+        Loaded += LoadLoginSetting;
         UpdateValues();
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+    }
+    private async void LoadLoginSetting(object sender, RoutedEventArgs e)
+    {
+        Loaded -= LoadLoginSetting;
+        try
+        {
+            var enabled = await Task.Run(DeskIsle.Services.LoginStartup.Enabled);
+            loginEnabled = enabled; LoginToggle.IsChecked = enabled; LoginToggle.IsEnabled = true;
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.IO.IOException)
+        { ErrorText.Text = "无法读取登录启动设置：" + ex.Message; ErrorText.Visibility = Visibility.Visible; }
     }
     private void ValuesChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdateValues();
     private void UpdateValues()
