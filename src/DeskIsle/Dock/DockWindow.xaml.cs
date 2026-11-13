@@ -364,9 +364,7 @@ public partial class DockBar : Window
     }
     private void Activate(DockWindow window)
     {
-        if (!DockNative.IsWindow(window.Handle) || !DockNative.IsWindowVisible(window.Handle) || !DockNative.IsWindowEnabled(window.Handle)) return;
-        if (DockNative.IsIconic(window.Handle)) DockNative.ShowWindow(window.Handle, 9);
-        DockNative.SetForegroundWindow(window.Handle);
+        _ = WindowActivation.Restore(window.Handle);
     }
     private void ShowDesktopClick(object sender, RoutedEventArgs e)
     {
