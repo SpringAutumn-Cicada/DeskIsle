@@ -168,6 +168,20 @@ public partial class MainWindow : Window
         e.Handled = true;
         if ((e.AllowedEffects & DragDropEffects.Copy) == 0 || e.Data.GetData(DataFormats.FileDrop) is not string[] paths) { e.Effects = DragDropEffects.None; return; }
         e.Effects = DragDropEffects.Copy;
+        if (e.Data.GetData(ReorderFormat) is ReorderPayload payload && payload.CardId != state.Id)
+        {
+            if (folder != null)
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => MoveIntoFolder(payload.Path, folder)));
+            else if (DesktopFiles.IsDesktopItem(payload.Path))
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(async () =>
+                {
+                    try { await workspace.TransferCardReference(payload.CardId, state.Id, payload.Path); }
+                    catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
+                }));
+            else
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ImportDesktopFiles(paths, folder)));
+            return;
+        }
         var captured = paths.ToArray();
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ImportDesktopFiles(captured, folder)));
     }

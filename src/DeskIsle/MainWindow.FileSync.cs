@@ -118,8 +118,6 @@ public partial class MainWindow
         var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         try
         {
-            await workspace.SyncDefaultDesktop();
-            if (closing) return;
             if (renamedFiles.Count > 0)
             {
                 var changes = renamedFiles.ToArray(); renamedFiles.Clear();
@@ -132,6 +130,8 @@ public partial class MainWindow
                 foreach (var change in verified) workspace.RecordDesktopRename(change.Old, change.New);
                 if (verified.Length > 0) { ScheduleFileSync(); return; }
             }
+            await workspace.SyncDefaultDesktop();
+            if (closing) return;
             var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Where(item => DesktopFiles.Displayable(item.FullPath)).Select(x => new FileTile(x)).ToArray());
             if (closing) return;
             if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
