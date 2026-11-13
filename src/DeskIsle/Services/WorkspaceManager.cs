@@ -2,7 +2,7 @@ using System.IO;
 using System.Windows;
 namespace DeskIsle.Services;
 
-public sealed class WorkspaceManager : IDisposable
+public sealed partial class WorkspaceManager : IDisposable
 {
     private readonly WorkspaceStore store;
     private readonly WorkspaceState state;
@@ -39,6 +39,7 @@ public sealed class WorkspaceManager : IDisposable
         state = store.Load();
         Warning = store.Warning;
         if (state.Cards.Count == 0) state.Cards.Add(new());
+        if (!state.Cards.Any(c => c.Id == state.DefaultCardId)) state.DefaultCardId = state.Cards[0].Id;
     }
     public void Start()
     {
@@ -55,6 +56,7 @@ public sealed class WorkspaceManager : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "旧配置备份未完成，请先修复权限再导入旧记录。"; }
         }
         foreach (var card in state.Cards.ToArray()) Open(card);
+        if (DesktopIntegration) _ = SyncDefaultDesktop();
         if (DesktopIntegration) { dock = new DeskIsle.Dock.DockController(); dock.Start(); }
         if (DesktopIntegration && PendingDesktopPaths.Length > 0 && !state.DesktopMigrationPrompted)
             Application.Current.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => windows.Values.FirstOrDefault()?.OfferDesktopMigration()));
@@ -105,9 +107,11 @@ public sealed class WorkspaceManager : IDisposable
         if (store.ReadOnly) { MessageBox.Show(window, "配置处于保护模式，不能移除卡片。", "DeskIsle"); return; }
         if (MessageBox.Show(window, "移除此卡片及其收藏记录？真实文件不会删除。移除最后一张卡片后程序退出。", "移除卡片", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         var index = state.Cards.IndexOf(card);
+        var previousDefault = state.DefaultCardId;
         state.Cards.Remove(card);
+        if (state.DefaultCardId == card.Id) state.DefaultCardId = state.Cards.FirstOrDefault()?.Id;
         try { Save(); }
-        catch { state.Cards.Insert(index, card); throw; }
+        catch { state.Cards.Insert(index, card); state.DefaultCardId = previousDefault; throw; }
         window.Close();
     }
     public bool FileMoveInProgress { get; private set; }

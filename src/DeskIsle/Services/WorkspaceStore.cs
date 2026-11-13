@@ -5,6 +5,8 @@ namespace DeskIsle.Services;
 public sealed class WorkspaceState
 {
     public int SchemaVersion { get; set; } = 3;
+    public Guid? DefaultCardId { get; set; }
+    public List<string>? SeenDesktopPaths { get; set; }
     public bool DesktopMigrationPrompted { get; set; }
     public Dictionary<string, string> ImportedPaths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<CardState> Cards { get; set; } = [];
@@ -68,6 +70,8 @@ public sealed class WorkspaceStore
     {
         if (state.Cards == null) throw new JsonException();
         state.ImportedPaths = new Dictionary<string, string>((state.ImportedPaths ?? []).Where(pair => Path.IsPathFullyQualified(pair.Key) && Path.IsPathFullyQualified(pair.Value)), StringComparer.OrdinalIgnoreCase);
+        state.SeenDesktopPaths = state.SeenDesktopPaths?.Where(p => !string.IsNullOrWhiteSpace(p) && Path.IsPathFullyQualified(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (!state.Cards.Any(c => c != null && c.Id == state.DefaultCardId)) state.DefaultCardId = state.Cards.FirstOrDefault()?.Id;
         var ids = new HashSet<Guid>();
         foreach (var card in state.Cards)
         {

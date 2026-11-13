@@ -118,6 +118,8 @@ public partial class MainWindow
         var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         try
         {
+            await workspace.SyncDefaultDesktop();
+            if (closing) return;
             if (renamedFiles.Count > 0)
             {
                 var changes = renamedFiles.ToArray(); renamedFiles.Clear();

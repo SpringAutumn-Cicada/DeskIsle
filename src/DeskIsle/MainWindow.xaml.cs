@@ -100,6 +100,8 @@ public partial class MainWindow : Window
     private void RenameLostFocus(object sender, KeyboardFocusChangedEventArgs e) => FinishRename(true);
     private void UpdateDesktopButton()
     {
+        DefaultCardToggle.IsChecked = workspace.IsDefaultCard(state.Id);
+        DefaultCardToggle.Header = workspace.IsDefaultCard(state.Id) ? "default 卡片（接收桌面新增文件）" : "设为 default 卡片";
         PositionLockToggle.IsChecked = state.PositionLocked;
         PositionLockToggle.Header = state.PositionLocked ? "取消固定卡片位置" : "固定卡片位置";
         var visible = desktopIcons.Visible;
@@ -297,6 +299,11 @@ public partial class MainWindow : Window
         CurrentTransferMenu.Visibility = currentTransfer == null ? Visibility.Collapsed : Visibility.Visible;
         if (sender is Button { ContextMenu: { } menu } button)
         { menu.PlacementTarget = button; menu.IsOpen = true; }
+    }
+    private void SetDefaultCardClick(object sender, RoutedEventArgs e)
+    {
+        try { workspace.SetDefaultCard(state.Id); UpdateDesktopButton(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = ex.Message; UpdateDesktopButton(); }
     }
     private void ResetCardOpacity(object sender, RoutedEventArgs e) => OpacitySlider.Value = CardState.DefaultBackgroundOpacity;
     private void OpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

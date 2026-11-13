@@ -58,6 +58,7 @@
 <Button.ContextMenu><ContextMenu>
 <MenuItem Header="添加新卡片" Icon="＋" Click="AddCardClick"/><MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="我的桌面分组" Click="CollectionClick"/><MenuItem Header="打开桌面目录" Click="OpenDesktopClick"/><MenuItem x:Name="CurrentTransferMenu" Header="查看当前文件操作…" Visibility="Collapsed" Click="ViewTransferClick"/><MenuItem x:Name="MigrationMenu" Header="导入待迁移旧记录…" Click="MigrateDesktopClick"/><MenuItem x:Name="RemovePendingMenu" Header="移除待迁移旧记录…" Click="RemovePendingClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
 
+<MenuItem x:Name="DefaultCardToggle" Header="设为 default 卡片" IsCheckable="True" Click="SetDefaultCardClick"/>
 <MenuItem x:Name="PositionLockToggle" Header="固定卡片位置" IsCheckable="True" Click="TogglePositionLock"/>
 <MenuItem x:Name="DesktopToggle" Header="隐藏桌面图标" Click="ToggleDesktopIcons" Icon="◉"/>
 <MenuItem Header="卡片外观" Icon="◐"><MenuItem StaysOpenOnClick="True"><MenuItem.Header><StackPanel Width="190" Margin="0,2"><Grid Margin="0,0,0,4"><TextBlock Text="背景不透明度" Foreground="#D9E4F2" FontWeight="Medium"/><TextBlock HorizontalAlignment="Right" Foreground="#99E0D5" Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}"/></Grid><Slider Style="{StaticResource AppearanceSlider}" AutomationProperties.Name="卡片背景不透明度" x:Name="OpacitySlider" Minimum="0.3" Maximum="1" Value="0.85" ValueChanged="OpacityChanged"/></StackPanel></MenuItem.Header></MenuItem><MenuItem Header="恢复默认不透明度（85%）" Click="ResetCardOpacity"/></MenuItem>
