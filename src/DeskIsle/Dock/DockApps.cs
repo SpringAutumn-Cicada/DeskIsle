@@ -47,19 +47,27 @@ internal static class DockApps
         var list = new List<DockWindow>();
         DockNative.EnumWindows((w, _) =>
         {
-            if (!DockNative.IsWindowVisible(w) || DockNative.GetWindow(w, 4) != 0 || (DockNative.GetWindowLong(w, -20) & 0x80) != 0) return true;
+            if (!IsAppWindow(w)) return true;
             DockNative.GetWindowThreadProcessId(w, out var pid);
-            if (pid == Environment.ProcessId || DockNative.Class(w) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW") return true;
             var text = new StringBuilder(1024); DockNative.GetWindowText(w, text, text.Capacity);
-            if (text.Length == 0) return true;
-            // Cloaked UWP/virtual-desktop windows must not appear as active applications.
-            if (DwmGetWindowAttribute(w, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             string? path = null;
             try { using var process = Process.GetProcessById((int)pid); path = process.MainModule?.FileName; }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or NotSupportedException) { }
             list.Add(new(w, text.ToString(), path)); return true;
         }, 0);
         return list.ToArray();
+    }
+    // Shared by app enumeration and attention: background/tool/cloaked windows cannot hold Dock open.
+    internal static bool IsAppWindow(nint window)
+    {
+        if (!DockNative.IsWindow(window) || !DockNative.IsWindowVisible(window) ||
+            DockNative.GetWindow(window, 4) != 0 || (DockNative.GetWindowLong(window, -20) & 0x80) != 0) return false;
+        DockNative.GetWindowThreadProcessId(window, out var pid);
+        if (pid == Environment.ProcessId || DockNative.Class(window) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "Progman" or "WorkerW") return false;
+        var text = new StringBuilder(1024);
+        DockNative.GetWindowText(window, text, text.Capacity);
+        if (text.Length == 0) return false;
+        return DwmGetWindowAttribute(window, 14, out var cloaked, sizeof(int)) != 0 || cloaked == 0;
     }
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct FileInfo { public nint Icon; public int Index; public uint Attributes; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string Type; }

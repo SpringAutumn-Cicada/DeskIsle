@@ -9,6 +9,7 @@ internal sealed partial class DockController
     private uint shellMessage;
     private bool shellRegistered;
     private readonly HashSet<nint> attentionWindows = [];
+    private readonly HashSet<nint> deferredAttention = [];
     private readonly Dictionary<nint, string> attentionKeys = [];
     private readonly Dictionary<string, long> attentionStarted = new(StringComparer.OrdinalIgnoreCase);
 
@@ -27,9 +28,18 @@ internal sealed partial class DockController
         {
             DockNative.GetWindowThreadProcessId(window, out var pid);
             if (pid == Environment.ProcessId || window == DockNative.GetForegroundWindow()) return;
-            UpdateAttention();
+            // Do not interpret a helper window's flash as an unread message for a whole process.
+            if (!DockApps.IsAppWindow(window)) return;
             var app = windows.FirstOrDefault(w => w.Handle == window);
-            var key = app?.Executable;
+            if (app == null)
+            {
+                // A real app may flash before the asynchronous app snapshot catches up.
+                deferredAttention.Add(window);
+                if (!settle.IsEnabled) settle.Start();
+                return;
+            }
+            UpdateAttention();
+            var key = app.Executable;
             if (key == null)
             {
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)pid); key = process.MainModule?.FileName; }
@@ -60,7 +70,7 @@ internal sealed partial class DockController
         DockNative.GetWindowThreadProcessId(foreground, out var foregroundPid);
         var cleared = attentionWindows.RemoveWhere(handle =>
         {
-            if (!DockNative.IsWindow(handle)) return true;
+            if (!windows.Any(w => w.Handle == handle) || !DockApps.IsAppWindow(handle)) return true;
             // A failed Dock click never clears state: the application must actually be foreground.
             if (DockNative.IsIconic(foreground)) return false;
             DockNative.GetWindowThreadProcessId(handle, out var pid);
@@ -76,10 +86,19 @@ internal sealed partial class DockController
             && attentionStarted.TryGetValue(key, out var started) && Environment.TickCount64 - started < 5000).ToArray();
         bar?.SetAttention(attentionWindows, strong);
     }
+    private void ReconcileAttention()
+    {
+        var pending = deferredAttention.ToArray();
+        deferredAttention.Clear();
+        foreach (var handle in pending)
+            if (windows.Any(w => w.Handle == handle) && DockApps.IsAppWindow(handle))
+                HandleAttentionMessage((int)shellMessage, 0x8006, handle);
+        UpdateAttention();
+    }
     private void StopAttention()
     {
         if (shellRegistered && messages != null) DeregisterShellHookWindow(messages.Handle);
         shellRegistered = false; shellMessage = 0;
-        attentionWindows.Clear(); attentionKeys.Clear(); attentionStarted.Clear();
+        deferredAttention.Clear(); attentionWindows.Clear(); attentionKeys.Clear(); attentionStarted.Clear();
     }
 }

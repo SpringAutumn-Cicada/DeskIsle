@@ -305,6 +305,7 @@ internal sealed partial class DockController : IDisposable
             if (!requested.SequenceEqual(Settings.Pins, StringComparer.OrdinalIgnoreCase)) return;
             windows = snapshot; pins = nextPins; resolvedPaths = requested;
             bar?.SetApps(pins, windows);
+            ReconcileAttention();
         }
         catch (Exception ex) when (Recoverable(ex)) { /* Preserve last snapshot; try again on the next event/tick. */ }
         finally
