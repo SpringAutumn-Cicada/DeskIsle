@@ -24,9 +24,10 @@ internal static partial class DockApps
     }
     private static bool HostIcon(string? path) => Path.GetFileName(path)?.ToLowerInvariant() is "mmc.exe" or "applicationframehost.exe";
     internal static string IconCacheKey(string? path, DockWindow[] windows) =>
-        (path ?? "window") + (path == null || HostIcon(path) ? "|" + string.Join(";", windows.Select(w => $"{w.Handle}:{w.Title}")) : "");
+        (path ?? "window") + (path == null || HostIcon(path) || windows.Any(w => HostIcon(w.Executable)) ? "|" + string.Join(";", windows.Select(w => $"{w.Handle}:{w.Title}")) : "");
     private static bool SettingsWindow(string? path, DockWindow[] windows) =>
         Path.GetFileName(path)?.Equals("SystemSettings.exe", StringComparison.OrdinalIgnoreCase) == true ||
+        windows.Any(w => Path.GetFileName(w.Executable)?.Equals("SystemSettings.exe", StringComparison.OrdinalIgnoreCase) == true) ||
         (path == null || Path.GetFileName(path)?.Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) == true) &&
             windows.Any(w => w.Title is "设置" or "Settings");
     internal static ImageSource? ApplicationIcon(string? path, DockWindow[] windows, int pixels)
@@ -41,7 +42,8 @@ internal static partial class DockApps
                 if (image != null) return image;
             }
         }
-        if (Path.GetFileName(path)?.Equals("mmc.exe", StringComparison.OrdinalIgnoreCase) == true)
+        if (Path.GetFileName(path)?.Equals("mmc.exe", StringComparison.OrdinalIgnoreCase) == true ||
+            windows.Any(w => Path.GetFileName(w.Executable)?.Equals("mmc.exe", StringComparison.OrdinalIgnoreCase) == true))
         {
             if (windows.Any(w => w.Title.Contains("磁盘管理", StringComparison.OrdinalIgnoreCase) || w.Title.Contains("Disk Management", StringComparison.OrdinalIgnoreCase)))
             {

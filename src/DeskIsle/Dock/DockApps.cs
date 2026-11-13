@@ -86,9 +86,10 @@ internal static partial class DockApps
     [DllImport("ole32.dll")] private static extern void CoUninitialize();
     [DllImport("user32.dll")] private static extern nint SendMessageTimeout(nint window, uint message, nint wParam, nint lParam, uint flags, uint timeout, out nint result);
     [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] private static extern nint GetClassLongPtr(nint window, int index);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
     internal static ImageSource? WindowIcon(nint window, int pixels = 96)
     {
-        SendMessageTimeout(window, 0x7F, 1, (nint)Math.Max(96, pixels * 96 / 36), 2, 100, out var icon);
+        SendMessageTimeout(window, 0x7F, 1, (nint)Math.Max(96u, GetDpiForWindow(window)), 2, 100, out var icon);
         if (icon == 0) icon = GetClassLongPtr(window, -14);
         if (icon == 0) SendMessageTimeout(window, 0x7F, 2, 0, 2, 100, out icon);
         if (icon == 0) return null;
