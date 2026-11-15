@@ -81,10 +81,13 @@ internal sealed class WindowPeek : IDisposable
                 if (!DockNative.SetWindowPos(Surface.Handle, 0, rect.Left, rect.Top, size.Width, size.Height, 0x4 | 0x10))
                 { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             }
-            var fullSource = string.Equals(Environment.GetEnvironmentVariable("DESKISLE_PEEK_SOURCE_MODE"), "full", StringComparison.OrdinalIgnoreCase);
+            // User A/B verification isolated the shift to RECTSOURCE, irrespective
+            // of corner mode. Always let DWM choose the full source region.
+            // Ignore legacy explicit-mode environment variables from diagnosis.
+            const bool fullSource = true;
             Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch, corner, fullSource, requestedCorner, cornerResult);
-            var props = new Properties { Flags = 1u | (fullSource ? 0u : 2u) | 4u | 8u | 16u,
-                Destination = destination, Source = crop,
+            var props = new Properties { Flags = 1u | 4u | 8u | 16u,
+                Destination = destination,
                 Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
