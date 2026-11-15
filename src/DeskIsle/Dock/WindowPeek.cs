@@ -11,6 +11,8 @@ internal sealed class WindowPeek : IDisposable
         public DockNative.Rect NormalPosition;
     }
     private sealed record Snapshot(nint Handle, uint Pid, uint Thread, Placement Placement, nint Previous, bool Minimized, bool Topmost);
+    private static readonly HashSet<nint> temporary = [];
+    internal static bool IsTemporary(nint handle) => temporary.Contains(handle);
     private readonly List<Snapshot> snapshots = [];
     private nint foreground;
     internal bool Active => snapshots.Count > 0;
@@ -35,6 +37,7 @@ internal sealed class WindowPeek : IDisposable
             next.Add(new(handle, pid, thread, placement, DockNative.GetWindow(handle, 3), DockNative.IsIconic(handle), (DockNative.GetWindowLong(handle, -20) & 8) != 0));
         }
         snapshots.AddRange(next);
+        foreach (var item in next) temporary.Add(item.Handle);
         foreach (var item in snapshots)
         {
             if (item.Minimized)
@@ -60,6 +63,7 @@ internal sealed class WindowPeek : IDisposable
                 var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 3;
                 SetWindowPlacement(item.Handle, in placement); // Explicit click may activate/maximize.
             }
+            temporary.Remove(item.Handle);
             snapshots.Remove(item);
         }
         Restore();
@@ -79,6 +83,7 @@ internal sealed class WindowPeek : IDisposable
     internal void Restore()
     {
         var items = snapshots.ToArray(); snapshots.Clear();
+        foreach (var item in items) temporary.Remove(item.Handle);
         foreach (var item in items.Reverse())
         {
             if (!SameWindow(item)) continue;

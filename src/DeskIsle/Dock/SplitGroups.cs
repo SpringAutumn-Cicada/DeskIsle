@@ -8,7 +8,7 @@ internal sealed class SplitGroups
     internal void Observe(DockWindow[] windows)
     {
         foreach (var window in windows)
-            if (!DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect)) positions[window.Handle] = rect;
+            if (!WindowPeek.IsTemporary(window.Handle) && !DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect)) positions[window.Handle] = rect;
         foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) positions.Remove(key);
     }
     internal SplitPair? Find(DockWindow[] windows)

@@ -28,6 +28,10 @@ internal sealed class WindowPreview : Window
     private readonly StackPanel content = new();
     private readonly SplitGroups groups;
     private readonly List<Tile> tiles = [];
+    private readonly WindowPeek peek = new();
+    private Card? hoveredCard, peekCandidate, blockedPeek;
+    private long peekSince;
+    private bool peekAttempted;
     private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private int page;
     private bool finished, preparing, ready;
@@ -73,6 +77,7 @@ internal sealed class WindowPreview : Window
             if (live.Length == 0) { dismiss(); return; }
             if (live.Length != windows.Length) { windows = live; RenderPage(); }
             else UpdateThumbnails();
+            UpdatePeek();
         };
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
         new WindowInteropHelper(this).EnsureHandle();
@@ -118,6 +123,7 @@ internal sealed class WindowPreview : Window
         close.Click += (_, e) =>
         {
             e.Handled = true;
+            CancelPeek();
             foreach (var member in members.DistinctBy(w => w.Handle))
                 if (DockNative.IsWindow(member.Handle)) DockNative.PostMessage(member.Handle, 0x0010, 0, 0);
         };
@@ -130,7 +136,7 @@ internal sealed class WindowPreview : Window
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
         Grid.SetColumn(title, 1); Grid.SetColumn(close, 2);
         header.Children.Add(icons); header.Children.Add(title); header.Children.Add(close);
-        header.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
+        header.MouseLeftButtonUp += (_, e) => { e.Handled = true; SelectPeek(members, click); };
         var layout = new StackPanel(); layout.Children.Add(header); layout.Children.Add(images);
         var surface = new Border { Child = layout, Padding = new Thickness(3.5), BorderThickness = new Thickness(1.5),
             BorderBrush = Brush("#344252"), CornerRadius = new CornerRadius(8), Background = Brush("#202936"),
@@ -151,6 +157,7 @@ internal sealed class WindowPreview : Window
     private void RenderPage()
     {
         if (finished) return;
+        CancelPeek();
         var previousTiles = tiles.ToDictionary(tile => (tile.Window.Handle, tile.Composite));
         tiles.Clear(); cards.Clear(); content.Children.Clear();
         var perPage = PerPage;
@@ -168,10 +175,11 @@ internal sealed class WindowPreview : Window
         {
             var host = new Grid { Width = width, Height = height, Background = Brush("#202936"), VerticalAlignment = VerticalAlignment.Center };
             host.Children.Add(new Image { Source = icon, Width = 32, Height = 32, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
-            host.MouseLeftButtonUp += (_, e) => { e.Handled = true; click(); };
+            Action select = () => SelectPeek(card.Windows, click);
+            host.MouseLeftButtonUp += (_, e) => { e.Handled = true; select(); };
             if (!previousTiles.Remove((window.Handle, composite), out var tile))
-                tile = new Tile { Window = window, Host = host, Click = click, Group = card, Composite = composite };
-            tile.Window = window; tile.Host = host; tile.Click = click; tile.Group = card;
+                tile = new Tile { Window = window, Host = host, Click = select, Group = card, Composite = composite };
+            tile.Window = window; tile.Host = host; tile.Click = select; tile.Group = card;
             EnsureThumbnail(tile);
             if (!composite && tile.Thumbnail is { AspectRatio: > 0 } thumbnail)
             {
@@ -280,6 +288,7 @@ internal sealed class WindowPreview : Window
                 if (tile.Thumbnail?.ContainsPointer() == true || (mouse.X >= start.X && mouse.X < end.X && mouse.Y >= start.Y && mouse.Y < end.Y)) { hoverGroup = tile.Group; break; }
             }
         }
+        if (present) hoveredCard = hoverGroup as Card;
         foreach (var card in cards)
         {
             var hovered = ReferenceEquals(hoverGroup, card);
@@ -306,6 +315,33 @@ internal sealed class WindowPreview : Window
                 tile.RetryAt = Environment.TickCount64 + 500;
             }
         }
+    }
+    private void UpdatePeek()
+    {
+        if (finished || !ready) return;
+        if (peek.CheckForeground()) blockedPeek = peekCandidate;
+        var card = hoveredCard;
+        // Closing a window is an action, not a request to temporarily restore it.
+        if (card?.Close.IsMouseOver == true) card = null;
+        if (!ReferenceEquals(card, peekCandidate))
+        {
+            peek.Restore(); peekCandidate = card; blockedPeek = null;
+            peekSince = Environment.TickCount64; peekAttempted = false;
+        }
+        if (card == null || ReferenceEquals(card, blockedPeek) || peekAttempted || Environment.TickCount64 - peekSince < 300) return;
+        peekAttempted = true;
+        peek.Begin(card.Windows);
+    }
+    private void SelectPeek(DockWindow[] selected, Action click)
+    {
+        peek.Commit(selected);
+        peekCandidate = blockedPeek = null; peekAttempted = false;
+        click();
+    }
+    private void CancelPeek()
+    {
+        peek.Restore(); hoveredCard = peekCandidate = blockedPeek = null;
+        peekAttempted = false;
     }
     private void EnsureThumbnail(Tile tile)
     {
@@ -368,5 +404,5 @@ internal sealed class WindowPreview : Window
         if (changed) RenderPage();
         else RefreshTitles();
     }
-    private void Release() { foreach (var tile in tiles) tile.Thumbnail?.Dispose(); tiles.Clear(); cards.Clear(); }
+    private void Release() { CancelPeek(); peek.Dispose(); foreach (var tile in tiles) tile.Thumbnail?.Dispose(); tiles.Clear(); cards.Clear(); }
 }
