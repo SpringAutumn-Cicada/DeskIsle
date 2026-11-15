@@ -70,6 +70,9 @@ internal sealed class WindowPreview : Window
         SizeChanged += (_, _) => { if (!preparing) Place(); };
         check.Tick += (_, _) =>
         {
+            // Unowned topmost DWM hosts must not survive Show Desktop or a
+            // foreground switch. Check before updating/raising any thumbnails.
+            if (peek.CheckForeground() || DesktopShortcutDown()) { dismiss(); return; }
             if (ContainsInteractionPointer()) outsideSince = 0;
             else if (outsideSince == 0) outsideSince = Environment.TickCount64;
             else if (Environment.TickCount64 - outsideSince >= 350) { dismiss(); return; }
@@ -316,10 +319,14 @@ internal sealed class WindowPreview : Window
             }
         }
     }
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    private static bool DesktopShortcutDown() =>
+        ((GetAsyncKeyState(0x5B) | GetAsyncKeyState(0x5C)) & 0x8000) != 0 &&
+        (GetAsyncKeyState(0x44) & 0x8000) != 0;
     private void UpdatePeek()
     {
         if (finished || !ready) return;
-        if (peek.CheckForeground()) blockedPeek = peekCandidate;
+
         // Keep preview controls above the full-size DWM view layers.
         if (peek.Active) RaisePreview();
         var card = hoveredCard;

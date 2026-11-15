@@ -369,6 +369,7 @@ public partial class DockBar : Window
     private void ShowDesktopClick(object sender, RoutedEventArgs e)
     {
         ClosePreview();
+        CloseSystemPanel();
         if (!DockNative.ShowDesktop()) MessageBox.Show("系统未接受显示桌面快捷键，请按 Win+D。", "DeskIsle");
     }
     private void UpdateClock()
