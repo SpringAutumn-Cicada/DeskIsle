@@ -20,11 +20,12 @@ internal sealed class WindowPeek : IDisposable
         [MarshalAs(UnmanagedType.Bool)] public bool Visible;
         [MarshalAs(UnmanagedType.Bool)] public bool ClientOnly;
     }
+    [StructLayout(LayoutKind.Sequential)] private struct Size { public int Width, Height; }
     private sealed class View : IDisposable
     {
         internal readonly HwndSource Surface;
         internal nint Thumbnail;
-        internal View(nint source, DockNative.Rect rect, Action select)
+        internal View(nint source, DockNative.Rect outer, DockNative.Rect rect, Action select)
         {
             Surface = new HwndSource(new HwndSourceParameters("DeskIsle hover view")
             {
@@ -40,9 +41,24 @@ internal sealed class WindowPeek : IDisposable
                 return 0;
             });
             if (DwmRegisterThumbnail(Surface.Handle, source, out Thumbnail) < 0) return;
-            var props = new Properties { Flags = 1 | 4 | 8 | 16,
-                Destination = new() { Right = rect.Right - rect.Left, Bottom = rect.Bottom - rect.Top },
-                Opacity = 255, Visible = true, ClientOnly = false };
+            if (DwmQueryThumbnailSourceSize(Thumbnail, out var size) < 0 || size.Width <= 0 || size.Height <= 0)
+            { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
+            var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
+            var crop = new DockNative.Rect { Right = size.Width, Bottom = size.Height };
+            // DWM may expose either the full outer surface or just its visible frame.
+            // Crop only when its measured dimensions match the outer rectangle.
+            if (size.Width == outer.Right - outer.Left && size.Height == outer.Bottom - outer.Top)
+                crop = new() { Left = rect.Left - outer.Left, Top = rect.Top - outer.Top,
+                    Right = rect.Right - outer.Left, Bottom = rect.Bottom - outer.Top };
+            var sourceWidth = crop.Right - crop.Left; var sourceHeight = crop.Bottom - crop.Top;
+            // Unknown/cache-size mismatch: preserve aspect ratio and never upscale.
+            var scale = Math.Min(1, Math.Min((double)width / sourceWidth, (double)height / sourceHeight));
+            var drawnWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
+            var drawnHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
+            var left = (width - drawnWidth) / 2; var top = (height - drawnHeight) / 2;
+            var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
+                Destination = new() { Left = left, Top = top, Right = left + drawnWidth, Bottom = top + drawnHeight },
+                Source = crop, Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
         internal void Show() => DockNative.SetWindowPos(Surface.Handle, -1, 0, 0, 0, 0, 1 | 2 | 0x10 | 0x40);
@@ -57,6 +73,9 @@ internal sealed class WindowPeek : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmUnregisterThumbnail(nint thumbnail);
     [DllImport("dwmapi.dll")] private static extern int DwmUpdateThumbnailProperties(nint thumbnail, ref Properties properties);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out int value, int size);
+    [DllImport("dwmapi.dll")] private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size size);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int FrameBounds(nint window, uint attribute, out DockNative.Rect rect, int size);
     private readonly List<View> views = [];
     private nint foreground;
     internal bool Active => views.Count > 0;
@@ -92,7 +111,16 @@ internal sealed class WindowPeek : IDisposable
                     }
                 }
                 if (rect.Right <= rect.Left || rect.Bottom <= rect.Top) { Restore(); return false; }
-                var view = new View(hwnd, rect, select);
+                var frame = rect;
+                if (!DockNative.IsIconic(hwnd))
+                {
+                    if (FrameBounds(hwnd, 9, out var visible, Marshal.SizeOf<DockNative.Rect>()) == 0) frame = visible;
+                }
+                else if (groups.TryGetFrame(hwnd, out var cachedFrame)) frame = cachedFrame;
+                // Reject stale/invalid frame bounds instead of stretching to them.
+                if (frame.Left < rect.Left || frame.Top < rect.Top || frame.Right > rect.Right || frame.Bottom > rect.Bottom ||
+                    frame.Right <= frame.Left || frame.Bottom <= frame.Top) frame = rect;
+                var view = new View(hwnd, rect, frame, select);
                 views.Add(view);
                 if (view.Thumbnail == 0) { Restore(); return false; }
             }
