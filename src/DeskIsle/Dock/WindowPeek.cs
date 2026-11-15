@@ -46,19 +46,21 @@ internal sealed class WindowPeek : IDisposable
             if (DwmRegisterThumbnail(Surface.Handle, source, out Thumbnail) < 0) return;
             if (DwmQueryThumbnailSourceSize(Thumbnail, out var size) < 0 || size.Width <= 0 || size.Height <= 0)
             { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
-            // rcSource uses source-window coordinates. Keep the complete source
-            // at 1:1 scale and translate its origin once into the visible viewport.
-            // Do not infer a different origin merely from matching frame dimensions.
-            var offsetX = outer.Left - rect.Left;
-            var offsetY = outer.Top - rect.Top;
-            var destination = new DockNative.Rect { Left = offsetX, Top = offsetY,
-                Right = offsetX + size.Width, Bottom = offsetY + size.Height };
-            var reliable = size.Width == outer.Right - outer.Left && size.Height == outer.Bottom - outer.Top;
-            Diagnose(source, outer, rect, size, destination, reliable);
-            if (!reliable)
+            var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
+            var crop = new DockNative.Rect { Right = size.Width, Bottom = size.Height };
+            var outerMatch = size.Width == outer.Right - outer.Left && size.Height == outer.Bottom - outer.Top;
+            var frameMatch = size.Width == width && size.Height == height;
+            if (outerMatch)
+                crop = new() { Left = rect.Left - outer.Left, Top = rect.Top - outer.Top,
+                    Right = rect.Right - outer.Left, Bottom = rect.Bottom - outer.Top };
+            // Accept DWM's visible-frame representation as well as the outer surface.
+            // Clip source pixels instead of submitting a negative destination rectangle.
+            var destination = new DockNative.Rect { Right = crop.Right - crop.Left, Bottom = crop.Bottom - crop.Top };
+            Diagnose(source, outer, rect, size, crop, destination, outerMatch || frameMatch);
+            if (!outerMatch && !frameMatch)
             { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
-                Destination = destination, Source = new() { Right = size.Width, Bottom = size.Height },
+                Destination = destination, Source = crop,
                 Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
@@ -87,7 +89,7 @@ internal sealed class WindowPeek : IDisposable
         return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
     }
     private static void Diagnose(nint source, DockNative.Rect outer, DockNative.Rect frame,
-        Size size, DockNative.Rect destination, bool reliable)
+        Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable)
     {
         if (Environment.GetEnvironmentVariable("DESKISLE_PEEK_DIAGNOSTICS") != "1") return;
         try
@@ -98,7 +100,7 @@ internal sealed class WindowPeek : IDisposable
             if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length > 1024 * 1024)
                 System.IO.File.WriteAllText(path, "");
             static string R(DockNative.Rect r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
-            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} source=0,0,{size.Width},{size.Height} destination={R(destination)} reliable={reliable}\n");
+            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} source={R(crop)} destination={R(destination)} reliable={reliable}\n");
         }
         catch { /* Diagnostics must never interrupt preview cleanup. */ }
     }
