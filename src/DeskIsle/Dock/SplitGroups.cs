@@ -17,7 +17,7 @@ internal sealed class SplitGroups
             if (!DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect))
             {
                 positions[window.Handle] = rect;
-                corners[window.Handle] = WindowPeek.CornerPreference(window);
+                corners[window.Handle] = WindowPeek.CornerPreference(window.Handle);
                 if (FrameBounds(window.Handle, 9, out var frame, Marshal.SizeOf<DockNative.Rect>()) == 0 &&
                     frame.Right > frame.Left && frame.Bottom > frame.Top) frames[window.Handle] = frame;
                 else frames.Remove(window.Handle);
