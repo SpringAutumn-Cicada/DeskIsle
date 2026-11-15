@@ -56,6 +56,7 @@
 </TextBox>
 <Button Grid.Column="1" Content="•••" Width="32" Height="28" Padding="0" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
+<ContextMenu.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#202632" Offset="0"/><GradientStop Color="#1D2330" Offset="0.55"/><GradientStop Color="#202632" Offset="1"/></LinearGradientBrush></ContextMenu.Background>
 <MenuItem Header="添加新卡片" Click="AddCardClick"/><MenuItem x:Name="RenameCardMenu" Header="重命名卡片" Click="RenameClick"/><MenuItem x:Name="OpenDesktopMenu" Header="打开桌面目录" Click="OpenDesktopClick"/><MenuItem x:Name="CurrentTransferMenu" Header="查看当前文件操作…" Visibility="Collapsed" Click="ViewTransferClick"/><MenuItem Header="刷新" Click="RefreshClick"/><Separator/>
 
 <MenuItem x:Name="DefaultCardToggle" Header="设为 default 卡片" IsCheckable="True" Click="SetDefaultCardClick"/>
