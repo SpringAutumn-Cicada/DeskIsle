@@ -38,6 +38,7 @@ internal sealed partial class DockController : IDisposable
     private DockPin[] pins = [];
     private DockWindow[] windows = [];
     private string[] resolvedPaths = [];
+    private long pinsResolvedAt;
     internal DockController()
     {
         Settings = store.Load();
@@ -313,13 +314,15 @@ internal sealed partial class DockController : IDisposable
         {
             lease.Reconcile();
             var requested = Settings.Pins.ToArray();
-            var resolve = !resolvedPaths.SequenceEqual(requested, StringComparer.OrdinalIgnoreCase);
+            var resolve = !resolvedPaths.SequenceEqual(requested, StringComparer.OrdinalIgnoreCase) ||
+                Environment.TickCount64 - pinsResolvedAt >= 30000 || pins.Any(p => !p.Available || p.Executable == null);
             // Shortcut COM runs on an STA worker; no Shell icon extraction on the UI thread.
             var snapshot = await Task.Run(DockApps.Windows);
             var nextPins = resolve ? await ResolvePins(requested) : pins;
             if (disposed || lease == null) return;
             if (!requested.SequenceEqual(Settings.Pins, StringComparer.OrdinalIgnoreCase)) return;
             windows = snapshot; pins = nextPins; resolvedPaths = requested;
+            if (resolve) pinsResolvedAt = Environment.TickCount64;
             bar?.SetApps(pins, windows);
             ReconcileAttention();
         }

@@ -9,20 +9,18 @@ using System.Windows.Media.Imaging;
 namespace DeskIsle.Dock;
 
 internal sealed record DockWindow(nint Handle, string Title, string? Executable);
-internal sealed record DockPin(string Path, string? Executable, string Name);
+internal sealed record DockPin(string Path, string? Executable, string Name, string? LaunchPath = null, string? IconPath = null, bool Available = true);
 internal static partial class DockApps
 {
     internal static ProcessStartInfo LaunchInfo(string path)
     {
-        var executable = Path.GetFileName(path);
-        var packagedTerminal = executable.Equals("WindowsTerminal.exe", StringComparison.OrdinalIgnoreCase)
-            && path.Contains(@"\WindowsApps\Microsoft.WindowsTerminal", StringComparison.OrdinalIgnoreCase);
-        if (!packagedTerminal) return new(path) { UseShellExecute = true };
-        // A running Store application's executable path is not a supported launch entry.
-        // The per-user execution alias follows package upgrades and preserves the default profile.
-        var alias = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "wt.exe");
-        if (!File.Exists(alias)) throw new IOException("Windows Terminal 启动别名 wt.exe 不可用，请在系统‘应用执行别名’中启用，或将终端快捷方式固定到 Dock。");
-        return new(alias) { UseShellExecute = true, WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
+        var package = StoreEntry(path);
+        if (package == null) return new(path) { UseShellExecute = true };
+        var alias = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", package.Alias);
+        if (EntryExists(alias)) return new(alias) { UseShellExecute = true, WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
+        var info = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+        info.ArgumentList.Add(package.ShellPath);
+        return info;
     }
     internal static bool Supported(string path) => Path.GetExtension(path).ToLowerInvariant() is ".exe" or ".lnk" or ".appref-ms";
     internal static DockPin Resolve(string path)
@@ -40,7 +38,15 @@ internal static partial class DockApps
             catch (Exception ex) when (ex is COMException or System.Reflection.TargetInvocationException) { }
             finally { if (link != null) Marshal.FinalReleaseComObject(link); if (shell != null) Marshal.FinalReleaseComObject(shell); }
         }
-        return new(path, string.IsNullOrWhiteSpace(target) ? null : target, System.IO.Path.GetFileNameWithoutExtension(path));
+        var store = StoreEntry(target ?? path);
+        if (store != null)
+        {
+            var current = CurrentStoreExecutable(store);
+            var alias = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", store.Alias);
+            return new(path, current ?? target, Path.GetFileNameWithoutExtension(path), target ?? path,
+                current ?? store.ShellPath, current != null || EntryExists(alias));
+        }
+        return new(path, string.IsNullOrWhiteSpace(target) ? null : target, Path.GetFileNameWithoutExtension(path), Available: EntryExists(path));
     }
     internal static DockWindow[] Windows()
     {

@@ -113,12 +113,12 @@ public partial class DockBar : Window
         {
             alive.Add(id);
             if (!views.TryGetValue(id, out var view)) { view = CreateView(); views.Add(id, view); }
-            view.Windows = group; view.Pin = pin; view.IconPath = iconPath;
+            view.Windows = group; view.Pin = pin; view.IconPath = pin?.IconPath ?? iconPath;
             var foreground = controller.ForegroundForClick();
             if (group.FirstOrDefault(w => w.Handle == foreground) is { } current) view.RecentWindow = current.Handle;
             ToolTipService.SetIsEnabled(view.Button, group.Length == 0);
-            view.Button.ToolTip = pin != null && !File.Exists(pin.Path) ? title + "（路径不可用，右键重新定位）" : title;
-            view.Button.Opacity = pin != null && !File.Exists(pin.Path) ? .45 : 1;
+            view.Button.ToolTip = pin != null && !pin.Available ? title + "（路径不可用，右键重新定位）" : title;
+            view.Button.Opacity = pin != null && !pin.Available ? .45 : 1;
             view.Indicator.Visibility = group.Length > 0 ? Visibility.Visible : Visibility.Hidden;
             view.Indicator.Background = group.Any(w => w.Handle == DockNative.GetForegroundWindow()) ? Brushes.Aquamarine : Brushes.LightSlateGray;
             ApplyAttention(view);
@@ -126,8 +126,8 @@ public partial class DockBar : Window
             (pin != null ? pinned : running).Add(view.Button);
         }
         foreach (var pin in pins)
-            Use("pin:" + pin.Path, pin.Name, pin.Path, pin, windows.Where(w => pin.Executable != null && string.Equals(w.Executable, pin.Executable, StringComparison.OrdinalIgnoreCase)).ToArray());
-        var extra = windows.Where(w => !pins.Any(p => p.Executable != null && string.Equals(p.Executable, w.Executable, StringComparison.OrdinalIgnoreCase)))
+            Use("pin:" + pin.Path, pin.Name, pin.Path, pin, windows.Where(w => DockApps.Matches(pin, w)).ToArray());
+        var extra = windows.Where(w => !pins.Any(p => DockApps.Matches(p, w)))
             .GroupBy(w => w.Executable ?? $"window:{w.Handle}", StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         foreach (var id in extra.Keys)
@@ -226,7 +226,7 @@ public partial class DockBar : Window
             var active = view.Windows.FirstOrDefault(w => (w.Handle == foreground || w.Handle == root || DockNative.GetAncestor(w.Handle, 3) == root) && DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle) && DockNative.IsWindowEnabled(w.Handle) && !DockNative.IsIconic(w.Handle));
             pressedForeground = 0;
             if (view.Pin != null && view.Windows.All(w => !DockNative.IsWindow(w.Handle) || !DockNative.IsWindowVisible(w.Handle)))
-            { controller.Launch(view.Pin.Path); return; }
+            { controller.Launch(view.Pin.LaunchPath ?? view.Pin.Path); return; }
             if (active != null)
             {
                 splitGroups.Observe(view.Windows);
@@ -249,7 +249,7 @@ public partial class DockBar : Window
                 var recent = visible.FirstOrDefault(w => w.Handle == view.RecentWindow) ?? visible.FirstOrDefault(w => !DockNative.IsIconic(w.Handle)) ?? visible.FirstOrDefault() ?? view.Windows[0];
                 view.RecentWindow = recent.Handle; Activate(recent);
             }
-            else if (view.Pin != null) controller.Launch(view.Pin.Path);
+            else if (view.Pin != null) controller.Launch(view.Pin.LaunchPath ?? view.Pin.Path);
         };
         button.PreviewMouseLeftButtonDown += (_, e) => { pressedForeground = controller.ForegroundForClick(); down = e.GetPosition(this); dragPin = view.Pin?.Path; };
         button.PreviewMouseMove += (_, e) =>
@@ -287,7 +287,7 @@ public partial class DockBar : Window
     private void FillMenu(ContextMenu menu, AppView view)
     {
         menu.Items.Clear();
-        Add(menu, "打开新窗口", () => { if (view.Pin != null) controller.Launch(view.Pin.Path); else if (view.IconPath != null) controller.Launch(view.IconPath); });
+        Add(menu, "打开新窗口", () => { if (view.Pin != null) controller.Launch(view.Pin.LaunchPath ?? view.Pin.Path); else if (view.IconPath != null) controller.Launch(view.IconPath); });
         if (view.Pin is { } pin)
         {
             Add(menu, "取消固定", () => controller.Unpin(pin.Path));
