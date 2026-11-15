@@ -33,6 +33,9 @@ internal sealed class WindowPeek : IDisposable
                 handle == foreground || DwmGetWindowAttribute(handle, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
             var placement = new Placement { Length = (uint)Marshal.SizeOf<Placement>() };
             if (!GetWindowPlacement(handle, ref placement)) return false;
+            // GetWindowPlacement does not reliably report restore-to-maximized flags.
+            // Preserve the maximized style for minimized windows as well.
+            if (DockNative.IsZoomed(handle) || (DockNative.GetWindowLong(handle, -16) & 0x01000000) != 0) placement.Flags |= 2;
             var thread = DockNative.GetWindowThreadProcessId(handle, out var pid);
             next.Add(new(handle, pid, thread, placement, DockNative.GetWindow(handle, 3), DockNative.IsIconic(handle), (DockNative.GetWindowLong(handle, -20) & 8) != 0));
         }
@@ -46,6 +49,15 @@ internal sealed class WindowPeek : IDisposable
                 show.Flags |= 4; // WPF_ASYNCWINDOWPLACEMENT: never wait on another app's dispatcher.
                 show.ShowCommand = 4; // SW_SHOWNOACTIVATE
                 if (!SetWindowPlacement(item.Handle, in show)) { Restore(); return false; }
+                if ((item.Placement.Flags & 2) != 0)
+                {
+                    var info = new DockNative.MonitorInfo { Size = Marshal.SizeOf<DockNative.MonitorInfo>() };
+                    if (DockNative.GetMonitorInfo(DockNative.MonitorFromWindow(item.Handle, 2), ref info))
+                    {
+                        var r = info.Work;
+                        DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : 0, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, 0x10 | 0x200 | 0x4000);
+                    }
+                }
             }
             if (!DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : 0, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000))
             { Restore(); return false; }
