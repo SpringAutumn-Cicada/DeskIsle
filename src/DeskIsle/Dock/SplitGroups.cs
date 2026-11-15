@@ -6,8 +6,6 @@ internal sealed class SplitGroups
 {
     private readonly Dictionary<nint, DockNative.Rect> positions = [];
     private readonly Dictionary<nint, DockNative.Rect> frames = [];
-    private readonly Dictionary<nint, int> corners = [];
-    internal bool TryGetCorner(nint window, out int corner) => corners.TryGetValue(window, out corner);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
     private static extern int FrameBounds(nint window, uint attribute, out DockNative.Rect rect, int size);
     internal bool TryGetFrame(nint window, out DockNative.Rect rect) => frames.TryGetValue(window, out rect);
@@ -17,12 +15,11 @@ internal sealed class SplitGroups
             if (!DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect))
             {
                 positions[window.Handle] = rect;
-                corners[window.Handle] = WindowPeek.CornerPreference(window.Handle);
                 if (FrameBounds(window.Handle, 9, out var frame, Marshal.SizeOf<DockNative.Rect>()) == 0 &&
                     frame.Right > frame.Left && frame.Bottom > frame.Top) frames[window.Handle] = frame;
                 else frames.Remove(window.Handle);
             }
-        foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) { positions.Remove(key); frames.Remove(key); corners.Remove(key); }
+        foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) { positions.Remove(key); frames.Remove(key); }
     }
     // GetWindowPlacement can contain the pre-snap restore rectangle. Retain the
     // last actual screen bounds while minimized or in a reversible hover session.

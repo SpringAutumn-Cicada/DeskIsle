@@ -25,7 +25,7 @@ internal sealed class WindowPeek : IDisposable
     {
         internal readonly HwndSource Surface;
         internal nint Thumbnail;
-        internal View(nint source, DockNative.Rect outer, DockNative.Rect rect, int corner, Action select)
+        internal View(nint source, DockNative.Rect outer, DockNative.Rect rect, Action select)
         {
             Surface = new HwndSource(new HwndSourceParameters("DeskIsle hover view")
             {
@@ -33,11 +33,6 @@ internal sealed class WindowPeek : IDisposable
                 Width = rect.Right - rect.Left, Height = rect.Bottom - rect.Top,
                 WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
             });
-            // The thumbnail host has its own DWM outline; source rounding is not
-            // inherited by a WS_POPUP surface. Apply it to this host only.
-            DwmSetWindowAttribute(Surface.Handle, 33, ref corner, sizeof(int));
-            var border = -2; // DWMWA_COLOR_NONE: do not add a second visible border.
-            DwmSetWindowAttribute(Surface.Handle, 34, ref border, sizeof(int));
             if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Black;
             Surface.AddHook((nint hwnd, int msg, nint wp, nint lp, ref bool handled) =>
             {
@@ -60,10 +55,9 @@ internal sealed class WindowPeek : IDisposable
             var scale = Math.Min(1, Math.Min((double)width / sourceWidth, (double)height / sourceHeight));
             var drawnWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
             var drawnHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
-            // The surface already starts at the visible frame origin. Keep that
-            // anchor when cache dimensions differ; centering adds a second offset.
+            var left = (width - drawnWidth) / 2; var top = (height - drawnHeight) / 2;
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
-                Destination = new() { Right = drawnWidth, Bottom = drawnHeight },
+                Destination = new() { Left = left, Top = top, Right = left + drawnWidth, Bottom = top + drawnHeight },
                 Source = crop, Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
@@ -82,18 +76,6 @@ internal sealed class WindowPeek : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
     private static extern int FrameBounds(nint window, uint attribute, out DockNative.Rect rect, int size);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint window, uint attribute, ref int value, int size);
-    [DllImport("user32.dll")] private static extern bool IsWindowArranged(nint window);
-    internal static int CornerPreference(nint window)
-    {
-        // Maximized and snapped windows have square outlines even if their
-        // application has explicitly requested rounded normal windows.
-        if (DockNative.IsZoomed(window) || (DockNative.GetWindowLong(window, -16) & 0x01000000) != 0 || IsWindowArranged(window)) return 1;
-        if (DwmGetWindowAttribute(window, 33, out var corner, sizeof(int)) == 0 && corner is >= 1 and <= 3) return corner;
-        // Avoid imposing rounded corners on custom, borderless popup windows.
-        var style = DockNative.GetWindowLong(window, -16);
-        return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
-    }
     private readonly List<View> views = [];
     private nint foreground;
     internal bool Active => views.Count > 0;
@@ -138,9 +120,7 @@ internal sealed class WindowPeek : IDisposable
                 // Reject stale/invalid frame bounds instead of stretching to them.
                 if (frame.Left < rect.Left || frame.Top < rect.Top || frame.Right > rect.Right || frame.Bottom > rect.Bottom ||
                     frame.Right <= frame.Left || frame.Bottom <= frame.Top) frame = rect;
-                var corner = DockNative.IsIconic(hwnd) && groups.TryGetCorner(hwnd, out var cachedCorner)
-                    ? cachedCorner : CornerPreference(hwnd);
-                var view = new View(hwnd, rect, frame, corner, select);
+                var view = new View(hwnd, rect, frame, select);
                 views.Add(view);
                 if (view.Thumbnail == 0) { Restore(); return false; }
             }
