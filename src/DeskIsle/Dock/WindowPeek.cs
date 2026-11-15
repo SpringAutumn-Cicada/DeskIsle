@@ -96,9 +96,19 @@ internal sealed class WindowPeek : IDisposable
     {
         var items = snapshots.ToArray(); snapshots.Clear();
         foreach (var item in items) temporary.Remove(item.Handle);
-        foreach (var item in items.Reverse())
+        // Restore a predecessor before windows that were directly below it. Reversing a
+        // split pair can leave its second member above the original foreground application.
+        var pending = items.ToList();
+        while (pending.Count > 0)
         {
-            if (!SameWindow(item)) continue;
+            var item = pending.FirstOrDefault(candidate => !pending.Any(other => other.Handle == candidate.Previous)) ?? pending[0];
+            pending.Remove(item);
+            RestoreWindow(item);
+        }
+    }
+    private static void RestoreWindow(Snapshot item)
+        {
+            if (!SameWindow(item)) return;
             if (item.Minimized)
             {
                 var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 7; // SW_SHOWMINNOACTIVE
