@@ -55,9 +55,10 @@ internal sealed class WindowPeek : IDisposable
             var scale = Math.Min(1, Math.Min((double)width / sourceWidth, (double)height / sourceHeight));
             var drawnWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
             var drawnHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
-            var left = (width - drawnWidth) / 2; var top = (height - drawnHeight) / 2;
+            // The surface already starts at the visible frame origin. Keep that
+            // anchor when cache dimensions differ; centering adds a second offset.
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
-                Destination = new() { Left = left, Top = top, Right = left + drawnWidth, Bottom = top + drawnHeight },
+                Destination = new() { Right = drawnWidth, Bottom = drawnHeight },
                 Source = crop, Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
