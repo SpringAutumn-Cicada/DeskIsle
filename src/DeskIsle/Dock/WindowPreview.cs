@@ -319,7 +319,7 @@ internal sealed class WindowPreview : Window
             }
         }
     }
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     private static bool DesktopShortcutDown() =>
         ((GetAsyncKeyState(0x5B) | GetAsyncKeyState(0x5C)) & 0x8000) != 0 &&
         (GetAsyncKeyState(0x44) & 0x8000) != 0;
