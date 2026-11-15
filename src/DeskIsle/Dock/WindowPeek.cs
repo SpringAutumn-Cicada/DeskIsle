@@ -107,18 +107,17 @@ internal sealed class WindowPeek : IDisposable
         }
     }
     private static void RestoreWindow(Snapshot item)
+    {
+        if (!SameWindow(item)) return;
+        if (item.Minimized)
         {
-            if (!SameWindow(item)) return;
-            if (item.Minimized)
-            {
-                var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 7; // SW_SHOWMINNOACTIVE
-                SetWindowPlacement(item.Handle, in placement);
-            }
-            var previous = item.Previous;
-            if (previous == item.Handle || !DockNative.IsWindow(previous) ||
-                !item.Topmost && (DockNative.GetWindowLong(previous, -20) & 8) != 0) previous = item.Topmost ? -1 : 0;
-            DockNative.SetWindowPos(item.Handle, previous, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
+            var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 7; // SW_SHOWMINNOACTIVE
+            SetWindowPlacement(item.Handle, in placement);
         }
+        var previous = item.Previous;
+        if (previous == item.Handle || !DockNative.IsWindow(previous) ||
+            !item.Topmost && (DockNative.GetWindowLong(previous, -20) & 8) != 0) previous = item.Topmost ? -1 : 0;
+        DockNative.SetWindowPos(item.Handle, previous, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
     }
     public void Dispose() => Restore();
 }
