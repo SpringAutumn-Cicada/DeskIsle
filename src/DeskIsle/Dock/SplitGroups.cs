@@ -8,7 +8,7 @@ internal sealed class SplitGroups
     internal void Observe(DockWindow[] windows)
     {
         foreach (var window in windows)
-            if (!WindowPeek.IsTemporary(window.Handle) && !DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect)) positions[window.Handle] = rect;
+            if (!DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect)) positions[window.Handle] = rect;
         foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) positions.Remove(key);
     }
     // GetWindowPlacement can contain the pre-snap restore rectangle. Retain the

@@ -320,8 +320,7 @@ internal sealed class WindowPreview : Window
     {
         if (finished || !ready) return;
         if (peek.CheckForeground()) blockedPeek = peekCandidate;
-        // The cross-process restore is asynchronous. Keep our controls above it
-        // after its queued promotion completes as well as on the initial request.
+        // Keep preview controls above the full-size DWM view layers.
         if (peek.Active) RaisePreview();
         var card = hoveredCard;
         // Closing a window is an action, not a request to temporarily restore it.
@@ -333,7 +332,17 @@ internal sealed class WindowPreview : Window
         }
         if (card == null || ReferenceEquals(card, blockedPeek) || peekAttempted || Environment.TickCount64 - peekSince < 300) return;
         peekAttempted = true;
-        if (peek.Begin(card.Windows, groups)) RaisePreview();
+        if (source != null && peek.Begin(card.Windows, groups, () =>
+        {
+            if (finished || !ReferenceEquals(card, peekCandidate) || !peek.Active) return;
+            SelectPeek(card.Windows, () =>
+            {
+                var pair = groups.Find(card.Windows);
+                if (pair != null) SplitGroups.Restore(pair);
+                else activate(card.Windows[0]);
+                dismiss();
+            });
+        })) RaisePreview();
     }
     private void RaisePreview()
     {

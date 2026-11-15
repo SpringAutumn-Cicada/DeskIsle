@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Media;
 namespace DeskIsle.Dock;
 
-// One reversible hover session. No foreground activation and no changes to unrelated windows.
+// Full-size DWM views, never restore/move/minimize the source HWNDs during hover.
 internal sealed class WindowPeek : IDisposable
 {
     [StructLayout(LayoutKind.Sequential)] private struct Placement
@@ -10,162 +12,106 @@ internal sealed class WindowPeek : IDisposable
         public DockNative.Point MinPosition, MaxPosition;
         public DockNative.Rect NormalPosition;
     }
-    private sealed record Snapshot(nint Handle, uint Pid, uint Thread, Placement Placement, Placement DisplayPlacement, nint Previous, bool Minimized, bool Topmost);
-    private static readonly HashSet<nint> temporary = [];
-    private static readonly Dictionary<nint, long> settling = [];
-    internal static bool IsTemporary(nint handle)
+    [StructLayout(LayoutKind.Sequential)] private struct Properties
     {
-        if (temporary.Contains(handle)) return true;
-        if (!settling.TryGetValue(handle, out var until)) return false;
-        if (Environment.TickCount64 < until) return true;
-        settling.Remove(handle);
-        return false;
+        public uint Flags;
+        public DockNative.Rect Destination, Source;
+        public byte Opacity;
+        [MarshalAs(UnmanagedType.Bool)] public bool Visible;
+        [MarshalAs(UnmanagedType.Bool)] public bool ClientOnly;
     }
-    private static void Settling(nint handle)
+    private sealed class View : IDisposable
     {
-        foreach (var key in settling.Where(p => p.Value <= Environment.TickCount64).Select(p => p.Key).ToArray()) settling.Remove(key);
-        settling[handle] = Environment.TickCount64 + 750;
+        internal readonly HwndSource Surface;
+        internal nint Thumbnail;
+        internal View(nint source, DockNative.Rect rect, Action select)
+        {
+            Surface = new HwndSource(new HwndSourceParameters("DeskIsle hover view")
+            {
+                ParentWindow = 0, PositionX = rect.Left, PositionY = rect.Top,
+                Width = rect.Right - rect.Left, Height = rect.Bottom - rect.Top,
+                WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
+            });
+            if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Black;
+            Surface.AddHook((nint hwnd, int msg, nint wp, nint lp, ref bool handled) =>
+            {
+                if (msg == 0x21) { handled = true; return 3; } // MA_NOACTIVATE
+                if (msg == 0x202) { handled = true; Surface.Dispatcher.BeginInvoke(select); }
+                return 0;
+            });
+            if (DwmRegisterThumbnail(Surface.Handle, source, out Thumbnail) < 0) return;
+            var props = new Properties { Flags = 1 | 4 | 8 | 16,
+                Destination = new() { Right = rect.Right - rect.Left, Bottom = rect.Bottom - rect.Top },
+                Opacity = 255, Visible = true, ClientOnly = false };
+            if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
+        }
+        internal void Show() => DockNative.SetWindowPos(Surface.Handle, -1, 0, 0, 0, 0, 1 | 2 | 0x10 | 0x40);
+        public void Dispose()
+        {
+            if (Thumbnail != 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
+            Surface.Dispose();
+        }
     }
-    private readonly List<Snapshot> snapshots = [];
-    private nint foreground;
-    internal bool Active => snapshots.Count > 0;
     [DllImport("user32.dll")] private static extern bool GetWindowPlacement(nint window, ref Placement placement);
-    [DllImport("user32.dll")] private static extern bool SetWindowPlacement(nint window, in Placement placement);
+    [DllImport("dwmapi.dll")] private static extern int DwmRegisterThumbnail(nint destination, nint source, out nint thumbnail);
+    [DllImport("dwmapi.dll")] private static extern int DwmUnregisterThumbnail(nint thumbnail);
+    [DllImport("dwmapi.dll")] private static extern int DwmUpdateThumbnailProperties(nint thumbnail, ref Properties properties);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out int value, int size);
-    private static bool SameWindow(Snapshot item) => DockNative.IsWindow(item.Handle) &&
-        DockNative.GetWindowThreadProcessId(item.Handle, out var pid) == item.Thread && pid == item.Pid;
-    internal bool Begin(IEnumerable<DockWindow> windows, SplitGroups groups)
+    private readonly List<View> views = [];
+    private nint foreground;
+    internal bool Active => views.Count > 0;
+    internal bool Begin(IEnumerable<DockWindow> windows, SplitGroups groups, Action select)
     {
         Restore();
         foreground = DockNative.GetForegroundWindow();
-        var next = new List<Snapshot>();
-        foreach (var window in windows.DistinctBy(w => w.Handle))
+        try
         {
-            var handle = window.Handle;
-            if (!DockNative.IsWindow(handle) || !DockNative.IsWindowVisible(handle) || !DockNative.IsWindowEnabled(handle) ||
-                handle == foreground || DwmGetWindowAttribute(handle, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
-            var placement = new Placement { Length = (uint)Marshal.SizeOf<Placement>() };
-            if (!GetWindowPlacement(handle, ref placement)) return false;
-            // GetWindowPlacement does not reliably report restore-to-maximized flags.
-            // Preserve the maximized style for minimized windows as well.
-            if (DockNative.IsZoomed(handle) || (DockNative.GetWindowLong(handle, -16) & 0x01000000) != 0) placement.Flags |= 2;
-            var display = placement;
-            var minimized = DockNative.IsIconic(handle);
-            if (minimized && (placement.Flags & 2) == 0 && groups.TryGetPosition(handle, out var bounds))
+            foreach (var window in windows.DistinctBy(w => w.Handle))
             {
-                // Saved bounds are screen coordinates; WINDOWPLACEMENT normally
-                // expects workspace coordinates, including on secondary monitors.
-                var info = new DockNative.MonitorInfo { Size = Marshal.SizeOf<DockNative.MonitorInfo>() };
-                if ((DockNative.GetWindowLong(handle, -20) & 0x80) == 0)
+                var hwnd = window.Handle;
+                if (!DockNative.IsWindow(hwnd) || !DockNative.IsWindowVisible(hwnd) || !DockNative.IsWindowEnabled(hwnd) ||
+                    DwmGetWindowAttribute(hwnd, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0)
+                { Restore(); return false; }
+                DockNative.Rect rect;
+                if (!DockNative.IsIconic(hwnd))
                 {
-                    if (!DockNative.GetMonitorInfo(DockNative.MonitorFromWindow(handle, 2), ref info)) return false;
-                    var x = info.Work.Left - info.Monitor.Left;
-                    var y = info.Work.Top - info.Monitor.Top;
-                    bounds.Left -= x; bounds.Right -= x;
-                    bounds.Top -= y; bounds.Bottom -= y;
+                    if (!DockNative.GetWindowRect(hwnd, out rect)) { Restore(); return false; }
                 }
-                display.NormalPosition = bounds;
-            }
-            var thread = DockNative.GetWindowThreadProcessId(handle, out var pid);
-            next.Add(new(handle, pid, thread, placement, display, DockNative.GetWindow(handle, 3), minimized, (DockNative.GetWindowLong(handle, -20) & 8) != 0));
-        }
-        snapshots.AddRange(next);
-        foreach (var item in next) temporary.Add(item.Handle);
-        foreach (var item in snapshots)
-        {
-            if (item.Minimized)
-            {
-                var show = item.DisplayPlacement;
-                show.Flags |= 4; // WPF_ASYNCWINDOWPLACEMENT: never wait on another app's dispatcher.
-                show.ShowCommand = 4; // SW_SHOWNOACTIVATE
-                if (!SetWindowPlacement(item.Handle, in show)) { Restore(); return false; }
-                if ((item.Placement.Flags & 2) != 0)
+                else if (!groups.TryGetPosition(hwnd, out rect))
                 {
+                    var placement = new Placement { Length = (uint)Marshal.SizeOf<Placement>() };
                     var info = new DockNative.MonitorInfo { Size = Marshal.SizeOf<DockNative.MonitorInfo>() };
-                    if (DockNative.GetMonitorInfo(DockNative.MonitorFromWindow(item.Handle, 2), ref info))
+                    if (!GetWindowPlacement(hwnd, ref placement) || !DockNative.GetMonitorInfo(DockNative.MonitorFromWindow(hwnd, 2), ref info))
+                    { Restore(); return false; }
+                    rect = placement.NormalPosition;
+                    if ((DockNative.GetWindowLong(hwnd, -16) & 0x01000000) != 0) rect = info.Work;
+                    else if ((DockNative.GetWindowLong(hwnd, -20) & 0x80) == 0)
                     {
-                        var r = info.Work;
-                        DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : 0, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, 0x10 | 0x200 | 0x4000);
+                        var x = info.Work.Left - info.Monitor.Left; var y = info.Work.Top - info.Monitor.Top;
+                        rect.Left += x; rect.Right += x; rect.Top += y; rect.Bottom += y;
                     }
                 }
+                if (rect.Right <= rect.Left || rect.Bottom <= rect.Top) { Restore(); return false; }
+                var view = new View(hwnd, rect, select);
+                views.Add(view);
+                if (view.Thumbnail == 0) { Restore(); return false; }
             }
-            if (!DockNative.SetWindowPos(item.Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000))
-            { Restore(); return false; }
+            // Publish only after all members are ready; no half-restored combination.
+            foreach (var view in views) view.Show();
+            return Active;
         }
-        return Active;
+        catch { Restore(); return false; }
     }
-    // Called before the existing click action closes the preview. Committed windows must stay open.
-    internal void Commit(IEnumerable<DockWindow> windows)
-    {
-        var selected = windows.Select(w => w.Handle).ToHashSet();
-        foreach (var item in snapshots.Where(s => selected.Contains(s.Handle)).ToArray())
-        {
-            if (SameWindow(item))
-            {
-                RestorePlacement(item, commit: true);
-                RestoreBand(item);
-            }
-            Settling(item.Handle);
-            temporary.Remove(item.Handle);
-            snapshots.Remove(item);
-        }
-        Restore();
-    }
-    // Return true when the user changed foreground; do not immediately reopen the same hovered card.
+    internal void Commit(IEnumerable<DockWindow> windows) => Restore();
     internal bool CheckForeground()
     {
-        if (!Active) return false;
-        var current = DockNative.GetForegroundWindow();
-        if (current == foreground) return false;
-        var selected = snapshots.Where(s => s.Handle == current || DockNative.GetAncestor(current, 3) == s.Handle)
-            .Select(s => new DockWindow(s.Handle, "", null)).ToArray();
-        // Directly clicking a real window is also an explicit selection, not an unviewed hover.
-        Commit(selected);
-        return true;
+        if (!Active || DockNative.GetForegroundWindow() == foreground) return false;
+        Restore(); return true;
     }
     internal void Restore()
     {
-        var items = snapshots.ToArray(); snapshots.Clear();
-        foreach (var item in items) { Settling(item.Handle); temporary.Remove(item.Handle); }
-        // Restore a predecessor before windows that were directly below it. Reversing a
-        // split pair can leave its second member above the original foreground application.
-        var pending = items.ToList();
-        while (pending.Count > 0)
-        {
-            var item = pending.FirstOrDefault(candidate => !pending.Any(other => other.Handle == candidate.Previous)) ?? pending[0];
-            pending.Remove(item);
-            RestoreWindow(item);
-        }
-    }
-    private static void RestoreWindow(Snapshot item)
-    {
-        if (!SameWindow(item)) return;
-        RestorePlacement(item, commit: false);
-        RestoreBand(item);
-        var previous = item.Previous;
-        if (previous == item.Handle || !DockNative.IsWindow(previous) ||
-            !item.Topmost && (DockNative.GetWindowLong(previous, -20) & 8) != 0) previous = item.Topmost ? -1 : 0;
-        DockNative.SetWindowPos(item.Handle, previous, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
-    }
-    private static void RestorePlacement(Snapshot item, bool commit)
-    {
-        // Always restore the saved workspace-coordinate placement, including on click.
-        // A maximized hover uses a temporary screen rectangle; never retain it as the
-        // application's normal restore rectangle.
-        if (!item.Minimized) return;
-        // A committed snapped window must keep its visible snap bounds rather
-        // than being sent to its pre-snap normal restore rectangle again.
-        var placement = commit ? item.DisplayPlacement : item.Placement;
-        placement.Flags |= 4;
-        placement.ShowCommand = item.Minimized && !commit ? 7u :
-            (item.Placement.Flags & 2) != 0 ? 3u : 4u;
-        SetWindowPlacement(item.Handle, in placement);
-    }
-    private static void RestoreBand(Snapshot item)
-    {
-        // Relative insertion alone cannot reliably remove temporary WS_EX_TOPMOST.
-        DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : -2, 0, 0, 0, 0,
-            0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
+        foreach (var view in views) view.Dispose();
+        views.Clear();
     }
     public void Dispose() => Restore();
 }
