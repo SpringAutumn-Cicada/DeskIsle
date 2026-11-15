@@ -11,15 +11,16 @@ public partial class MainWindow
     private static Image CMenuIcon(string kind, bool active)
     {
         var group = new DrawingGroup();
-        Brush light = new SolidColorBrush(Color.FromRgb(163, 215, 201));
-        Brush dark = new SolidColorBrush(Color.FromRgb(68, 132, 123));
-        Brush mint = new SolidColorBrush(Color.FromRgb(114, 222, 194));
+        Brush light = new LinearGradientBrush(Color.FromRgb(201, 239, 224), Color.FromRgb(133, 193, 180), 70);
+        Brush dark = new LinearGradientBrush(Color.FromRgb(99, 166, 151), Color.FromRgb(45, 104, 102), 70);
+        Brush mint = new LinearGradientBrush(Color.FromRgb(167, 246, 217), Color.FromRgb(82, 196, 171), 70);
         Brush white = new SolidColorBrush(Color.FromRgb(236, 242, 241));
         Brush ink = new SolidColorBrush(Color.FromRgb(34, 66, 64));
         using (var d = group.Open())
         {
             d.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 24, 24));
-            void Shape(string path, Brush fill) => d.DrawGeometry(fill, null, Geometry.Parse(path));
+            void Shape(string path, Brush fill) => d.DrawGeometry(fill,
+                new Pen(new SolidColorBrush(Color.FromArgb(40, 225, 255, 246)), .45) { LineJoin = PenLineJoin.Round }, Geometry.Parse(path));
             void Line(string path, Brush color, double width = 2.5) => d.DrawGeometry(null,
                 new Pen(color, width) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, Geometry.Parse(path));
             switch (kind)
@@ -27,6 +28,7 @@ public partial class MainWindow
                 case "add":
                     d.DrawRoundedRectangle(dark, null, new Rect(6, 2, 17, 14), 3, 3);
                     d.DrawRoundedRectangle(light, null, new Rect(1, 6, 18, 15), 3, 3);
+                    Line("M4,7 L15,7", new SolidColorBrush(Color.FromArgb(115, 236, 255, 247)), .65);
                     Line("M10,10 L10,17 M6.5,13.5 L13.5,13.5", ink, 1.9); break;
                 case "pencil":
                     Shape("M3,16 L16,3 Q18,1 20,3 L22,5 Q23,7 21,9 L8,22 L2,23 Z", light);
@@ -71,9 +73,10 @@ public partial class MainWindow
         }
         group.Freeze();
         var style = new Style(typeof(Image));
-        style.Setters.Add(new Setter(OpacityProperty, active ? .94 : .60));
+        style.Setters.Add(new Setter(OpacityProperty, active ? 1.0 : .72));
         var hover = new DataTrigger { Binding = new Binding("IsHighlighted") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1) }, Value = true };
-        hover.Setters.Add(new Setter(OpacityProperty, 1.0)); style.Triggers.Add(hover);
+        hover.Setters.Add(new Setter(OpacityProperty, 1.0));
+        hover.Setters.Add(new Setter(EffectProperty, new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(113, 220, 193), BlurRadius = 3, ShadowDepth = 0, Opacity = .22 })); style.Triggers.Add(hover);
         return new Image { Source = new DrawingImage(group), Width = 19, Height = 19,
             VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Style = style };
     }

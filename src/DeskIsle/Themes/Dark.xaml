@@ -35,8 +35,8 @@
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
             <Grid>
                 <Border x:Name="ItemSurface" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
-                        <ContentPresenter ContentSource="Icon" VerticalAlignment="Center"/>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition x:Name="MenuIconColumn" Width="20"/><ColumnDefinition/><ColumnDefinition Width="16"/></Grid.ColumnDefinitions>
+                        <ContentPresenter x:Name="MenuIconPresenter" ContentSource="Icon" VerticalAlignment="Center"/>
                         <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
                         <TextBlock x:Name="Arrow" Grid.Column="2" Text="›" Foreground="#8E9CB5" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                     </Grid>
@@ -48,6 +48,10 @@
                 </Popup>
             </Grid>
             <ControlTemplate.Triggers>
+                <Trigger Property="Tag" Value="CardMenuVisual">
+                    <Setter TargetName="MenuIconColumn" Property="Width" Value="32"/>
+                    <Setter TargetName="MenuIconPresenter" Property="Margin" Value="-4,0,0,0"/>
+                </Trigger>
                 <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="#3B4B65"/></Trigger>
                 <Trigger Property="IsSubmenuOpen" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="#33415A"/></Trigger>
                 <Trigger Property="HasItems" Value="True"><Setter TargetName="Arrow" Property="Visibility" Value="Visible"/></Trigger>

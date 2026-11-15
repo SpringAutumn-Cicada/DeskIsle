@@ -115,6 +115,8 @@ public partial class MainWindow : Window
         RenameCardMenu.Icon = CMenuIcon("pencil", true);
         OpenDesktopMenu.Icon = CMenuIcon("folder", true);
         RefreshCardMenu.Icon = CMenuIcon("refresh", true);
+        FolderRefreshMenu.Icon = CMenuIcon("refresh", true);
+        FolderAddCardMenu.Icon = CMenuIcon("add", true);
         CurrentTransferMenu.Icon = CMenuIcon("transfer", true);
         CardAppearanceMenu.Icon = CMenuIcon("palette", true);
         ResetOpacityMenu.Icon = CMenuIcon("refresh", true);
