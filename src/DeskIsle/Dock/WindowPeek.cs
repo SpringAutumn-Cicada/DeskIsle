@@ -78,7 +78,7 @@ internal sealed class WindowPeek : IDisposable
                 if (!DockNative.SetWindowPos(Surface.Handle, 0, rect.Left, rect.Top, size.Width, size.Height, 0x4 | 0x10))
                 { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             }
-            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch);
+            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch, corner);
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
                 Destination = destination, Source = crop,
                 Opacity = 255, Visible = true, ClientOnly = false };
@@ -109,7 +109,7 @@ internal sealed class WindowPeek : IDisposable
         return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
     }
     private static void Diagnose(nint source, nint host, DockNative.Rect outer, DockNative.Rect frame,
-        Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable)
+        Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable, int corner)
     {
         if (Environment.GetEnvironmentVariable("DESKISLE_PEEK_DIAGNOSTICS") != "1") return;
         try
@@ -124,7 +124,7 @@ internal sealed class WindowPeek : IDisposable
             var origin = new DockNative.Point();
             ClientToScreen(host, ref origin);
             static string R(DockNative.Rect r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
-            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} source={R(crop)} destination={R(destination)} reliable={reliable} host={R(actual)} client={R(client)} clientOrigin={origin.X},{origin.Y} sourceDpi={GetDpiForWindow(source)} hostDpi={GetDpiForWindow(host)}\n");
+            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} source={R(crop)} destination={R(destination)} reliable={reliable} corner={corner} host={R(actual)} client={R(client)} clientOrigin={origin.X},{origin.Y} sourceDpi={GetDpiForWindow(source)} hostDpi={GetDpiForWindow(host)}\n");
         }
         catch { /* Diagnostics must never interrupt preview cleanup. */ }
     }
