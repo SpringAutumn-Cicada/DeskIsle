@@ -56,15 +56,29 @@ internal sealed class WindowPeek : IDisposable
             // Accept DWM's visible-frame representation as well as the outer surface.
             // Clip source pixels instead of submitting a negative destination rectangle.
             var destination = new DockNative.Rect { Right = crop.Right - crop.Left, Bottom = crop.Bottom - crop.Top };
-            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch);
             if (!outerMatch && !frameMatch)
             {
-                // Cache sizes can differ after minimize/DPI changes. Preserve hover
-                // availability without touching the source window or stretching it.
-                var scale = Math.Min((double)width / size.Width, (double)height / size.Height);
-                destination.Right = Math.Max(1, (int)Math.Round(size.Width * scale));
-                destination.Bottom = Math.Max(1, (int)Math.Round(size.Height * scale));
+                // Never resample a minimized cache to a guessed restore size.
+                // Keep all cached pixels at 1:1, adjusting only our local host.
+                // Without a measured frame, recognize the symmetric side/bottom
+                // inset only when the source/outer differences agree exactly.
+                var dx = outer.Right - outer.Left - size.Width;
+                var dy = outer.Bottom - outer.Top - size.Height;
+                if (rect.Equals(outer) && dx > 0 && dy > 0 && dx == 2 * dy)
+                {
+                    rect.Left = outer.Left + dy;
+                    rect.Right = rect.Left + size.Width;
+                    rect.Bottom = rect.Top + size.Height;
+                }
+                else
+                {
+                    rect.Right = rect.Left + size.Width;
+                    rect.Bottom = rect.Top + size.Height;
+                }
+                if (!DockNative.SetWindowPos(Surface.Handle, 0, rect.Left, rect.Top, size.Width, size.Height, 0x4 | 0x10))
+                { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             }
+            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch);
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
                 Destination = destination, Source = crop,
                 Opacity = 255, Visible = true, ClientOnly = false };
@@ -115,7 +129,6 @@ internal sealed class WindowPeek : IDisposable
         catch { /* Diagnostics must never interrupt preview cleanup. */ }
     }
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
-    [DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
     [DllImport("user32.dll")] private static extern bool GetClientRect(nint window, out DockNative.Rect rect);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(nint window, ref DockNative.Point point);
     private readonly List<View> views = [];
@@ -161,16 +174,6 @@ internal sealed class WindowPeek : IDisposable
                     if (FrameBounds(hwnd, 9, out var visible, Marshal.SizeOf<DockNative.Rect>()) == 0) frame = visible;
                 }
                 else if (groups.TryGetFrame(hwnd, out var cachedFrame)) frame = cachedFrame;
-                else if ((DockNative.GetWindowLong(hwnd, -16) & 0x00040000) != 0 &&
-                    (DockNative.GetWindowLong(hwnd, -16) & 0x01000000) == 0)
-                {
-                    // Startup may first see an already minimized window. Use this
-                    // window's DPI metrics instead of assuming a fixed 11px border.
-                    var dpi = GetDpiForWindow(hwnd);
-                    var x = GetSystemMetricsForDpi(32, dpi) + GetSystemMetricsForDpi(92, dpi);
-                    var y = GetSystemMetricsForDpi(33, dpi) + GetSystemMetricsForDpi(92, dpi);
-                    frame.Left += x; frame.Right -= x; frame.Bottom -= y;
-                }
                 // Reject stale/invalid frame bounds instead of stretching to them.
                 if (frame.Left < rect.Left || frame.Top < rect.Top || frame.Right > rect.Right || frame.Bottom > rect.Bottom ||
                     frame.Right <= frame.Left || frame.Bottom <= frame.Top) frame = rect;
