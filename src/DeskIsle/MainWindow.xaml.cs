@@ -101,12 +101,32 @@ public partial class MainWindow : Window
     private void UpdateDesktopButton()
     {
         DefaultCardToggle.IsChecked = workspace.IsDefaultCard(state.Id);
-        DefaultCardToggle.Header = workspace.IsDefaultCard(state.Id) ? "default 卡片（接收桌面新增文件）" : "设为 default 卡片";
+        DefaultCardToggle.Header = workspace.IsDefaultCard(state.Id) ? "default 卡片" : "设为 default 卡片";
+        DefaultCardToggle.ToolTip = "桌面新增文件自动显示到唯一的 default 卡片";
+        DefaultCardToggle.Icon = StateMenuIcon("M8,1 L10.1,5.4 L15,6.1 L11.5,9.5 L12.3,14.5 L8,12.2 L3.7,14.5 L4.5,9.5 L1,6.1 L5.9,5.4 Z", DefaultCardToggle.IsChecked);
         PositionLockToggle.IsChecked = state.PositionLocked;
         PositionLockToggle.Header = state.PositionLocked ? "取消固定卡片位置" : "固定卡片位置";
+        PositionLockToggle.Icon = StateMenuIcon("M5,1 L11,1 L10,6 L13,9 L13,10 L9,10 L8,15 L7,10 L3,10 L3,9 L6,6 Z", state.PositionLocked);
         var visible = desktopIcons.Visible;
         DesktopToggle.Header = visible == false ? "显示桌面图标" : "隐藏桌面图标";
         DesktopToggle.IsEnabled = visible.HasValue;
+    }
+    private static System.Windows.Shapes.Path StateMenuIcon(string geometry, bool active)
+    {
+        var stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#72D6C5" : "#9BAFC8"));
+        var style = new Style(typeof(System.Windows.Shapes.Path));
+        style.Setters.Add(new Setter(System.Windows.Shapes.Shape.StrokeProperty, stroke));
+        style.Setters.Add(new Setter(System.Windows.Shapes.Shape.FillProperty, active ? stroke : Brushes.Transparent));
+        var hover = new System.Windows.Data.Binding("IsHighlighted")
+        {
+            RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(MenuItem), 1)
+        };
+        var trigger = new DataTrigger { Binding = hover, Value = true };
+        trigger.Setters.Add(new Setter(System.Windows.Shapes.Shape.StrokeProperty, Brushes.White));
+        style.Triggers.Add(trigger);
+        return new System.Windows.Shapes.Path { Data = Geometry.Parse(geometry), Width = 15, Height = 15,
+            Stretch = Stretch.Uniform, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round,
+            VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Style = style };
     }
     internal void ShowStartupWarning(string message) => Status.Text = message;
     private void ToggleDesktopIcons(object sender, RoutedEventArgs e)
