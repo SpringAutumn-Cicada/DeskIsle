@@ -36,7 +36,7 @@ internal sealed class WindowPeek : IDisposable
             DwmSetWindowAttribute(Surface.Handle, 33, ref corner, sizeof(int));
             var border = -2; // DWMWA_COLOR_NONE: no additional border on the host.
             DwmSetWindowAttribute(Surface.Handle, 34, ref border, sizeof(int));
-            if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Black;
+            if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Transparent;
             Surface.AddHook((nint hwnd, int msg, nint wp, nint lp, ref bool handled) =>
             {
                 if (msg == 0x21) { handled = true; return 3; } // MA_NOACTIVATE
