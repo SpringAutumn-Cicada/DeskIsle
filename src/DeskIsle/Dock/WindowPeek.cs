@@ -25,7 +25,7 @@ internal sealed class WindowPeek : IDisposable
     {
         internal readonly HwndSource Surface;
         internal nint Thumbnail;
-        internal View(nint source, DockNative.Rect outer, DockNative.Rect rect, Action select)
+        internal View(nint source, DockNative.Rect outer, DockNative.Rect rect, int corner, Action select)
         {
             Surface = new HwndSource(new HwndSourceParameters("DeskIsle hover view")
             {
@@ -33,6 +33,9 @@ internal sealed class WindowPeek : IDisposable
                 Width = rect.Right - rect.Left, Height = rect.Bottom - rect.Top,
                 WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
             });
+            DwmSetWindowAttribute(Surface.Handle, 33, ref corner, sizeof(int));
+            var border = -2; // DWMWA_COLOR_NONE: no additional border on the host.
+            DwmSetWindowAttribute(Surface.Handle, 34, ref border, sizeof(int));
             if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Black;
             Surface.AddHook((nint hwnd, int msg, nint wp, nint lp, ref bool handled) =>
             {
@@ -74,6 +77,15 @@ internal sealed class WindowPeek : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
     private static extern int FrameBounds(nint window, uint attribute, out DockNative.Rect rect, int size);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint window, uint attribute, ref int value, int size);
+    [DllImport("user32.dll")] private static extern bool IsWindowArranged(nint window);
+    internal static int CornerPreference(nint window)
+    {
+        if (DockNative.IsZoomed(window) || (DockNative.GetWindowLong(window, -16) & 0x01000000) != 0 || IsWindowArranged(window)) return 1;
+        if (DwmGetWindowAttribute(window, 33, out var corner, sizeof(int)) == 0 && corner is >= 1 and <= 3) return corner;
+        var style = DockNative.GetWindowLong(window, -16);
+        return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
+    }
     private static void Diagnose(nint source, DockNative.Rect outer, DockNative.Rect frame,
         Size size, DockNative.Rect destination, bool reliable)
     {
@@ -134,7 +146,9 @@ internal sealed class WindowPeek : IDisposable
                 // Reject stale/invalid frame bounds instead of stretching to them.
                 if (frame.Left < rect.Left || frame.Top < rect.Top || frame.Right > rect.Right || frame.Bottom > rect.Bottom ||
                     frame.Right <= frame.Left || frame.Bottom <= frame.Top) frame = rect;
-                var view = new View(hwnd, rect, frame, select);
+                var corner = DockNative.IsIconic(hwnd) && groups.TryGetCorner(hwnd, out var cachedCorner)
+                    ? cachedCorner : CornerPreference(hwnd);
+                var view = new View(hwnd, rect, frame, corner, select);
                 views.Add(view);
                 if (view.Thumbnail == 0) { Restore(); return false; }
             }
