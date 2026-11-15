@@ -58,7 +58,13 @@ internal sealed class WindowPeek : IDisposable
             var destination = new DockNative.Rect { Right = crop.Right - crop.Left, Bottom = crop.Bottom - crop.Top };
             Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch);
             if (!outerMatch && !frameMatch)
-            { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
+            {
+                // Cache sizes can differ after minimize/DPI changes. Preserve hover
+                // availability without touching the source window or stretching it.
+                var scale = Math.Min((double)width / size.Width, (double)height / size.Height);
+                destination.Right = Math.Max(1, (int)Math.Round(size.Width * scale));
+                destination.Bottom = Math.Max(1, (int)Math.Round(size.Height * scale));
+            }
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
                 Destination = destination, Source = crop,
                 Opacity = 255, Visible = true, ClientOnly = false };
