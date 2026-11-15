@@ -195,5 +195,12 @@ internal sealed class WindowThumbnail : IDisposable
         if (!DockNative.IsWindowVisible(surface.Handle)) DockNative.ShowWindow(surface.Handle, 4);
         SyncCloseVisibility();
     }
+    internal void Raise()
+    {
+        if (handle == 0) return;
+        SetWindowPos(surface.Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+        if (closeSurface != null && DockNative.IsWindowVisible(closeSurface.Handle))
+            SetWindowPos(closeSurface.Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+    }
     public void Dispose() { if (handle != 0) { DwmUnregisterThumbnail(handle); handle = 0; closeSurface?.RemoveHook(CloseInput); closeSurface?.Dispose(); surface.RemoveHook(Input); surface.Dispose(); } }
 }

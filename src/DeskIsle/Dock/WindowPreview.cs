@@ -320,6 +320,9 @@ internal sealed class WindowPreview : Window
     {
         if (finished || !ready) return;
         if (peek.CheckForeground()) blockedPeek = peekCandidate;
+        // The cross-process restore is asynchronous. Keep our controls above it
+        // after its queued promotion completes as well as on the initial request.
+        if (peek.Active) RaisePreview();
         var card = hoveredCard;
         // Closing a window is an action, not a request to temporarily restore it.
         if (card?.Close.IsMouseOver == true) card = null;
@@ -330,7 +333,13 @@ internal sealed class WindowPreview : Window
         }
         if (card == null || ReferenceEquals(card, blockedPeek) || peekAttempted || Environment.TickCount64 - peekSince < 300) return;
         peekAttempted = true;
-        peek.Begin(card.Windows);
+        if (peek.Begin(card.Windows)) RaisePreview();
+    }
+    private void RaisePreview()
+    {
+        DockNative.SetWindowPos(new WindowInteropHelper(bar).Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+        if (source != null) DockNative.SetWindowPos(source.Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+        foreach (var tile in tiles) tile.Thumbnail?.Raise();
     }
     private void SelectPeek(DockWindow[] selected, Action click)
     {

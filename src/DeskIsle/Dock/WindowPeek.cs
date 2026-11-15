@@ -59,7 +59,7 @@ internal sealed class WindowPeek : IDisposable
                     }
                 }
             }
-            if (!DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : 0, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000))
+            if (!DockNative.SetWindowPos(item.Handle, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000))
             { Restore(); return false; }
         }
         return Active;
@@ -70,10 +70,10 @@ internal sealed class WindowPeek : IDisposable
         var selected = windows.Select(w => w.Handle).ToHashSet();
         foreach (var item in snapshots.Where(s => selected.Contains(s.Handle)).ToArray())
         {
-            if (SameWindow(item) && item.Minimized && (item.Placement.Flags & 2) != 0)
+            if (SameWindow(item))
             {
-                var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 3;
-                SetWindowPlacement(item.Handle, in placement); // Explicit click may activate/maximize.
+                RestorePlacement(item, commit: true);
+                RestoreBand(item);
             }
             temporary.Remove(item.Handle);
             snapshots.Remove(item);
@@ -109,15 +109,30 @@ internal sealed class WindowPeek : IDisposable
     private static void RestoreWindow(Snapshot item)
     {
         if (!SameWindow(item)) return;
-        if (item.Minimized)
-        {
-            var placement = item.Placement; placement.Flags |= 4; placement.ShowCommand = 7; // SW_SHOWMINNOACTIVE
-            SetWindowPlacement(item.Handle, in placement);
-        }
+        RestorePlacement(item, commit: false);
+        RestoreBand(item);
         var previous = item.Previous;
         if (previous == item.Handle || !DockNative.IsWindow(previous) ||
             !item.Topmost && (DockNative.GetWindowLong(previous, -20) & 8) != 0) previous = item.Topmost ? -1 : 0;
         DockNative.SetWindowPos(item.Handle, previous, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
+    }
+    private static void RestorePlacement(Snapshot item, bool commit)
+    {
+        // Always restore the saved workspace-coordinate placement, including on click.
+        // A maximized hover uses a temporary screen rectangle; never retain it as the
+        // application's normal restore rectangle.
+        if (!item.Minimized) return;
+        var placement = item.Placement;
+        placement.Flags |= 4;
+        placement.ShowCommand = item.Minimized && !commit ? 7u :
+            (item.Placement.Flags & 2) != 0 ? 3u : 4u;
+        SetWindowPlacement(item.Handle, in placement);
+    }
+    private static void RestoreBand(Snapshot item)
+    {
+        // Relative insertion alone cannot reliably remove temporary WS_EX_TOPMOST.
+        DockNative.SetWindowPos(item.Handle, item.Topmost ? -1 : -2, 0, 0, 0, 0,
+            0x1 | 0x2 | 0x10 | 0x200 | 0x4000);
     }
     public void Dispose() => Restore();
 }
