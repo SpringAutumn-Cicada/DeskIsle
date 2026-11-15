@@ -21,6 +21,11 @@ public partial class MainWindow
             d.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 24, 24));
             void Shape(string path, Brush fill) => d.DrawGeometry(fill,
                 new Pen(new SolidColorBrush(Color.FromArgb(40, 225, 255, 246)), .45) { LineJoin = PenLineJoin.Round }, Geometry.Parse(path));
+            void StateShape(string path)
+            {
+                d.DrawGeometry(active ? mint : Brushes.Transparent,
+                    new Pen(active ? light : white, active ? .6 : 1.9) { LineJoin = PenLineJoin.Round }, Geometry.Parse(path));
+            }
             void Line(string path, Brush color, double width = 2.5) => d.DrawGeometry(null,
                 new Pen(color, width) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, Geometry.Parse(path));
             switch (kind)
@@ -38,14 +43,16 @@ public partial class MainWindow
                     Shape("M1,6 Q1,3 4,3 L9,3 L12,6 L20,6 Q22,6 22,9 L22,20 L1,20 Z", light);
                     Shape("M5,10 L23,10 L21,21 L2,21 Z", dark); break;
                 case "star":
-                    Shape("M12,1 Q12.6,1 13,2 L15.6,7.6 L22,8.5 Q24,8.8 22.5,10.3 L18,14.8 L19.1,21 Q19.4,23 17.6,22 L12,19 L6.4,22 Q4.6,23 4.9,21 L6,14.8 L1.5,10.3 Q0,8.8 2,8.5 L8.4,7.6 L11,2 Q11.4,1 12,1 Z", active ? mint : dark); break;
+                    StateShape("M12,1 Q12.6,1 13,2 L15.6,7.6 L22,8.5 Q24,8.8 22.5,10.3 L18,14.8 L19.1,21 Q19.4,23 17.6,22 L12,19 L6.4,22 Q4.6,23 4.9,21 L6,14.8 L1.5,10.3 Q0,8.8 2,8.5 L8.4,7.6 L11,2 Q11.4,1 12,1 Z"); break;
                 case "pin":
-                    Shape("M15,2 Q16,1 17,2 L23,8 Q24,9 23,10 L20,11 L16,16 L16,19 L14,21 L9,16 L4,22 Q2,24 1,22 L7,15 L3,11 L5,9 L8,9 L13,5 Z", active ? mint : dark); break;
+                    StateShape("M15,2 Q16,1 17,2 L23,8 Q24,9 23,10 L20,11 L16,16 L16,19 L14,21 L9,16 L4,22 Q2,24 1,22 L7,15 L3,11 L5,9 L8,9 L13,5 Z"); break;
                 case "monitor":
-                    d.DrawRoundedRectangle(light, null, new Rect(1, 2, 22, 15), 2.5, 2.5);
-                    d.DrawRectangle(dark, null, new Rect(1, 14, 22, 3));
-                    d.DrawRectangle(light, null, new Rect(10, 17, 4, 3));
-                    d.DrawRoundedRectangle(dark, null, new Rect(7, 20, 10, 2), 1, 1); break;
+                    d.DrawRoundedRectangle(active ? mint : Brushes.Transparent,
+                        new Pen(active ? light : white, 1.8), new Rect(2, 3, 20, 13), 2, 2);
+                    if (active) Line("M5,6 L19,6", light, .8);
+                    Line("M12,17 L12,20 M8,21 L16,21", active ? mint : white, 2);
+                    if (!active) Line("M6,12 L18,6", white, 1.5);
+                    break;
                 case "palette":
                     Shape("M12,1 C3,1 0,8 2,15 C3,20 7,24 11,22 C14,20 11,17 16,16 C23,16 25,10 21,5 C19,2 16,1 12,1 Z", light);
                     foreach (var dot in new[] { new Point(7,7), new Point(13,5), new Point(18,9), new Point(6,13) }) d.DrawEllipse(ink, null, dot, 1.7, 1.7);
@@ -65,15 +72,18 @@ public partial class MainWindow
                     Line("M3,7 L21,7 M17,3 L21,7 L17,11", light, 2.4);
                     Line("M21,17 L3,17 M7,13 L3,17 L7,21", dark, 2.4); break;
                 default: // refresh, matching the white upper/teal lower arrows
-                    Line("M3,10 A9,9 0 0 1 19,5", white, 2.7);
-                    Shape("M13,1 L20,5 L14,8 Z", light);
-                    Line("M21,14 A9,9 0 0 1 5,19", mint, 2.7);
-                    Shape("M11,23 L4,19 L10,16 Z", dark); break;
+                    Line("M4,10 A8.25,8.25 0 0 1 19,7.5", white, 2.6);
+                    Shape("M14.5,4.3 L20.8,7.8 L14.8,10 Z", light);
+                    Line("M20,14 A8.25,8.25 0 0 1 5,16.5", mint, 2.6);
+                    Shape("M9.5,19.7 L3.2,16.2 L9.2,14 Z", dark); break;
             }
         }
         group.Freeze();
         var style = new Style(typeof(Image));
-        style.Setters.Add(new Setter(OpacityProperty, active ? 1.0 : .72));
+        style.Setters.Add(new Setter(OpacityProperty, 1.0));
+        if (active && kind is "star" or "pin" or "monitor")
+            style.Setters.Add(new Setter(EffectProperty, new System.Windows.Media.Effects.DropShadowEffect
+                { Color = Color.FromRgb(113, 220, 193), BlurRadius = 2, ShadowDepth = 0, Opacity = .18 }));
         var hover = new DataTrigger { Binding = new Binding("IsHighlighted") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1) }, Value = true };
         hover.Setters.Add(new Setter(OpacityProperty, 1.0));
         hover.Setters.Add(new Setter(EffectProperty, new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(113, 220, 193), BlurRadius = 3, ShadowDepth = 0, Opacity = .22 })); style.Triggers.Add(hover);
