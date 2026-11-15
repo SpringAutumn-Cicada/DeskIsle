@@ -43,22 +43,20 @@ internal sealed class WindowPeek : IDisposable
             if (DwmRegisterThumbnail(Surface.Handle, source, out Thumbnail) < 0) return;
             if (DwmQueryThumbnailSourceSize(Thumbnail, out var size) < 0 || size.Width <= 0 || size.Height <= 0)
             { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
-            var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
-            var crop = new DockNative.Rect { Right = size.Width, Bottom = size.Height };
-            // DWM may expose either the full outer surface or just its visible frame.
-            // Crop only when its measured dimensions match the outer rectangle.
-            if (size.Width == outer.Right - outer.Left && size.Height == outer.Bottom - outer.Top)
-                crop = new() { Left = rect.Left - outer.Left, Top = rect.Top - outer.Top,
-                    Right = rect.Right - outer.Left, Bottom = rect.Bottom - outer.Top };
-            var sourceWidth = crop.Right - crop.Left; var sourceHeight = crop.Bottom - crop.Top;
-            // Unknown/cache-size mismatch: preserve aspect ratio and never upscale.
-            var scale = Math.Min(1, Math.Min((double)width / sourceWidth, (double)height / sourceHeight));
-            var drawnWidth = Math.Max(1, (int)Math.Round(sourceWidth * scale));
-            var drawnHeight = Math.Max(1, (int)Math.Round(sourceHeight * scale));
-            var left = (width - drawnWidth) / 2; var top = (height - drawnHeight) / 2;
+            // rcSource uses source-window coordinates. Keep the complete source
+            // at 1:1 scale and translate its origin once into the visible viewport.
+            // Do not infer a different origin merely from matching frame dimensions.
+            var offsetX = outer.Left - rect.Left;
+            var offsetY = outer.Top - rect.Top;
+            var destination = new DockNative.Rect { Left = offsetX, Top = offsetY,
+                Right = offsetX + size.Width, Bottom = offsetY + size.Height };
+            var reliable = size.Width == outer.Right - outer.Left && size.Height == outer.Bottom - outer.Top;
+            Diagnose(source, outer, rect, size, destination, reliable);
+            if (!reliable)
+            { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
-                Destination = new() { Left = left, Top = top, Right = left + drawnWidth, Bottom = top + drawnHeight },
-                Source = crop, Opacity = 255, Visible = true, ClientOnly = false };
+                Destination = destination, Source = new() { Right = size.Width, Bottom = size.Height },
+                Opacity = 255, Visible = true, ClientOnly = false };
             if (DwmUpdateThumbnailProperties(Thumbnail, ref props) < 0) { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; }
         }
         internal void Show() => DockNative.SetWindowPos(Surface.Handle, -1, 0, 0, 0, 0, 1 | 2 | 0x10 | 0x40);
@@ -76,6 +74,22 @@ internal sealed class WindowPeek : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
     private static extern int FrameBounds(nint window, uint attribute, out DockNative.Rect rect, int size);
+    private static void Diagnose(nint source, DockNative.Rect outer, DockNative.Rect frame,
+        Size size, DockNative.Rect destination, bool reliable)
+    {
+        if (Environment.GetEnvironmentVariable("DESKISLE_PEEK_DIAGNOSTICS") != "1") return;
+        try
+        {
+            var directory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeskIsle");
+            System.IO.Directory.CreateDirectory(directory);
+            var path = System.IO.Path.Combine(directory, "peek-geometry.log");
+            if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length > 1024 * 1024)
+                System.IO.File.WriteAllText(path, "");
+            static string R(DockNative.Rect r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
+            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} source=0,0,{size.Width},{size.Height} destination={R(destination)} reliable={reliable}\n");
+        }
+        catch { /* Diagnostics must never interrupt preview cleanup. */ }
+    }
     private readonly List<View> views = [];
     private nint foreground;
     internal bool Active => views.Count > 0;
