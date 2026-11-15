@@ -16,11 +16,17 @@ internal sealed class SplitGroups
         foreach (var window in windows)
             if (!DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect))
             {
-                positions[window.Handle] = rect;
-                corners[window.Handle] = WindowPeek.CornerPreference(window.Handle);
+
                 if (FrameBounds(window.Handle, 9, out var frame, Marshal.SizeOf<DockNative.Rect>()) == 0 &&
-                    frame.Right > frame.Left && frame.Bottom > frame.Top) frames[window.Handle] = frame;
-                else frames.Remove(window.Handle);
+                    frame.Right > frame.Left && frame.Bottom > frame.Top && frame.Left >= rect.Left &&
+                    frame.Top >= rect.Top && frame.Right <= rect.Right && frame.Bottom <= rect.Bottom)
+                {
+                    // Update outer/frame/corner together; a transient failed DWM read
+                    // must not erase the last complete pre-minimize snapshot.
+                    positions[window.Handle] = rect;
+                    frames[window.Handle] = frame;
+                    corners[window.Handle] = WindowPeek.CornerPreference(window.Handle);
+                }
             }
         foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) { positions.Remove(key); frames.Remove(key); corners.Remove(key); }
     }

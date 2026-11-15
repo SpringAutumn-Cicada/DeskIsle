@@ -56,7 +56,7 @@ internal sealed class WindowPeek : IDisposable
             // Accept DWM's visible-frame representation as well as the outer surface.
             // Clip source pixels instead of submitting a negative destination rectangle.
             var destination = new DockNative.Rect { Right = crop.Right - crop.Left, Bottom = crop.Bottom - crop.Top };
-            Diagnose(source, outer, rect, size, crop, destination, outerMatch || frameMatch);
+            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch);
             if (!outerMatch && !frameMatch)
             { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             var props = new Properties { Flags = 1 | 2 | 4 | 8 | 16,
@@ -88,7 +88,7 @@ internal sealed class WindowPeek : IDisposable
         var style = DockNative.GetWindowLong(window, -16);
         return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
     }
-    private static void Diagnose(nint source, DockNative.Rect outer, DockNative.Rect frame,
+    private static void Diagnose(nint source, nint host, DockNative.Rect outer, DockNative.Rect frame,
         Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable)
     {
         if (Environment.GetEnvironmentVariable("DESKISLE_PEEK_DIAGNOSTICS") != "1") return;
@@ -99,11 +99,19 @@ internal sealed class WindowPeek : IDisposable
             var path = System.IO.Path.Combine(directory, "peek-geometry.log");
             if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length > 1024 * 1024)
                 System.IO.File.WriteAllText(path, "");
+            DockNative.GetWindowRect(host, out var actual);
+            GetClientRect(host, out var client);
+            var origin = new DockNative.Point();
+            ClientToScreen(host, ref origin);
             static string R(DockNative.Rect r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
-            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} source={R(crop)} destination={R(destination)} reliable={reliable}\n");
+            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} source={R(crop)} destination={R(destination)} reliable={reliable} host={R(actual)} client={R(client)} clientOrigin={origin.X},{origin.Y} sourceDpi={GetDpiForWindow(source)} hostDpi={GetDpiForWindow(host)}\n");
         }
         catch { /* Diagnostics must never interrupt preview cleanup. */ }
     }
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
+    [DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint window, out DockNative.Rect rect);
+    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint window, ref DockNative.Point point);
     private readonly List<View> views = [];
     private nint foreground;
     internal bool Active => views.Count > 0;
@@ -111,9 +119,11 @@ internal sealed class WindowPeek : IDisposable
     {
         Restore();
         foreground = DockNative.GetForegroundWindow();
+        var members = windows.ToArray();
+        groups.Observe(members);
         try
         {
-            foreach (var window in windows.DistinctBy(w => w.Handle))
+            foreach (var window in members.DistinctBy(w => w.Handle))
             {
                 var hwnd = window.Handle;
                 if (!DockNative.IsWindow(hwnd) || !DockNative.IsWindowVisible(hwnd) || !DockNative.IsWindowEnabled(hwnd) ||
@@ -145,6 +155,16 @@ internal sealed class WindowPeek : IDisposable
                     if (FrameBounds(hwnd, 9, out var visible, Marshal.SizeOf<DockNative.Rect>()) == 0) frame = visible;
                 }
                 else if (groups.TryGetFrame(hwnd, out var cachedFrame)) frame = cachedFrame;
+                else if ((DockNative.GetWindowLong(hwnd, -16) & 0x00040000) != 0 &&
+                    (DockNative.GetWindowLong(hwnd, -16) & 0x01000000) == 0)
+                {
+                    // Startup may first see an already minimized window. Use this
+                    // window's DPI metrics instead of assuming a fixed 11px border.
+                    var dpi = GetDpiForWindow(hwnd);
+                    var x = GetSystemMetricsForDpi(32, dpi) + GetSystemMetricsForDpi(92, dpi);
+                    var y = GetSystemMetricsForDpi(33, dpi) + GetSystemMetricsForDpi(92, dpi);
+                    frame.Left += x; frame.Right -= x; frame.Bottom -= y;
+                }
                 // Reject stale/invalid frame bounds instead of stretching to them.
                 if (frame.Left < rect.Left || frame.Top < rect.Top || frame.Right > rect.Right || frame.Bottom > rect.Bottom ||
                     frame.Right <= frame.Left || frame.Bottom <= frame.Top) frame = rect;
