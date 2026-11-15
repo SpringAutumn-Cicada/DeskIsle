@@ -33,7 +33,10 @@ internal sealed class WindowPeek : IDisposable
                 Width = rect.Right - rect.Left, Height = rect.Bottom - rect.Top,
                 WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x08000080
             });
-            DwmSetWindowAttribute(Surface.Handle, 33, ref corner, sizeof(int));
+            var requestedCorner = corner;
+            var square = Environment.GetEnvironmentVariable("DESKISLE_PEEK_SQUARE") == "1";
+            if (square) corner = 1;
+            var cornerResult = DwmSetWindowAttribute(Surface.Handle, 33, ref corner, sizeof(int));
             var border = -2; // DWMWA_COLOR_NONE: no additional border on the host.
             DwmSetWindowAttribute(Surface.Handle, 34, ref border, sizeof(int));
             if (Surface.CompositionTarget != null) Surface.CompositionTarget.BackgroundColor = Colors.Transparent;
@@ -79,7 +82,7 @@ internal sealed class WindowPeek : IDisposable
                 { DwmUnregisterThumbnail(Thumbnail); Thumbnail = 0; return; }
             }
             var fullSource = string.Equals(Environment.GetEnvironmentVariable("DESKISLE_PEEK_SOURCE_MODE"), "full", StringComparison.OrdinalIgnoreCase);
-            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch, corner, fullSource);
+            Diagnose(source, Surface.Handle, outer, rect, size, crop, destination, outerMatch || frameMatch, corner, fullSource, requestedCorner, cornerResult);
             var props = new Properties { Flags = 1u | (fullSource ? 0u : 2u) | 4u | 8u | 16u,
                 Destination = destination, Source = crop,
                 Opacity = 255, Visible = true, ClientOnly = false };
@@ -110,7 +113,7 @@ internal sealed class WindowPeek : IDisposable
         return (style & 0x00C00000) == 0x00C00000 && (style & 0x00040000) != 0 ? 2 : 1;
     }
     private static void Diagnose(nint source, nint host, DockNative.Rect outer, DockNative.Rect frame,
-        Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable, int corner, bool fullSource)
+        Size size, DockNative.Rect crop, DockNative.Rect destination, bool reliable, int corner, bool fullSource, int requestedCorner, int cornerResult)
     {
         if (Environment.GetEnvironmentVariable("DESKISLE_PEEK_DIAGNOSTICS") != "1") return;
         try
@@ -125,7 +128,7 @@ internal sealed class WindowPeek : IDisposable
             var origin = new DockNative.Point();
             ClientToScreen(host, ref origin);
             static string R(DockNative.Rect r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
-            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} sourceMode={(fullSource ? "full" : "explicit")} sourceApplied={!fullSource} source={R(crop)} destination={R(destination)} reliable={reliable} corner={corner} host={R(actual)} client={R(client)} clientOrigin={origin.X},{origin.Y} sourceDpi={GetDpiForWindow(source)} hostDpi={GetDpiForWindow(host)}\n");
+            System.IO.File.AppendAllText(path, $"{DateTimeOffset.Now:O} hwnd={source:X} minimized={DockNative.IsIconic(source)} outer={R(outer)} frame={R(frame)} sourceSize={size.Width},{size.Height} sourceMode={(fullSource ? "full" : "explicit")} sourceApplied={!fullSource} source={R(crop)} destination={R(destination)} reliable={reliable} corner={corner} requestedCorner={requestedCorner} cornerResult={cornerResult:X8} host={R(actual)} client={R(client)} clientOrigin={origin.X},{origin.Y} sourceDpi={GetDpiForWindow(source)} hostDpi={GetDpiForWindow(host)}\n");
         }
         catch { /* Diagnostics must never interrupt preview cleanup. */ }
     }
