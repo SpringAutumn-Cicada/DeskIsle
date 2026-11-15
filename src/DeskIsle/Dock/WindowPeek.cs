@@ -10,9 +10,22 @@ internal sealed class WindowPeek : IDisposable
         public DockNative.Point MinPosition, MaxPosition;
         public DockNative.Rect NormalPosition;
     }
-    private sealed record Snapshot(nint Handle, uint Pid, uint Thread, Placement Placement, nint Previous, bool Minimized, bool Topmost);
+    private sealed record Snapshot(nint Handle, uint Pid, uint Thread, Placement Placement, Placement DisplayPlacement, nint Previous, bool Minimized, bool Topmost);
     private static readonly HashSet<nint> temporary = [];
-    internal static bool IsTemporary(nint handle) => temporary.Contains(handle);
+    private static readonly Dictionary<nint, long> settling = [];
+    internal static bool IsTemporary(nint handle)
+    {
+        if (temporary.Contains(handle)) return true;
+        if (!settling.TryGetValue(handle, out var until)) return false;
+        if (Environment.TickCount64 < until) return true;
+        settling.Remove(handle);
+        return false;
+    }
+    private static void Settling(nint handle)
+    {
+        foreach (var key in settling.Where(p => p.Value <= Environment.TickCount64).Select(p => p.Key).ToArray()) settling.Remove(key);
+        settling[handle] = Environment.TickCount64 + 750;
+    }
     private readonly List<Snapshot> snapshots = [];
     private nint foreground;
     internal bool Active => snapshots.Count > 0;
@@ -21,7 +34,7 @@ internal sealed class WindowPeek : IDisposable
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out int value, int size);
     private static bool SameWindow(Snapshot item) => DockNative.IsWindow(item.Handle) &&
         DockNative.GetWindowThreadProcessId(item.Handle, out var pid) == item.Thread && pid == item.Pid;
-    internal bool Begin(IEnumerable<DockWindow> windows)
+    internal bool Begin(IEnumerable<DockWindow> windows, SplitGroups groups)
     {
         Restore();
         foreground = DockNative.GetForegroundWindow();
@@ -36,8 +49,25 @@ internal sealed class WindowPeek : IDisposable
             // GetWindowPlacement does not reliably report restore-to-maximized flags.
             // Preserve the maximized style for minimized windows as well.
             if (DockNative.IsZoomed(handle) || (DockNative.GetWindowLong(handle, -16) & 0x01000000) != 0) placement.Flags |= 2;
+            var display = placement;
+            var minimized = DockNative.IsIconic(handle);
+            if (minimized && (placement.Flags & 2) == 0 && groups.TryGetPosition(handle, out var bounds))
+            {
+                // Saved bounds are screen coordinates; WINDOWPLACEMENT normally
+                // expects workspace coordinates, including on secondary monitors.
+                var info = new DockNative.MonitorInfo { Size = Marshal.SizeOf<DockNative.MonitorInfo>() };
+                if ((DockNative.GetWindowLong(handle, -20) & 0x80) == 0)
+                {
+                    if (!DockNative.GetMonitorInfo(DockNative.MonitorFromWindow(handle, 2), ref info)) return false;
+                    var x = info.Work.Left - info.Monitor.Left;
+                    var y = info.Work.Top - info.Monitor.Top;
+                    bounds.Left -= x; bounds.Right -= x;
+                    bounds.Top -= y; bounds.Bottom -= y;
+                }
+                display.NormalPosition = bounds;
+            }
             var thread = DockNative.GetWindowThreadProcessId(handle, out var pid);
-            next.Add(new(handle, pid, thread, placement, DockNative.GetWindow(handle, 3), DockNative.IsIconic(handle), (DockNative.GetWindowLong(handle, -20) & 8) != 0));
+            next.Add(new(handle, pid, thread, placement, display, DockNative.GetWindow(handle, 3), minimized, (DockNative.GetWindowLong(handle, -20) & 8) != 0));
         }
         snapshots.AddRange(next);
         foreach (var item in next) temporary.Add(item.Handle);
@@ -45,7 +75,7 @@ internal sealed class WindowPeek : IDisposable
         {
             if (item.Minimized)
             {
-                var show = item.Placement;
+                var show = item.DisplayPlacement;
                 show.Flags |= 4; // WPF_ASYNCWINDOWPLACEMENT: never wait on another app's dispatcher.
                 show.ShowCommand = 4; // SW_SHOWNOACTIVATE
                 if (!SetWindowPlacement(item.Handle, in show)) { Restore(); return false; }
@@ -75,6 +105,7 @@ internal sealed class WindowPeek : IDisposable
                 RestorePlacement(item, commit: true);
                 RestoreBand(item);
             }
+            Settling(item.Handle);
             temporary.Remove(item.Handle);
             snapshots.Remove(item);
         }
@@ -95,7 +126,7 @@ internal sealed class WindowPeek : IDisposable
     internal void Restore()
     {
         var items = snapshots.ToArray(); snapshots.Clear();
-        foreach (var item in items) temporary.Remove(item.Handle);
+        foreach (var item in items) { Settling(item.Handle); temporary.Remove(item.Handle); }
         // Restore a predecessor before windows that were directly below it. Reversing a
         // split pair can leave its second member above the original foreground application.
         var pending = items.ToList();
@@ -122,7 +153,9 @@ internal sealed class WindowPeek : IDisposable
         // A maximized hover uses a temporary screen rectangle; never retain it as the
         // application's normal restore rectangle.
         if (!item.Minimized) return;
-        var placement = item.Placement;
+        // A committed snapped window must keep its visible snap bounds rather
+        // than being sent to its pre-snap normal restore rectangle again.
+        var placement = commit ? item.DisplayPlacement : item.Placement;
         placement.Flags |= 4;
         placement.ShowCommand = item.Minimized && !commit ? 7u :
             (item.Placement.Flags & 2) != 0 ? 3u : 4u;

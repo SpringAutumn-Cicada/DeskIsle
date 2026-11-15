@@ -11,6 +11,9 @@ internal sealed class SplitGroups
             if (!WindowPeek.IsTemporary(window.Handle) && !DockNative.IsIconic(window.Handle) && DockNative.GetWindowRect(window.Handle, out var rect)) positions[window.Handle] = rect;
         foreach (var key in positions.Keys.Where(key => !DockNative.IsWindow(key)).ToArray()) positions.Remove(key);
     }
+    // GetWindowPlacement can contain the pre-snap restore rectangle. Retain the
+    // last actual screen bounds while minimized or in a reversible hover session.
+    internal bool TryGetPosition(nint window, out DockNative.Rect rect) => positions.TryGetValue(window, out rect);
     internal SplitPair? Find(DockWindow[] windows)
     {
         foreach (var left in windows)

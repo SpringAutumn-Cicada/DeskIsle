@@ -333,7 +333,7 @@ internal sealed class WindowPreview : Window
         }
         if (card == null || ReferenceEquals(card, blockedPeek) || peekAttempted || Environment.TickCount64 - peekSince < 300) return;
         peekAttempted = true;
-        if (peek.Begin(card.Windows)) RaisePreview();
+        if (peek.Begin(card.Windows, groups)) RaisePreview();
     }
     private void RaisePreview()
     {
