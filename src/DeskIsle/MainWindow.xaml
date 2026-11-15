@@ -56,7 +56,7 @@
 </TextBox>
 <Button Grid.Column="1" Content="•••" Width="32" Height="28" Padding="0" Click="MoreClick" Background="Transparent" Foreground="#DCE5F5" BorderThickness="0" FontSize="17" ToolTip="卡片菜单">
 <Button.ContextMenu><ContextMenu>
-<MenuItem Header="添加新卡片" Icon="＋" Click="AddCardClick"/><MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="我的桌面分组" Click="CollectionClick"/><MenuItem Header="打开桌面目录" Click="OpenDesktopClick"/><MenuItem x:Name="CurrentTransferMenu" Header="查看当前文件操作…" Visibility="Collapsed" Click="ViewTransferClick"/><MenuItem x:Name="MigrationMenu" Header="导入待迁移旧记录…" Click="MigrateDesktopClick"/><MenuItem x:Name="RemovePendingMenu" Header="移除待迁移旧记录…" Click="RemovePendingClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
+<MenuItem Header="添加新卡片" Icon="＋" Click="AddCardClick"/><MenuItem Header="重命名卡片" Icon="✎" Click="RenameClick"/><MenuItem Header="打开桌面目录" Click="OpenDesktopClick"/><MenuItem x:Name="CurrentTransferMenu" Header="查看当前文件操作…" Visibility="Collapsed" Click="ViewTransferClick"/><MenuItem Header="刷新" Icon="↻" Click="RefreshClick"/><Separator/>
 
 <MenuItem x:Name="DefaultCardToggle" Header="设为 default 卡片" IsCheckable="True" Click="SetDefaultCardClick"/>
 <MenuItem x:Name="PositionLockToggle" Header="固定卡片位置" IsCheckable="True" Click="TogglePositionLock"/>

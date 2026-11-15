@@ -7,12 +7,12 @@ public partial class MainWindow
 {
     private TransferProgressWindow? currentTransfer;
     private void ViewTransferClick(object sender, RoutedEventArgs e) => currentTransfer?.RevealProgress();
-    private async Task<TransferReport> RunTransfer(string[] sources, string target, bool move = false, string? name = null, bool migration = false, bool draft = false)
+    private async Task<TransferReport> RunTransfer(string[] sources, string target, bool move = false, string? name = null, bool draft = false)
     {
         var dialog = new TransferProgressWindow(this, move ? "正在移动桌面项目" : "正在导入到桌面",
             engine => engine.Run(sources.OrderBy(path => path.Length), target, move, name, draft),
             completion => Dispatcher.InvokeAsync(() => workspace.RecordTransfer(state.Id, completion)).Task,
-            migration ? workspace.ImportedPaths : null, moving: move);
+            null, moving: move);
         TrackDialog(dialog);
         currentTransfer = dialog;
         try { return await dialog.RunAsync(); }
@@ -24,7 +24,6 @@ public partial class MainWindow
         try
         {
             if (!workspace.BeginFileMove()) { Status.Text = "请先完成其他卡片的操作或关闭弹窗。"; return false; }
-            if (workspace.PendingDesktopPaths.Length > 0) workspace.EnsureMigrationBackup();
             return true;
         }
         catch (Exception ex) when (FileTransfer.Recoverable(ex))
@@ -74,48 +73,6 @@ public partial class MainWindow
         finally { workspace.EndFileMove(); }
         await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
         if (!closing) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
-    }
-    private void UpdateMigrationNotice()
-    {
-        var count = workspace.PendingDesktopPaths.Length;
-        MigrationMenu.Header = count == 0 ? "导入待迁移旧记录…" : $"导入待迁移旧记录（{count}）…";
-        MigrationMenu.IsEnabled = RemovePendingMenu.IsEnabled = count > 0;
-    }
-    internal void OfferDesktopMigration() => MigrateDesktopClick(this, new RoutedEventArgs());
-    private async void MigrateDesktopClick(object sender, RoutedEventArgs e)
-    {
-        if (!BeginDesktopOperation()) return;
-        TransferReport? report = null;
-        string? warning = null;
-        try
-        {
-            var pending = workspace.PendingDesktopPaths;
-            if (pending.Length == 0) return;
-            workspace.MarkDesktopMigrationPrompted();
-            var review = new MigrationReview(this, pending);
-            TrackDialog(review);
-            if (review.ShowDialog() != true) return;
-            report = await RunTransfer(pending, DesktopFiles.Root, migration: true);
-            workspace.PublishMigrationRoots(report);
-        }
-        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { warning = "迁移未完成：" + ex.Message; }
-        finally { workspace.EndFileMove(); UpdateMigrationNotice(); }
-        await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
-        if (!closing && report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
-        if (!closing && warning != null) Status.Text = warning;
-    }
-    private async void RemovePendingClick(object sender, RoutedEventArgs e)
-    {
-        if (workspace.PendingDesktopPaths.Length == 0 || !BeginDesktopOperation()) return;
-        try
-        {
-            var review = new MigrationReview(this, workspace.PendingDesktopPaths, remove: true);
-            TrackDialog(review);
-            if (review.ShowDialog() == true) workspace.RemovePendingDesktopPaths();
-        }
-        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
-        finally { workspace.EndFileMove(); UpdateMigrationNotice(); }
-        await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
     }
     private FileTile? ExternalFolderTarget(DragEventArgs e)
     {

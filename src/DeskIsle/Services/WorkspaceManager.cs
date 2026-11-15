@@ -51,16 +51,9 @@ public sealed partial class WorkspaceManager : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
         }
         if (DesktopIntegration) desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
-        if (DesktopIntegration && PendingDesktopPaths.Length > 0)
-        {
-            try { EnsureMigrationBackup(); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "旧配置备份未完成，请先修复权限再导入旧记录。"; }
-        }
         foreach (var card in state.Cards.ToArray()) Open(card);
         if (DesktopIntegration) _ = SyncDefaultDesktop();
         if (DesktopIntegration) { dock = new DeskIsle.Dock.DockController(); dock.Start(); }
-        if (DesktopIntegration && PendingDesktopPaths.Length > 0 && !state.DesktopMigrationPrompted)
-            Application.Current.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => windows.Values.FirstOrDefault()?.OfferDesktopMigration()));
         if (DesktopIntegration)
         {
             startupHidePending = true;
@@ -124,33 +117,6 @@ public sealed partial class WorkspaceManager : IDisposable
         return true;
     }
     public void EndFileMove() { FileMoveInProgress = false; if (DesktopIntegration) NotifyDesktopMutation(); }
-    private string? migrationBackup;
-    public string[] PendingDesktopPaths => state.Cards.SelectMany(card => card.References).Where(path => !DesktopFiles.IsCardPath(path)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path.Length).ToArray();
-    public IReadOnlyDictionary<string, string> ImportedPaths => new Dictionary<string, string>(state.ImportedPaths, StringComparer.OrdinalIgnoreCase);
-    public void EnsureMigrationBackup()
-    {
-        if (store.ReadOnly) throw new IOException("配置处于保护模式，不能导入或迁移。");
-        migrationBackup ??= store.BackupForDesktopMigration(state);
-    }
-    public void MarkDesktopMigrationPrompted()
-    {
-        EnsureMigrationBackup();
-        state.DesktopMigrationPrompted = true;
-        Save();
-    }
-    public void PublishMigrationRoots(TransferReport report)
-    {
-        foreach (var card in state.Cards)
-            foreach (var root in report.Roots.Where(root => root.Published && card.References.Contains(root.Source, StringComparer.OrdinalIgnoreCase)))
-                if (!card.References.Contains(root.Target, StringComparer.OrdinalIgnoreCase)) card.References.Add(root.Target);
-        Save();
-    }
-    public void RemovePendingDesktopPaths()
-    {
-        EnsureMigrationBackup();
-        foreach (var card in state.Cards) card.References.RemoveAll(path => !DesktopFiles.IsCardPath(path));
-        Save();
-    }
     public void RecordTransfer(Guid sourceCard, TransferCompletion completion)
     {
         DesktopFiles.Require(completion.Target);

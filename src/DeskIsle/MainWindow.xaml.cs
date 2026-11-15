@@ -129,7 +129,6 @@ public partial class MainWindow : Window
         RebuildFileWatchers();
         TitleText.ToolTip = null;
         TitleText.Text = state.Title;
-        UpdateMigrationNotice();
         var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var entries = await Task.Run(() => ReadReferences(paths));
         if (directory != null || version != viewVersion || closing) return;
@@ -184,12 +183,6 @@ public partial class MainWindow : Window
         }
         var captured = paths.ToArray();
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ImportDesktopFiles(captured, folder)));
-    }
-    private async void CollectionClick(object sender, RoutedEventArgs e)
-    {
-        if (HasPendingCreation) return;
-        CancelNewItem(sender, e);
-        await LoadReferences();
     }
     private async void RemoveReference(object sender, RoutedEventArgs e)
     {

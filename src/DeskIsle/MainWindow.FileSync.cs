@@ -121,7 +121,6 @@ public partial class MainWindow
         syncingFiles = true;
         var version = viewVersion;
         var folder = directory;
-        UpdateMigrationNotice();
         var paths = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         try
         {

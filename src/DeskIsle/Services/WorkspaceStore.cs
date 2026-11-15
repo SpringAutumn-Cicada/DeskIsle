@@ -82,14 +82,6 @@ public sealed class WorkspaceStore
             card.BackgroundOpacity = Math.Clamp(card.BackgroundOpacity, .3, 1);
         }
     }
-    public string BackupForDesktopMigration(WorkspaceState state)
-    {
-        Directory.CreateDirectory(dataDirectory);
-        var backup = Path.Combine(dataDirectory, "cards.before-desktop-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N") + ".json");
-        if (File.Exists(path)) File.Copy(path, backup, overwrite: false);
-        else File.WriteAllText(backup, JsonSerializer.Serialize(state));
-        return backup;
-    }
     public void Save(WorkspaceState state)
     {
         if (ReadOnly) return;
