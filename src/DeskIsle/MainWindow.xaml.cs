@@ -110,6 +110,17 @@ public partial class MainWindow : Window
         var visible = desktopIcons.Visible;
         DesktopToggle.Header = visible == false ? "显示桌面图标" : "隐藏桌面图标";
         DesktopToggle.IsEnabled = visible.HasValue;
+        DesktopToggle.Icon = StateMenuIcon("M1,2 L15,2 L15,11 L1,11 Z M8,11 L8,15 M4,15 L12,15", visible == true);
+        AddCardMenu.Icon = StateMenuIcon("M2,2 L14,2 L14,14 L2,14 Z M8,5 L8,11 M5,8 L11,8", false);
+        RenameCardMenu.Icon = StateMenuIcon("M3,10 L11,2 L14,5 L6,13 L2,14 Z M9,4 L12,7", false);
+        OpenDesktopMenu.Icon = StateMenuIcon("M1,4 L6,4 L8,6 L15,6 L14,14 L2,14 Z M1,4 L1,2 L6,2 L8,4 L14,4 L14,6", false);
+        RefreshCardMenu.Icon = StateMenuIcon("M14,6 A6,6 0 1 0 14,10 M14,2 L14,6 L10,6", false);
+        CurrentTransferMenu.Icon = StateMenuIcon("M2,5 L14,5 M11,2 L14,5 L11,8 M14,11 L2,11 M5,8 L2,11 L5,14", false);
+        CardAppearanceMenu.Icon = StateMenuIcon("M8,1 A7,7 0 1 0 15,8 A7,7 0 0 0 8,1 Z M8,1 L8,15 M8,5 L13,5 M8,8 L15,8 M8,11 L13,11", false);
+        ResetOpacityMenu.Icon = StateMenuIcon("M3,5 A6,6 0 1 1 2,10 M3,1 L3,5 L7,5", false);
+        RemoveCardMenu.Icon = StateMenuIcon("M3,5 L13,5 L12,15 L4,15 Z M1,3 L15,3 M6,3 L6,1 L10,1 L10,3 M6,7 L6,12 M10,7 L10,12", false);
+        DockSettingsMenu.Icon = StateMenuIcon("M3,1 L3,15 M8,1 L8,15 M13,1 L13,15 M1,4 L5,4 L5,7 L1,7 Z M6,9 L10,9 L10,12 L6,12 Z M11,3 L15,3 L15,6 L11,6 Z", false);
+        ExitMenu.Icon = StateMenuIcon("M7,2 L2,2 L2,14 L7,14 M6,8 L15,8 M11,4 L15,8 L11,12", false);
     }
     private static System.Windows.Shapes.Path StateMenuIcon(string geometry, bool active)
     {
@@ -125,7 +136,7 @@ public partial class MainWindow : Window
         trigger.Setters.Add(new Setter(System.Windows.Shapes.Shape.StrokeProperty, Brushes.White));
         style.Triggers.Add(trigger);
         return new System.Windows.Shapes.Path { Data = Geometry.Parse(geometry), Width = 15, Height = 15,
-            Stretch = Stretch.Uniform, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round,
+            Stretch = Stretch.Uniform, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
             VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Style = style };
     }
     internal void ShowStartupWarning(string message) => Status.Text = message;
