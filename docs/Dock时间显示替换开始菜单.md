@@ -20,3 +20,9 @@
 - `122e363` 保留原先只显示时间的 Dock。指针停在时钟区域时，上方显示 `2026年11月18日 · 周三` 格式的本地日期和星期，使用与时钟相同的 23 DIP 字号。
 - Windows x64 自包含发布成功。ZIP 405 项，CRC 和关键文件检查通过。交付 `D:\Mine\DeskIsle-2.2.15-win-x64.zip`，源包与副本 SHA-256 一致，为 `d5353a5dd661cc36a347441ae59dc5d4c894044251f52f318041a044a9caa578`。
 - 开发侧核对撤销结果并完成发布和包校验。未运行独立功能测试。悬停位置、移开后的隐藏和字号效果待 Windows 实机验收。
+
+## 2.2.16 悬停日期居中与字号
+
+- 分支 `test`。`79bb128` 将日期提示改为 15 DIP，缩小边距并移除中点两侧的空格。提示以时钟框为锚点，自定义定位到正上方。`ec388e7` 将上下间距按显示缩放换算，目标间距为 14 DIP。[WPF 弹出定位源码](https://github.com/dotnet/wpf/blob/main/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs#L1828)
+- Windows x64 自包含发布成功。ZIP 共 405 项，CRC 和关键文件检查通过。交付至 `D:\Mine\DeskIsle-2.2.16-win-x64.zip`，源包和副本 SHA-256 一致，为 `1e5122fee1c4824c19b8e1f08482f8630fa31fab0bebc38f3ce5550f726eb3e7`。
+- 开发侧完成代码审阅、授权发布和包校验。未运行独立功能测试，居中、间距及高 DPI 效果待 Windows 实机验收。
