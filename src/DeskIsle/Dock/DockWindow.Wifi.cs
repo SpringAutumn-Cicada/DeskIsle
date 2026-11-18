@@ -66,13 +66,15 @@ public partial class DockBar
             Style = (Style)FindResource("WifiRememberPassword")
         };
         AutomationProperties.SetHelpText(remember, "连接成功后保存在此电脑，下次选中该网络时自动填入。");
+        DockPanel.SetDock(remember, System.Windows.Controls.Dock.Left);
         footer.Children.Add(remember);
-        editor.Children.Add(footer);
         var hint = ControlText("下次连接时自动填入", 10);
         hint.Foreground = ControlBrush("#A8BFCD");
-        hint.Margin = new Thickness(21, 3, 0, 0);
-        editor.Children.Add(hint);
-
+        hint.Margin = new Thickness(8, 0, 6, 0);
+        hint.TextWrapping = TextWrapping.NoWrap;
+        hint.TextTrimming = TextTrimming.CharacterEllipsis;
+        footer.Children.Add(hint);
+        editor.Children.Add(footer);
 
         DockWireless.Network? selected = null;
         StackPanel? expandedRow = null;
