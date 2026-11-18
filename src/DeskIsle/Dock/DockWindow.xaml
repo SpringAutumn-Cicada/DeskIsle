@@ -10,18 +10,13 @@
 <Border x:Name="Surface" CornerRadius="22" Background="#EF202632" BorderBrush="#665D718A" BorderThickness="1" Padding="10,6" Margin="8">
 <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity=".25"/></Border.Effect>
 <StackPanel Orientation="Horizontal">
-<Grid Width="80" Height="48" Margin="2,0" Background="Transparent" AutomationProperties.Name="当前时间"
-      ToolTipService.InitialShowDelay="250" ToolTipService.ShowDuration="2147483647">
-<Grid.ToolTip>
-    <ToolTip x:Name="ClockDateTip" Placement="Custom" Background="#F5202632" BorderBrush="#665D718A"
-             Padding="10,5" Foreground="#C2E8FA" FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI"
-             FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Display">
-        <TextBlock x:Name="ClockDateText" TextWrapping="NoWrap"/>
-    </ToolTip>
-</Grid.ToolTip>
-<Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="3"/></Grid.RowDefinitions>
-<TextBlock x:Name="ClockText" Text="00:00" FontFamily="Cascadia Mono, Consolas" FontSize="23" FontWeight="SemiBold" Foreground="#C2E8FA" HorizontalAlignment="Center" VerticalAlignment="Center" TextOptions.TextFormattingMode="Display"/>
-<Border Grid.Row="1" Width="26" Height="1" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0.65"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#0068BDE8" Offset="0"/><GradientStop Color="#91DBF3" Offset="0.5"/><GradientStop Color="#0068BDE8" Offset="1"/></LinearGradientBrush></Border.Background></Border>
+<Grid Width="92" Height="48" Margin="2,0" AutomationProperties.Name="当前时间和日期">
+    <StackPanel VerticalAlignment="Center">
+        <TextBlock x:Name="ClockText" FontFamily="Cascadia Mono, Consolas" FontSize="23" FontWeight="SemiBold"
+                   Foreground="#C2E8FA" TextAlignment="Center"/>
+        <TextBlock FontFamily="Segoe UI" FontSize="11.5" FontWeight="SemiBold"
+                   Foreground="#B8DFF0" TextAlignment="Center" Margin="0,2,0,0"><Run x:Name="ClockDate"/><Run Text="&#xA0;·&#xA0;"/><Run x:Name="ClockWeekday" FontFamily="Microsoft YaHei UI" FontSize="10" FontWeight="Normal"/></TextBlock>
+    </StackPanel>
 </Grid>
 <Border Width="1" Background="#506077" Margin="6,8"/>
 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center"><StackPanel x:Name="Apps" Orientation="Horizontal"/></ScrollViewer>

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -46,12 +45,6 @@ public partial class DockBar : Window
     {
         this.controller = controller;
         InitializeComponent();
-        ClockDateTip.CustomPopupPlacementCallback = (popup, clock, _) =>
-        {
-            // WPF supplies the placement bounds in screen pixels.
-            var gap = 14 * VisualTreeHelper.GetDpi(ClockText).DpiScaleY;
-            return [new CustomPopupPlacement(new Point((clock.Width - popup.Width) / 2, -popup.Height - gap), PopupPrimaryAxis.Horizontal)];
-        };
         Surface.Opacity = controller.Settings.Opacity;
         InitializeSystemPanel();
         UpdateClock();
@@ -385,10 +378,11 @@ public partial class DockBar : Window
         var now = DateTime.Now;
         var text = now.ToString("HH:mm", CultureInfo.InvariantCulture);
         if (ClockText.Text != text) ClockText.Text = text;
+        var date = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (ClockDate.Text != date) ClockDate.Text = date;
         const string weekdays = "日一二三四五六";
-        var date = now.ToString("yyyy'年'M'月'd'日'", CultureInfo.InvariantCulture);
-        var dateAndWeekday = $"{date}·周{weekdays[(int)now.DayOfWeek]}";
-        if (ClockDateText.Text != dateAndWeekday) ClockDateText.Text = dateAndWeekday;
+        var weekday = $"周{weekdays[(int)now.DayOfWeek]}";
+        if (ClockWeekday.Text != weekday) ClockWeekday.Text = weekday;
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
     private void TaskManagerClick(object sender, RoutedEventArgs e)
