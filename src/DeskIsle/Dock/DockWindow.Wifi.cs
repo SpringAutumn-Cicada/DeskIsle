@@ -105,7 +105,6 @@ public partial class DockBar
         editor.Children.Add(footer);
 
         DockWireless.Network? selected = null;
-        StackPanel? expandedRow = null;
         var rows = new Dictionary<DockWireless.Network, (StackPanel Content, Button Select)>();
         foreach (var network in networks)
         {
@@ -149,16 +148,28 @@ public partial class DockBar
 
         void Select(DockWireless.Network network, bool restoring = false, string? feedback = null, bool skipSavedPassword = false)
         {
-            if ((!restoring && wirelessBusy) || ReferenceEquals(network, selected)) return;
+            if (!restoring && wirelessBusy) return;
             if (!restoring) wifiFeedback = null;
-            expandedRow?.Children.Remove(editor);
+            if (selected is { } previous)
+            {
+                rows[previous].Content.Children.Remove(editor);
+                if (ReferenceEquals(network, previous))
+                {
+                    selected = null;
+                    password.Clear();
+                    remember.IsChecked = false;
+                    SetConnectionMessage("");
+                    UpdateRows();
+                    UpdateActionButton();
+                    return;
+                }
+            }
             selected = network;
             UpdateRows();
             SetConnectionMessage("");
             UpdateEditor(network, skipSavedPassword);
             if (!string.IsNullOrEmpty(feedback)) SetConnectionMessage(feedback);
-            expandedRow = rows[network].Content;
-            expandedRow.Children.Add(editor);
+            rows[network].Content.Children.Add(editor);
             // Keep the newly expanded controls reachable even for the last visible row.
             _ = Dispatcher.InvokeAsync(() =>
             {
