@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -374,8 +375,12 @@ public partial class DockBar : Window
     }
     private void UpdateClock()
     {
-        var text = DateTime.Now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var now = DateTime.Now;
+        var text = now.ToString("HH:mm", CultureInfo.InvariantCulture);
         if (ClockText.Text != text) ClockText.Text = text;
+        const string weekdays = "日一二三四五六";
+        var date = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + $" · 周{weekdays[(int)now.DayOfWeek]}";
+        if (ClockDate.Text != date) ClockDate.Text = date;
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
     private void TaskManagerClick(object sender, RoutedEventArgs e)
