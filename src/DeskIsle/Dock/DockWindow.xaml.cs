@@ -358,6 +358,8 @@ public partial class DockBar : Window
             window => { view.RecentWindow = window.Handle; ClosePreview(); Activate(window); }, ClosePreview, splitGroups);
         preview.Show();
     }
+    internal void PreviewWindowUnavailable(nint window) => preview?.QueueWindowCheck(window);
+
     private void ClosePreview()
     {
         previewDelay.Stop();

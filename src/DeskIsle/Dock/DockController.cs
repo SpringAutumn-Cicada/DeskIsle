@@ -194,8 +194,9 @@ internal sealed partial class DockController : IDisposable
         {
             if (eventId == 3 && window != 0) lastExternalForeground = window;
             if (eventId != 3 && (objectId != 0 || childId != 0 || eventId is not (0x8000 or 0x8001 or 0x8002 or 0x8003 or 0x800C))) return;
-            if (disposed || lease == null || settle.IsEnabled) return;
-            settle.Start();
+            if (disposed || lease == null) return;
+            if (eventId is 0x8001 or 0x8003) bar?.PreviewWindowUnavailable(window);
+            if (!settle.IsEnabled) settle.Start();
         };
         windowHook = DockNative.SetWinEventHook(0x8000, 0x800C, 0, changeCallback, 0, 0, 2);
         foregroundHook = DockNative.SetWinEventHook(3, 3, 0, changeCallback, 0, 0, 2);

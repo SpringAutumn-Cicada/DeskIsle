@@ -33,6 +33,7 @@ internal sealed class WindowPreview : Window
     private long peekSince;
     private bool peekAttempted;
     private readonly DispatcherTimer check = new() { Interval = TimeSpan.FromMilliseconds(50) };
+    private bool windowCheckQueued;
     private int page;
     private bool finished, preparing, ready;
     private long outsideSince;
@@ -76,10 +77,7 @@ internal sealed class WindowPreview : Window
             if (ContainsInteractionPointer()) outsideSince = 0;
             else if (outsideSince == 0) outsideSince = Environment.TickCount64;
             else if (Environment.TickCount64 - outsideSince >= 350) { dismiss(); return; }
-            var live = windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)).ToArray();
-            if (live.Length == 0) { dismiss(); return; }
-            if (live.Length != windows.Length) { windows = live; RenderPage(); }
-            else UpdateThumbnails();
+            if (!RemoveUnavailableWindows()) UpdateThumbnails();
             UpdatePeek();
         };
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
@@ -412,14 +410,39 @@ internal sealed class WindowPreview : Window
         Left = Math.Clamp(center.X - Width / 2, area.Left + 4, Math.Max(area.Left + 4, area.Right - Width - 4));
         Top = Math.Max(area.Top + 4, bar.Top - Height - 6);
     }
+    private static bool IsVisibleWindow(DockWindow window) =>
+        DockNative.IsWindow(window.Handle) && DockNative.IsWindowVisible(window.Handle);
+
+    internal void QueueWindowCheck(nint window)
+    {
+        if (finished || windowCheckQueued || !Array.Exists(windows, item => item.Handle == window)) return;
+        windowCheckQueued = true;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            windowCheckQueued = false;
+            if (!finished) RemoveUnavailableWindows();
+        }, DispatcherPriority.Render);
+    }
+
+    private bool RemoveUnavailableWindows()
+    {
+        var live = Array.FindAll(windows, IsVisibleWindow);
+        if (live.Length == windows.Length) return false;
+        windows = live;
+        if (windows.Length == 0) dismiss();
+        else RenderPage();
+        return true;
+    }
+
     internal void SetWindows(DockWindow[] latest)
     {
         if (finished) return;
         // An enumeration snapshot can omit a window during minimize/activation transitions.
         // Retain only visible HWNDs (including minimized ones), never tray-hidden windows.
         if (ContainsInteractionPointer())
-            latest = latest.Concat(windows.Where(w => DockNative.IsWindow(w.Handle) && DockNative.IsWindowVisible(w.Handle)))
+            latest = latest.Concat(windows).Where(IsVisibleWindow)
                 .DistinctBy(w => w.Handle).OrderBy(w => w.Handle.ToInt64()).ToArray();
+        else latest = Array.FindAll(latest, IsVisibleWindow);
         var compositeHandles = tiles.Where(tile => tile.Composite).Select(tile => tile.Window.Handle).ToArray();
         var nextGroup = page == 0 ? groups.Find(latest) : null;
         var nextHandles = nextGroup == null ? Array.Empty<nint>() : new[] { nextGroup.Left.Handle, nextGroup.Right.Handle };
