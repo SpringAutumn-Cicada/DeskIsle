@@ -14,7 +14,11 @@ public partial class DockBar
     private long statusDismissedAt = long.MinValue;
     private void InitializeSystemPanel()
     {
-        statusTick.Tick += async (_, _) => await RefreshSystemStatus();
+        statusTick.Tick += (_, _) =>
+        {
+            _ = RefreshSystemStatus();
+            if (systemPopup?.IsOpen == true) _ = RefreshRadioViews();
+        };
         IsVisibleChanged += async (_, _) =>
         {
             if (IsVisible) { statusTick.Start(); await RefreshSystemStatus(); }
@@ -56,7 +60,6 @@ public partial class DockBar
             BatteryGlyph.Opacity = knownCharge ? 1 : .5;
             BatteryKey.ToolTip = !powerAvailable || power.Percent > 100 ? "电量状态暂不可用" : $"电量 {power.Percent}% · " + (power.Flags != 255 && (power.Flags & 8) != 0 ? "正在充电" : power.AC == 1 ? "已接通电源" : "使用电池");
             ReadAudio();
-            if (systemPopup?.IsOpen == true && radioViews.Count > 0) await RefreshRadioViews();
         }
         finally { statusBusy = false; }
     }

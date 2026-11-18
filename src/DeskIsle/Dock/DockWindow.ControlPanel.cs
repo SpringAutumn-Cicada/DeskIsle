@@ -190,6 +190,7 @@ public partial class DockBar
         var status = ControlText("读取中", 11); status.Margin = new Thickness(0, 2, 0, 0); copy.Children.Add(status);
         toggleContent.Children.Add(copy);
         var toggle = ControlButton(toggleContent, () => _ = ToggleRadio(kind), title + " 开启或关闭");
+        toggle.IsEnabled = false;
         toggle.Margin = new Thickness(0); toggle.Padding = new Thickness(12, 12, 28, 10); toggle.BorderThickness = new Thickness(0);
         card.Children.Add(toggle);
         var radioSwitch = PowerState(false); radioSwitch.HorizontalAlignment = HorizontalAlignment.Right; radioSwitch.VerticalAlignment = VerticalAlignment.Top; radioSwitch.Margin = new Thickness(0, 16, 18, 0); radioSwitch.IsHitTestVisible = false;
@@ -204,38 +205,41 @@ public partial class DockBar
 
     private async Task RefreshRadioViews()
     {
-        if (radioRefreshBusy) return;
+        if (radioRefreshBusy || wirelessBusy || radioViews.Count == 0) return;
         radioRefreshBusy = true;
         try
         {
-        var version = panelVersion;
-        var revision = wirelessRevision;
-        foreach (var kind in radioViews.Keys.ToArray())
-        {
-            try
-            {
-                var state = await DockWireless.Read(kind, connection: true);
-                if (closed || wirelessBusy || revision != wirelessRevision || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
-                view.Toggle.Background = new LinearGradientBrush(Color.FromRgb(48, 60, 74), Color.FromRgb(39, 49, 63), new Point(0, 0), new Point(1, 1));
-                view.Status.Foreground = ControlBrush(state.Label == "已连接" ? "#CDEAF2" : "#A6B9CA");
-                var replacement = PowerState(state.On);
-                view.Switch.Children.Clear();
-                foreach (var child in replacement.Children.Cast<UIElement>().ToArray())
-                { replacement.Children.Remove(child); view.Switch.Children.Add(child); }
-                view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
-                view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
+            var version = panelVersion;
+            var revision = wirelessRevision;
+            var snapshot = DockWireless.ReadRadios();
+            await Task.WhenAll(radioViews.Keys.ToArray().Select(Refresh));
 
-            }
-            catch (Exception ex) when (WirelessError(ex))
+            async Task Refresh(RadioKind kind)
             {
-                if (version != panelVersion || revision != wirelessRevision || wirelessBusy) return;
-                if (radioViews.TryGetValue(kind, out var view)) { view.Status.Text = "状态不可用"; view.Toggle.IsEnabled = false; }
+                try
+                {
+                    var state = await DockWireless.Read(kind, connection: true, snapshot: snapshot);
+                    if (closed || wirelessBusy || revision != wirelessRevision || version != panelVersion || !radioViews.TryGetValue(kind, out var view)) return;
+                    view.Toggle.Background = new LinearGradientBrush(Color.FromRgb(48, 60, 74), Color.FromRgb(39, 49, 63), new Point(0, 0), new Point(1, 1));
+                    view.Status.Foreground = ControlBrush(state.Label == "已连接" ? "#CDEAF2" : "#A6B9CA");
+                    var replacement = PowerState(state.On);
+                    view.Switch.Children.Clear();
+                    foreach (var child in replacement.Children.Cast<UIElement>().ToArray())
+                    { replacement.Children.Remove(child); view.Switch.Children.Add(child); }
+                    view.Toggle.IsEnabled = state.Available && !state.Locked && !wirelessBusy;
+                    view.Status.Text = state.Locked ? "系统已禁用" : state.Label;
+
+                }
+                catch (Exception ex) when (WirelessError(ex))
+                {
+                    if (version != panelVersion || revision != wirelessRevision || wirelessBusy) return;
+                    if (radioViews.TryGetValue(kind, out var view)) { view.Status.Text = "暂时无法读取"; view.Toggle.IsEnabled = false; }
+                }
             }
-        }
         }
         finally { radioRefreshBusy = false; }
     }
-    private static bool WirelessError(Exception ex) => ex is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException or TimeoutException;
+    private static bool WirelessError(Exception ex) => ex is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException or TimeoutException or OperationCanceledException;
     private async Task ToggleRadio(RadioKind kind)
     {
         if (wirelessBusy) return;
@@ -263,7 +267,7 @@ public partial class DockBar
         finally
         {
             wirelessBusy = false;
-            foreach (var view in radioViews.Values) { view.Switch.Opacity = 1; view.Toggle.IsEnabled = true; }
+            foreach (var view in radioViews.Values) { view.Switch.Opacity = 1; }
             await RefreshRadioViews();
         }
     }
@@ -275,7 +279,7 @@ public partial class DockBar
         var back = ControlButton(ControlIcon("M8,1 L2,7 L8,13", 10), ShowControlHome, "返回控制中心"); back.Style = (Style)FindResource("PanelTool");
         heading.Children.Add(back);
         var title = ControlText(kind == RadioKind.WiFi ? "Wi-Fi" : "蓝牙", 16); title.FontWeight = FontWeights.Medium; title.Margin = new Thickness(6, 0, 0, 0); Grid.SetColumn(title, 1); heading.Children.Add(title);
-        var toggle = ControlButton("开关", () => _ = ToggleDetailRadio(kind, version), "切换无线开关"); Grid.SetColumn(toggle, 2); heading.Children.Add(toggle);
+        var toggle = ControlButton("开关", () => _ = ToggleDetailRadio(kind, version), "切换无线开关"); Grid.SetColumn(toggle, 2); heading.Children.Add(toggle); toggle.IsEnabled = false;
         controlContent.Children.Add(heading);
         controlContent.Children.Add(new Border { Height = 1, Background = ControlBrush("#344F63"), Margin = new Thickness(2, 10, 2, 6) });
         var list = new StackPanel();
