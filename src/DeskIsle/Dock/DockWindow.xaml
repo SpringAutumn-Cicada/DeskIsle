@@ -13,9 +13,9 @@
 <Grid Width="80" Height="48" Margin="2,0" Background="Transparent" AutomationProperties.Name="当前时间"
       ToolTipService.InitialShowDelay="250" ToolTipService.ShowDuration="2147483647">
 <Grid.ToolTip>
-    <ToolTip Placement="Top" VerticalOffset="-6" Background="#F5202632" BorderBrush="#665D718A"
-             Padding="12,7" Foreground="#C2E8FA" FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI"
-             FontSize="23" FontWeight="SemiBold" TextOptions.TextFormattingMode="Display">
+    <ToolTip x:Name="ClockDateTip" Placement="Custom" Background="#F5202632" BorderBrush="#665D718A"
+             Padding="10,5" Foreground="#C2E8FA" FontFamily="Cascadia Mono, Consolas, Microsoft YaHei UI"
+             FontSize="15" FontWeight="SemiBold" TextOptions.TextFormattingMode="Display">
         <TextBlock x:Name="ClockDateText" TextWrapping="NoWrap"/>
     </ToolTip>
 </Grid.ToolTip>

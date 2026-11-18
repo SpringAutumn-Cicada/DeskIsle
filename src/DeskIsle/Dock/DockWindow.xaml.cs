@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -45,6 +46,8 @@ public partial class DockBar : Window
     {
         this.controller = controller;
         InitializeComponent();
+        ClockDateTip.CustomPopupPlacementCallback = (popup, clock, _) =>
+            [new CustomPopupPlacement(new Point((clock.Width - popup.Width) / 2, -popup.Height - 14), PopupPrimaryAxis.Horizontal)];
         Surface.Opacity = controller.Settings.Opacity;
         InitializeSystemPanel();
         UpdateClock();
@@ -380,7 +383,7 @@ public partial class DockBar : Window
         if (ClockText.Text != text) ClockText.Text = text;
         const string weekdays = "日一二三四五六";
         var date = now.ToString("yyyy'年'M'月'd'日'", CultureInfo.InvariantCulture);
-        var dateAndWeekday = $"{date} · 周{weekdays[(int)now.DayOfWeek]}";
+        var dateAndWeekday = $"{date}·周{weekdays[(int)now.DayOfWeek]}";
         if (ClockDateText.Text != dateAndWeekday) ClockDateText.Text = dateAndWeekday;
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
