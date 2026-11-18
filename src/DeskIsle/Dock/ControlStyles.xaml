@@ -17,6 +17,63 @@
 <Setter Property="Width" Value="44"/><Setter Property="Height" Value="38"/><Setter Property="MinHeight" Value="36"/><Setter Property="Padding" Value="6,4"/><Setter Property="Margin" Value="5,0"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="SnapsToDevicePixels" Value="True"/><Setter Property="BorderBrush" Value="#887A909F"/><Setter Property="HorizontalContentAlignment" Value="Center"/>
 </Style>
 <Style x:Key="PanelListAction" TargetType="Button" BasedOn="{StaticResource PanelAction}"><Setter Property="Background" Value="#252D35"/><Setter Property="BorderBrush" Value="#40596A79"/><Setter Property="BorderThickness" Value="0.7"/><Setter Property="Padding" Value="10,9"/><Setter Property="Margin" Value="0,3"/></Style>
+<Style x:Key="WifiPasswordField" TargetType="PasswordBox">
+    <Setter Property="Foreground" Value="#E1EDF4"/>
+    <Setter Property="CaretBrush" Value="#9FE7EF"/>
+    <Setter Property="Background" Value="#17222C"/>
+    <Setter Property="BorderBrush" Value="#486272"/>
+    <Setter Property="Padding" Value="11,6"/>
+    <Setter Property="MinHeight" Value="34"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="PasswordBox">
+                <Border x:Name="Field" CornerRadius="10" Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Field" Property="BorderBrush" Value="#759CAD"/>
+                    </Trigger>
+                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                        <Setter TargetName="Field" Property="BorderBrush" Value="#8DDCEA"/>
+                        <Setter TargetName="Field" Property="Background" Value="#1C2A35"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>
+<Style x:Key="WifiRememberPassword" TargetType="CheckBox">
+    <Setter Property="Foreground" Value="#C3D7E3"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="CheckBox">
+                <Border Background="Transparent" Padding="0,4">
+                    <StackPanel Orientation="Horizontal">
+                        <Grid Width="14" Height="14" Margin="0,0,7,0" VerticalAlignment="Center">
+                            <Ellipse x:Name="Ring" Stroke="#87A8BA" StrokeThickness="1.2"/>
+                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="#8DDCEA" Visibility="Collapsed"/>
+                        </Grid>
+                        <ContentPresenter VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Ring" Property="Stroke" Value="#B8EBF3"/>
+                        <Setter Property="Foreground" Value="#E1EDF4"/>
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="Ring" Property="Stroke" Value="#8DDCEA"/>
+                        <Setter Property="Foreground" Value="#D7F1F4"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>
 <Style x:Key="SoftScrollButton" TargetType="RepeatButton"><Setter Property="Focusable" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter></Style>
 <Style x:Key="SoftScrollBar" TargetType="ScrollBar"><Setter Property="Width" Value="8"/><Setter Property="Background" Value="Transparent"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Grid Background="Transparent"><Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource SoftScrollButton}" Command="ScrollBar.PageUpCommand"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource SoftScrollButton}" Command="ScrollBar.PageDownCommand"/></Track.IncreaseRepeatButton><Track.Thumb><Thumb MinHeight="28"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Grip" Width="4" CornerRadius="2" Background="#607D92" Margin="2,1"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Grip" Property="Background" Value="#A5CADC"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Grip" Property="Background" Value="#A5CADC"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>
 <Style x:Key="VolumeTrackButton" TargetType="RepeatButton"><Setter Property="Focusable" Value="False"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" VerticalAlignment="Center"/></ControlTemplate></Setter.Value></Setter></Style>
