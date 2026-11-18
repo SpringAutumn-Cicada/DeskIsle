@@ -378,9 +378,11 @@ public partial class DockBar : Window
         var now = DateTime.Now;
         var text = now.ToString("HH:mm", CultureInfo.InvariantCulture);
         if (ClockText.Text != text) ClockText.Text = text;
-        const string weekdays = "日一二三四五六";
-        var date = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + $" · 周{weekdays[(int)now.DayOfWeek]}";
+        var date = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (ClockDate.Text != date) ClockDate.Text = date;
+        const string weekdays = "日一二三四五六";
+        var weekday = $"周{weekdays[(int)now.DayOfWeek]}";
+        if (ClockWeekday.Text != weekday) ClockWeekday.Text = weekday;
     }
     private void NativeClick(object sender, RoutedEventArgs e) => controller.ToggleNative();
     private void TaskManagerClick(object sender, RoutedEventArgs e)

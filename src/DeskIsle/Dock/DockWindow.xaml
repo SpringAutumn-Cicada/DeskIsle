@@ -14,8 +14,8 @@
     <StackPanel VerticalAlignment="Center">
         <TextBlock x:Name="ClockText" FontFamily="Cascadia Mono, Consolas" FontSize="23" FontWeight="SemiBold"
                    Foreground="#C2E8FA" TextAlignment="Center"/>
-        <TextBlock x:Name="ClockDate" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="11.5" FontWeight="SemiBold"
-                   Foreground="#B8DFF0" TextAlignment="Center" Margin="0,2,0,0"/>
+        <TextBlock FontFamily="Segoe UI" FontSize="11.5" FontWeight="SemiBold"
+                   Foreground="#B8DFF0" TextAlignment="Center" Margin="0,2,0,0"><Run x:Name="ClockDate"/><Run Text="&#xA0;·&#xA0;"/><Run x:Name="ClockWeekday" FontFamily="Microsoft YaHei UI" FontSize="10" FontWeight="Normal"/></TextBlock>
     </StackPanel>
 </Grid>
 <Border Width="1" Background="#506077" Margin="6,8"/>
