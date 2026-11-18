@@ -47,7 +47,11 @@ public partial class DockBar : Window
         this.controller = controller;
         InitializeComponent();
         ClockDateTip.CustomPopupPlacementCallback = (popup, clock, _) =>
-            [new CustomPopupPlacement(new Point((clock.Width - popup.Width) / 2, -popup.Height - 14), PopupPrimaryAxis.Horizontal)];
+        {
+            // WPF supplies the placement bounds in screen pixels.
+            var gap = 14 * VisualTreeHelper.GetDpi(ClockText).DpiScaleY;
+            return [new CustomPopupPlacement(new Point((clock.Width - popup.Width) / 2, -popup.Height - gap), PopupPrimaryAxis.Horizontal)];
+        };
         Surface.Opacity = controller.Settings.Opacity;
         InitializeSystemPanel();
         UpdateClock();
