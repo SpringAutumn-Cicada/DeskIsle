@@ -33,7 +33,7 @@ internal static class DockNative
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint window, int command);
     [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(nint window, int command);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint window);
-    [DllImport("user32.dll")] internal static extern bool PostMessage(nint window, uint message, nint wParam, nint lParam);
+    [DllImport("user32.dll", SetLastError = true)] internal static extern bool PostMessage(nint window, uint message, nint wParam, nint lParam);
     [DllImport("user32.dll")] internal static extern nint GetWindow(nint window, uint command);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] internal static extern int GetWindowLong(nint window, int index);
     [DllImport("user32.dll")] internal static extern bool RegisterHotKey(nint window, int id, uint modifiers, uint key);

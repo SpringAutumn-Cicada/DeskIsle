@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -28,6 +29,8 @@ internal sealed class WindowPreview : Window
     private readonly StackPanel content = new();
     private readonly SplitGroups groups;
     private readonly List<Tile> tiles = [];
+    private sealed record CloseRequest(long ExpiresAt, int? Error = null);
+    private readonly Dictionary<nint, CloseRequest> closeRequests = [];
     private readonly WindowPeek peek = new();
     private Card? hoveredCard, peekCandidate, blockedPeek;
     private long peekSince;
@@ -78,6 +81,7 @@ internal sealed class WindowPreview : Window
             else if (outsideSince == 0) outsideSince = Environment.TickCount64;
             else if (Environment.TickCount64 - outsideSince >= 350) { dismiss(); return; }
             if (!RemoveUnavailableWindows()) UpdateThumbnails();
+            ExpireCloseRequests();
             UpdatePeek();
         };
         Closed += (_, _) => { finished = true; check.Stop(); Release(); source?.RemoveHook(NoActivate); };
@@ -97,6 +101,7 @@ internal sealed class WindowPreview : Window
         internal required TextBlock Title;
         internal required Button Close;
         internal required DockWindow[] Windows;
+        internal bool Closing;
         internal bool? Hover;
     }
     private readonly List<Card> cards = [];
@@ -106,7 +111,7 @@ internal sealed class WindowPreview : Window
         var title = new TextBlock { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0), Foreground = Brush("#DDE5EF") };
         var close = new Button { Content = "×", FontSize = 18, Width = 22, Height = 22,
-            Focusable = false, Visibility = Visibility.Hidden, ToolTip = composite ? "关闭组合窗口" : "关闭窗口" };
+            Focusable = false, Visibility = Visibility.Hidden };
         var borderFactory = new FrameworkElementFactory(typeof(Border));
         borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
         borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
@@ -124,9 +129,7 @@ internal sealed class WindowPreview : Window
         close.Click += (_, e) =>
         {
             e.Handled = true;
-            CancelPeek();
-            foreach (var member in members.DistinctBy(w => w.Handle))
-                if (DockNative.IsWindow(member.Handle)) DockNative.PostMessage(member.Handle, 0x0010, 0, 0);
+            RequestClose(members);
         };
         var icons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         for (var i = 0; i < (composite ? 2 : 1); i++)
@@ -151,9 +154,44 @@ internal sealed class WindowPreview : Window
         foreach (var card in cards)
         {
             var title = windows.FirstOrDefault(w => w.Handle == card.Windows[0].Handle)?.Title ?? card.Windows[0].Title;
-            card.Title.Text = (card.Windows.Length > 1 ? "组 | " : "") + title;
-            card.Title.ToolTip = card.Title.Text;
+            var name = (card.Windows.Length > 1 ? "组 | " : "") + title;
+            var requests = card.Windows.Select(window => closeRequests.GetValueOrDefault(window.Handle)).ToArray();
+            card.Closing = requests.Any(request => request is { Error: null });
+            var failed = requests.FirstOrDefault(request => request?.Error != null);
+            var feedback = failed != null ? "关闭请求发送失败" : card.Closing ? "正在关闭…" : "";
+            var help = failed?.Error == 5 ? "Windows 拒绝关闭请求，可在应用窗口内关闭。" : feedback;
+            card.Title.Text = feedback.Length == 0 ? name : $"{feedback}  {name}";
+            card.Title.ToolTip = help.Length == 0 ? name : $"{help}\n{name}";
+            card.Close.Content = card.Closing ? "…" : "×";
+            card.Close.ToolTip = help.Length != 0 ? help : card.Windows.Length > 1 ? "关闭组合窗口" : "关闭窗口";
         }
+    }
+
+    private void RequestClose(DockWindow[] members)
+    {
+        if (finished || members.Any(member => closeRequests.GetValueOrDefault(member.Handle) is { Error: null })) return;
+        CancelPeek();
+        var now = Environment.TickCount64;
+        foreach (var member in members.DistinctBy(window => window.Handle))
+        {
+            if (!IsVisibleWindow(member)) continue;
+            if (DockNative.PostMessage(member.Handle, 0x0010, 0, 0))
+                closeRequests[member.Handle] = new(now + 2000);
+            else
+                closeRequests[member.Handle] = new(now + 4000, Marshal.GetLastPInvokeError());
+        }
+        if (!RemoveUnavailableWindows()) RefreshTitles();
+    }
+
+    private void ExpireCloseRequests()
+    {
+        if (finished || closeRequests.Count == 0) return;
+        // A delivered WM_CLOSE can be cancelled by the target. Expiry only clears feedback.
+        var now = Environment.TickCount64;
+        var expired = closeRequests.Where(item => item.Value.ExpiresAt <= now).Select(item => item.Key).ToArray();
+        if (expired.Length == 0) return;
+        foreach (var handle in expired) closeRequests.Remove(handle);
+        RefreshTitles();
     }
     private void RenderPage()
     {
@@ -329,7 +367,7 @@ internal sealed class WindowPreview : Window
         if (peek.Active) RaisePreview();
         var card = hoveredCard;
         // Closing a window is an action, not a request to temporarily restore it.
-        if (card?.Close.IsMouseOver == true) card = null;
+        if (card is { Closing: true } || card?.Close.IsMouseOver == true) card = null;
         if (!ReferenceEquals(card, peekCandidate))
         {
             peek.Restore(); peekCandidate = card; blockedPeek = null;
@@ -428,6 +466,7 @@ internal sealed class WindowPreview : Window
     {
         var live = Array.FindAll(windows, IsVisibleWindow);
         if (live.Length == windows.Length) return false;
+        foreach (var window in windows.Except(live)) closeRequests.Remove(window.Handle);
         windows = live;
         if (windows.Length == 0) dismiss();
         else RenderPage();
