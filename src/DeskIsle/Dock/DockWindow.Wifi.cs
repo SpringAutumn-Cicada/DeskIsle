@@ -13,7 +13,8 @@ public partial class DockBar
         SetPanelMessage(networks.Length == 0 ? "未发现网络" : "");
         var actions = new StackPanel { Margin = new Thickness(2, 6, 2, 0), Visibility = Visibility.Collapsed };
         var selection = ControlText("");
-        var connect = ControlButton("连接", () => _ = ConnectSelected(), "连接所选 Wi-Fi 网络");
+        var connect = new Button { Content = "连接", Style = (Style)FindResource("PanelAction") };
+        AutomationProperties.SetName(connect, "连接所选 Wi-Fi 网络");
         connect.HorizontalAlignment = HorizontalAlignment.Right;
         connect.MinWidth = 80;
         actions.Children.Add(selection);
@@ -33,6 +34,7 @@ public partial class DockBar
             rows.Add(network, button);
             list.Children.Add(button);
         }
+        connect.Click += (_, _) => _ = ConnectSelected();
         UpdateRows();
 
         void Select(DockWireless.Network network)
