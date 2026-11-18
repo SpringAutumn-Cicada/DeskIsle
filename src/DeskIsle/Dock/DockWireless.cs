@@ -4,6 +4,8 @@ using Windows.Devices.Radios;
 using Windows.Devices.WiFi;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Enumeration;
+using Windows.Networking.Connectivity;
+using Windows.Security.Credentials;
 namespace DeskIsle.Dock;
 
 internal static class DockWireless
@@ -37,7 +39,18 @@ internal static class DockWireless
     internal static Task<IReadOnlyList<Radio>> ReadRadios() => Await("enumerate-radios", Radio.GetRadiosAsync);
 
     internal sealed record State(bool Available, bool On, bool Locked, string Label);
-    internal sealed record Network(WiFiAdapter Adapter, WiFiAvailableNetwork Source, string Name, byte Signal, bool Connected);
+    internal enum NetworkAccess { Open, Password, WindowsSettings }
+    internal sealed record Network(WiFiAdapter Adapter, WiFiAvailableNetwork Source, string Name, byte Signal, bool Connected)
+    {
+        internal NetworkAccess Access => Source.SecuritySettings.NetworkAuthenticationType switch
+        {
+            NetworkAuthenticationType.None or NetworkAuthenticationType.Open80211
+                when Source.SecuritySettings.NetworkEncryptionType == NetworkEncryptionType.None => NetworkAccess.Open,
+            NetworkAuthenticationType.WpaPsk or NetworkAuthenticationType.RsnaPsk or NetworkAuthenticationType.Wpa3Sae
+                or NetworkAuthenticationType.SharedKey80211 or NetworkAuthenticationType.Open80211 => NetworkAccess.Password,
+            _ => NetworkAccess.WindowsSettings
+        };
+    }
     internal sealed record Device(string Name, bool Connected);
     internal static async Task<State> Read(RadioKind kind, bool connection = false, Task<IReadOnlyList<Radio>>? snapshot = null)
     {
@@ -115,10 +128,15 @@ internal static class DockWireless
         }
         return result.OrderByDescending(n => n.Connected).ThenByDescending(n => n.Signal).DistinctBy(n => n.Name).ToArray();
     }
-    internal static async Task<bool> Connect(Network network)
+    internal static async Task<WiFiConnectionStatus> Connect(Network network, string? password)
     {
-        var result = await Await("wifi-connect", () => network.Adapter.ConnectAsync(network.Source, WiFiReconnectionKind.Automatic), 15);
-        return result.ConnectionStatus == WiFiConnectionStatus.Success;
+        var result = await Await("wifi-connect", () => password == null
+            ? network.Adapter.ConnectAsync(network.Source, WiFiReconnectionKind.Automatic)
+            : network.Adapter.ConnectAsync(network.Source, WiFiReconnectionKind.Automatic,
+                new PasswordCredential { Password = password }), 15);
+        if (result.ConnectionStatus != WiFiConnectionStatus.Success)
+            DeskIsle.Services.StartupDiagnostics.Mark($"wireless wifi-connect status={result.ConnectionStatus}");
+        return result.ConnectionStatus;
     }
     internal static async Task<Device[]> Devices()
     {

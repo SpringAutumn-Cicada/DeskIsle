@@ -303,9 +303,7 @@ public partial class DockBar
             {
                 var networks = await DockWireless.Networks();
                 if (version != panelVersion || closed) return;
-                SetPanelMessage(networks.Length == 0 ? "未发现网络" : "");
-                foreach (var network in networks)
-                    AddDeviceButton(list, network.Name, network.Connected ? "已连接" : $"信号 {network.Signal}/5", "M1,7 Q12,-2 23,7 M5,12 Q12,5 19,12 M9,17 Q12,14 15,17 M12,21 L12,21.1", network.Connected, () => _ = ConnectNetwork(network, version), network.Signal);
+                PopulateWifiNetworks(list, networks, version);
             }
             else
             {
@@ -348,7 +346,7 @@ public partial class DockBar
         if (connected) frame.Children.Add(new Border { Width = 3, CornerRadius = new CornerRadius(1.5), Background = ControlBrush("#59D9E6"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(1, 10, 0, 10), IsHitTestVisible = false });
         list.Children.Add(frame);
     }
-    private static Grid DeviceRow(string name, string state, string icon, bool connected, byte? signal = null)
+    private static Grid DeviceRow(string name, string state, string icon, bool connected, byte? signal = null, bool selected = false)
     {
         var row = new Grid { Margin = new Thickness(2, 4, 2, 4) };
         row.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(18) });
@@ -361,9 +359,11 @@ public partial class DockBar
         FrameworkElement trailing;
         if (!string.IsNullOrEmpty(state))
         {
-            var ring = new Grid { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center };
-            ring.Children.Add(new System.Windows.Shapes.Ellipse { Stroke = ControlBrush(connected ? "#5AE0EE" : "#8B9CA9"), StrokeThickness = 1.2 });
-            if (connected) ring.Children.Add(new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = ControlBrush("#5AE0EE") });
+            var ring = new Grid { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+            ring.Children.Add(new System.Windows.Shapes.Ellipse
+                { Stroke = ControlBrush(selected ? "#D5F6FF" : connected ? "#5AE0EE" : "#8B9CA9"), StrokeThickness = selected ? 1.8 : 1.2 });
+            if (selected || connected) ring.Children.Add(new System.Windows.Shapes.Ellipse
+                { Width = 8, Height = 8, Fill = ControlBrush(selected ? "#D5F6FF" : "#5AE0EE") });
             trailing = ring;
         }
         else trailing = ControlIcon("M2,1 L8,7 L2,13", 7);
@@ -374,19 +374,5 @@ public partial class DockBar
         await ToggleRadio(kind);
         if (version == panelVersion && !closed) await ShowRadioDetails(kind);
     }
-    private async Task ConnectNetwork(DockWireless.Network network, long version)
-    {
-        if (wirelessBusy) return;
-        wirelessBusy = true;
-        try
-        {
-            if (network.Connected) return;
-            SetPanelMessage("正在连接…");
-            var success = await DockWireless.Connect(network);
-            if (closed || version != panelVersion) return;
-            SetPanelMessage(success ? "已连接" : "连接未完成。需要密码或认证时，请到更多 Wi-Fi 设置中连接。");
-        }
-        catch (Exception ex) when (WirelessError(ex)) { if (version == panelVersion) SetPanelMessage("连接失败，请使用更多 Wi-Fi 设置完成认证。"); }
-        finally { wirelessBusy = false; }
-    }
+
 }
