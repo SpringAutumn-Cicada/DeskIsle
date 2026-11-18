@@ -53,7 +53,7 @@ public sealed partial class WorkspaceManager
             if (target == null) return;
             var previousSeen = state.SeenDesktopPaths;
             var seen = previousSeen?.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (seen != null && seen.SetEquals(paths)) return;
+            if (seen != null && seen.SetEquals(paths)) { ReportDesktopEnumeration(); return; }
             var assigned = state.Cards.SelectMany(c => c.References).ToHashSet(StringComparer.OrdinalIgnoreCase);
             // First upgrade establishes a baseline, preserving existing desktop organization.
             var added = seen == null ? [] : paths.Where(p => !seen.Contains(p) && !assigned.Contains(p)).ToArray();
@@ -64,12 +64,20 @@ public sealed partial class WorkspaceManager
             catch { target.References = previousReferences; state.SeenDesktopPaths = previousSeen; throw; }
             if (added.Length > 0 && windows.TryGetValue(target.Id, out var window))
             {
+                if (startupHidePending) startupCards.Add(target.Id);
                 StartupDiagnostics.Mark($"default-desktop-added count={added.Length}");
                 window.RequestFileSync();
             }
+            ReportDesktopEnumeration();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { StartupDiagnostics.Mark("default-desktop-sync-error=" + ex.GetType().Name); }
         finally { scanningDesktop = false; }
+    }
+    private void ReportDesktopEnumeration()
+    {
+        if (desktopEnumerated) return;
+        desktopEnumerated = true;
+        StartupDiagnostics.Mark("desktop-first-enumeration-ready");
     }
 }

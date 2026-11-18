@@ -152,7 +152,22 @@ public partial class MainWindow : Window
         tiles = entries;
         RebuildRows();
         Status.Text = "";
+        ReportFilesAfterLayout(version, paths);
     }
+
+    private void ReportFilesAfterLayout(int version, string[] paths)
+    {
+        if (!workspace.WaitingForStartupCard(state.Id)) return;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (closing || !IsVisible || directory != null || version != viewVersion ||
+                tiles.Any(tile => !string.IsNullOrEmpty(tile.Availability))) return;
+            var current = state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase);
+            if (paths.SequenceEqual(current, StringComparer.OrdinalIgnoreCase))
+                workspace.ReportStartupCardReady(state.Id, tiles.Count);
+        }, DispatcherPriority.Loaded);
+    }
+
     private void SaveCard()
     {
         state.Left = Left; state.Top = Top; state.Width = ActualWidth; state.Height = ActualHeight;

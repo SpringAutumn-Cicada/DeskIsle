@@ -147,12 +147,17 @@ public partial class MainWindow
             var existing = tiles.Select(x => x.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var ordered = tiles.Where(x => byPath.ContainsKey(x.FullPath)).Select(x => byPath[x.FullPath])
                 .Concat(updated.Where(x => !existing.Contains(x.FullPath))).ToArray();
-            if (tiles.Select(x => (x.FullPath, x.Availability)).SequenceEqual(ordered.Select(x => (x.FullPath, x.Availability)))) return;
+            if (tiles.Select(x => (x.FullPath, x.Availability)).SequenceEqual(ordered.Select(x => (x.FullPath, x.Availability))))
+            {
+                if (folder == null) ReportFilesAfterLayout(version, paths);
+                return;
+            }
             ClearReorderPreview();
             tiles = ordered;
             selectedTile = null;
             RebuildRows();
             Status.Text = "";
+            if (folder == null) ReportFilesAfterLayout(version, paths);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { /* Preserve the view during temporary access failures; retry on the next tick. */ }

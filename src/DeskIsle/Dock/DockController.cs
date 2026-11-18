@@ -17,6 +17,7 @@ internal sealed partial class DockController : IDisposable
     private readonly DispatcherTimer refresh = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(3) };
     private readonly DispatcherTimer startupRetry = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
     private int startupAttempts;
+    private long startupFrameDeadline;
     private TaskbarLease? lease;
     private DockBar? bar;
     private Window? returnButton;
@@ -66,6 +67,7 @@ internal sealed partial class DockController : IDisposable
             {
                 startupRetry.Stop();
                 DeskIsle.Services.StartupDiagnostics.Mark("explorer-ready");
+                startupFrameDeadline = Environment.TickCount64 + 15_000;
                 Apply(true); return;
             }
         }
@@ -107,6 +109,7 @@ internal sealed partial class DockController : IDisposable
             if (store.ReadOnly) throw new IOException("Dock 配置处于保护模式，不能启用接管。");
             if (enabled)
             {
+                if (startupFrameDeadline == long.MinValue) startupFrameDeadline = 0;
                 if (lease == null)
                 {
                     lease = new();
@@ -133,7 +136,18 @@ internal sealed partial class DockController : IDisposable
     {
         lastExternalForeground = DockNative.GetForegroundWindow();
         bar = new(this) { Opacity = 0 };
-        bar.RevealReady += () => lease?.BeginTakeover();
+        bar.RevealReady += () =>
+        {
+            if (startupFrameDeadline != 0 && Environment.TickCount64 >= startupFrameDeadline)
+            {
+                if (startupFrameDeadline != long.MinValue)
+                    DeskIsle.Services.StartupDiagnostics.Mark("taskbar-handoff-frame-timeout");
+                startupFrameDeadline = long.MinValue;
+                return;
+            }
+            startupFrameDeadline = 0;
+            lease?.BeginTakeover();
+        };
         bar.Show(); bar.Place(); bar.HideAnimated(true);
         var button = ReturnDockHead.Create();
         returnButton = new Window { Content = button, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, Topmost = true, ShowActivated = false };

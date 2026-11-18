@@ -14,20 +14,43 @@ public sealed partial class WorkspaceManager : IDisposable
     public bool Exiting { get; private set; }
     private DesktopReturnMonitor? desktopReturn;
     private readonly System.Windows.Threading.DispatcherTimer startupHide = new() { Interval = TimeSpan.FromSeconds(1) };
-    private int startupHideAttempts;
+    private long startupHideDeadline;
+    private bool desktopEnumerated;
+    private readonly HashSet<Guid> startupCards = [];
     private bool startupHidePending;
-    public void CancelStartupHide() { startupHidePending = false; startupHide.Stop(); }
+    public void CancelStartupHide() { startupHidePending = false; startupHide.Stop(); startupCards.Clear(); }
+
+    internal bool WaitingForStartupCard(Guid id) => startupHidePending && startupCards.Contains(id);
+
+    internal void ReportStartupCardReady(Guid id, int fileCount)
+    {
+        if (!startupHidePending || !startupCards.Remove(id)) return;
+        StartupDiagnostics.Mark($"startup-card-files-ready count={fileCount} remaining={startupCards.Count}");
+    }
     private void TryStartupHide()
     {
         if (!startupHidePending || Exiting) return;
-        try
+        if (Environment.TickCount64 >= startupHideDeadline)
         {
-            if (DesktopIcons.Hide()) { CancelStartupHide(); return; }
-            if (++startupHideAttempts < 30) { startupHide.Start(); return; }
-            Warning = "启动时未找到桌面图标，请使用卡片菜单手动隐藏。";
+            StartupDiagnostics.Mark($"desktop-icons-handoff-timeout remaining-cards={startupCards.Count} desktop-enumerated={desktopEnumerated}");
+            Warning = "桌面文件或 Explorer 尚未就绪，已保留原生桌面图标。";
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Warning = "无法保存桌面图标恢复标记，未自动隐藏；请使用卡片菜单重试。"; }
+        else
+        {
+            if (!desktopEnumerated || startupCards.Count > 0) return;
+            try
+            {
+                if (!DesktopIcons.Hide()) return;
+                StartupDiagnostics.Mark("desktop-icons-handoff-complete");
+                CancelStartupHide();
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                StartupDiagnostics.Mark($"desktop-icons-handoff-error hr=0x{ex.HResult:X8}");
+                Warning = "无法保存桌面图标恢复标记，未自动隐藏；请使用卡片菜单重试。";
+            }
+        }
         CancelStartupHide();
         foreach (var window in windows.Values) window.ShowStartupWarning(Warning!);
     }
@@ -51,15 +74,18 @@ public sealed partial class WorkspaceManager : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Warning = "桌面图标恢复标记无法处理，请使用菜单恢复入口。"; }
         }
         if (DesktopIntegration) desktopReturn = new DesktopReturnMonitor(Application.Current.Dispatcher, RecoverDesktopCards);
-        foreach (var card in state.Cards.ToArray()) Open(card);
-        if (DesktopIntegration) _ = SyncDefaultDesktop();
-        if (DesktopIntegration) { dock = new DeskIsle.Dock.DockController(); dock.Start(); }
         if (DesktopIntegration)
         {
             startupHidePending = true;
+            startupHideDeadline = Environment.TickCount64 + 30_000;
+            startupCards.UnionWith(state.Cards.Select(card => card.Id));
+            StartupDiagnostics.Mark($"desktop-icons-handoff-waiting cards={startupCards.Count}");
             startupHide.Tick += (_, _) => TryStartupHide();
-            TryStartupHide();
+            startupHide.Start();
         }
+        foreach (var card in state.Cards.ToArray()) Open(card);
+        if (DesktopIntegration) _ = SyncDefaultDesktop();
+        if (DesktopIntegration) { dock = new DeskIsle.Dock.DockController(); dock.Start(); }
     }
     private void RecoverDesktopCards(bool repaint)
     {
@@ -75,6 +101,7 @@ public sealed partial class WorkspaceManager : IDisposable
         window.Closed += (_, _) =>
         {
             windows.Remove(card.Id);
+            startupCards.Remove(card.Id);
             if (windows.Count == 0 && !Exiting) Exit();
         };
         window.Show();
