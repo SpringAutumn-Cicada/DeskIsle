@@ -12,15 +12,37 @@ internal static class LoginStartup
     // Only a missing task is a normal disabled state; permission/service errors must surface.
     private static bool MissingTask(Exception ex) =>
         (ex is COMException or FileNotFoundException) && ex.HResult == unchecked((int)0x80070002);
-    internal static bool Enabled()
+    internal sealed record Status(bool Enabled, string? Issue);
+
+    internal static Status ReadStatus()
     {
         dynamic service = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
         try
         {
             service.Connect();
             dynamic folder = service.GetFolder("\\");
-            try { dynamic task = folder.GetTask(TaskName); try { return (bool)task.Enabled; } finally { Marshal.FinalReleaseComObject(task); } }
-            catch (Exception ex) when (MissingTask(ex)) { return false; }
+            try
+            {
+                dynamic task = folder.GetTask(TaskName);
+                try
+                {
+                    var enabled = (bool)task.Enabled;
+                    var action = System.Xml.Linq.XDocument.Parse((string)task.Xml)
+                        .Descendants().FirstOrDefault(element => element.Name.LocalName == "Exec");
+                    string? Read(string name) => action?.Element(action.Name.Namespace + name)?.Value;
+                    var path = Read("Command");
+                    var directory = Read("WorkingDirectory");
+                    if (!File.Exists(path) || !Directory.Exists(directory))
+                        return new(enabled, "启动路径失效");
+                    if (!string.Equals(path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(directory, Path.GetDirectoryName(Environment.ProcessPath), StringComparison.OrdinalIgnoreCase) ||
+                        Read("Arguments") != "--login")
+                        return new(enabled, "启动任务指向其他程序位置");
+                    return new(enabled, null);
+                }
+                finally { Marshal.FinalReleaseComObject(task); }
+            }
+            catch (Exception ex) when (MissingTask(ex)) { return new(false, null); }
             finally { Marshal.FinalReleaseComObject(folder); }
         }
         finally { Marshal.FinalReleaseComObject(service); }
