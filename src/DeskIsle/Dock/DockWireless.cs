@@ -121,8 +121,7 @@ internal static class DockWireless
                 await adapter.ScanAsync().AsTask(timeout.Token);
                 return true;
             }, 12);
-            var profile = await Await("wifi-connected-profile", adapter.NetworkAdapter.GetConnectedProfileAsync);
-            var ssid = profile?.WlanConnectionProfileDetails?.GetConnectedSsid();
+            var ssid = await ConnectedSsid(adapter);
             foreach (var network in adapter.NetworkReport.AvailableNetworks.Where(n => !string.IsNullOrEmpty(n.Ssid)))
                 result.Add(new(adapter, network, network.Ssid, network.SignalBars, network.Ssid == ssid));
         }
@@ -138,6 +137,27 @@ internal static class DockWireless
             DeskIsle.Services.StartupDiagnostics.Mark($"wireless wifi-connect status={result.ConnectionStatus}");
         return result.ConnectionStatus;
     }
+
+    private static async Task<string?> ConnectedSsid(WiFiAdapter adapter)
+    {
+        var profile = await Await("wifi-connected-profile", adapter.NetworkAdapter.GetConnectedProfileAsync);
+        return profile?.WlanConnectionProfileDetails?.GetConnectedSsid();
+    }
+
+    internal static async Task<string?> Disconnect(Network network)
+    {
+        var ssid = await ConnectedSsid(network.Adapter);
+        if (ssid != network.Name) return ssid;
+
+        network.Adapter.Disconnect();
+        for (var attempt = 0; attempt < 6 && ssid == network.Name; attempt++)
+        {
+            await Task.Delay(150);
+            ssid = await ConnectedSsid(network.Adapter);
+        }
+        return ssid;
+    }
+
     internal static async Task<Device[]> Devices()
     {
         var selectors = new[] { BluetoothDevice.GetDeviceSelectorFromPairingState(true), BluetoothLEDevice.GetDeviceSelectorFromPairingState(true) };

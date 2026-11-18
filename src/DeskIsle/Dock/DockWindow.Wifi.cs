@@ -54,7 +54,6 @@ public partial class DockBar
             MinHeight = 28,
             MinWidth = 64
         };
-        AutomationProperties.SetName(connect, "连接所选 Wi-Fi 网络");
         var footer = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
         DockPanel.SetDock(connect, System.Windows.Controls.Dock.Right);
         footer.Children.Add(connect);
@@ -78,6 +77,7 @@ public partial class DockBar
 
         DockWireless.Network? selected = null;
         StackPanel? expandedRow = null;
+        var connected = networks.Where(network => network.Connected).ToHashSet();
         var rows = new Dictionary<DockWireless.Network, (StackPanel Content, Button Select)>();
         foreach (var network in networks)
         {
@@ -93,13 +93,13 @@ public partial class DockBar
             rows.Add(network, (content, button));
         }
 
-        connect.Click += (_, _) => _ = ConnectSelected();
-        password.PasswordChanged += (_, _) => UpdateConnectButton();
+        connect.Click += (_, _) => _ = ChangeConnection();
+        password.PasswordChanged += (_, _) => UpdateActionButton();
         password.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Enter || !connect.IsEnabled) return;
             e.Handled = true;
-            _ = ConnectSelected();
+            _ = ChangeConnection();
         };
         UpdateRows();
 
@@ -107,44 +107,48 @@ public partial class DockBar
         {
             if (wirelessBusy || ReferenceEquals(network, selected)) return;
             expandedRow?.Children.Remove(editor);
-            expandedRow = null;
-            password.Clear();
-            SetConnectionMessage("");
-            remember.IsChecked = false;
             selected = network;
             UpdateRows();
-            if (!network.Connected)
+            SetConnectionMessage("");
+            UpdateEditor(network);
+            expandedRow = rows[network].Content;
+            expandedRow.Children.Add(editor);
+            // Keep the newly expanded controls reachable even for the last visible row.
+            _ = Dispatcher.InvokeAsync(() =>
             {
-                var needsPassword = network.Access == DockWireless.NetworkAccess.Password;
-                label.Visibility = password.Visibility = remember.Visibility = hint.Visibility =
-                    needsPassword ? Visibility.Visible : Visibility.Collapsed;
-                if (needsPassword)
+                if (version == panelVersion && ReferenceEquals(network, selected)) editor.BringIntoView();
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        void UpdateEditor(DockWireless.Network network)
+        {
+            var isConnected = connected.Contains(network);
+            var needsPassword = !isConnected && network.Access == DockWireless.NetworkAccess.Password;
+            password.Clear();
+            remember.IsChecked = false;
+            label.Visibility = password.Visibility = remember.Visibility = hint.Visibility =
+                needsPassword ? Visibility.Visible : Visibility.Collapsed;
+            if (needsPassword)
+            {
+                try
                 {
-                    try
+                    var saved = WifiCredentials.Read(network);
+                    if (!string.IsNullOrEmpty(saved))
                     {
-                        var saved = WifiCredentials.Read(network);
-                        if (!string.IsNullOrEmpty(saved))
-                        {
-                            password.Password = saved;
-                            remember.IsChecked = true;
-                        }
-                    }
-                    catch (Win32Exception ex)
-                    {
-                        LogCredentialError("read", ex);
-                        SetConnectionMessage("无法读取已保存的密码，请手动输入。");
+                        password.Password = saved;
+                        remember.IsChecked = true;
                     }
                 }
-                connect.Content = network.Access == DockWireless.NetworkAccess.WindowsSettings ? "在系统设置中连接" : "连接";
-                expandedRow = rows[network].Content;
-                expandedRow.Children.Add(editor);
-                // Keep the newly expanded controls reachable even for the last visible row.
-                _ = Dispatcher.InvokeAsync(() =>
+                catch (Win32Exception ex)
                 {
-                    if (version == panelVersion && ReferenceEquals(network, selected)) editor.BringIntoView();
-                }, System.Windows.Threading.DispatcherPriority.Loaded);
+                    LogCredentialError("read", ex);
+                    SetConnectionMessage("无法读取已保存的密码，请手动输入。");
+                }
             }
-            UpdateConnectButton();
+            connect.Content = isConnected ? "断开连接" :
+                network.Access == DockWireless.NetworkAccess.WindowsSettings ? "在系统设置中连接" : "连接";
+            AutomationProperties.SetName(connect, $"{connect.Content} {network.Name}");
+            UpdateActionButton();
         }
 
         void UpdateRows()
@@ -152,15 +156,16 @@ public partial class DockBar
             foreach (var (network, row) in rows)
             {
                 var isSelected = ReferenceEquals(network, selected);
-                var status = network.Connected ? "已连接" : network.Access switch
+                var isConnected = connected.Contains(network);
+                var status = isConnected ? "已连接" : network.Access switch
                 {
                     DockWireless.NetworkAccess.Open => "开放网络",
                     DockWireless.NetworkAccess.Password => "需要密码",
                     _ => "系统认证"
                 };
                 var description = $"{status} · 信号 {network.Signal}/5";
-                row.Select.Content = DeviceRow(network.Name, description, "", network.Connected, network.Signal, isSelected);
-                row.Select.Background = PanelSurface(network.Connected || isSelected);
+                row.Select.Content = DeviceRow(network.Name, description, "", isConnected, network.Signal, isSelected);
+                row.Select.Background = PanelSurface(isConnected || isSelected);
                 row.Select.BorderBrush = ControlBrush(isSelected ? "#8DDCEA" : "#40596A79");
                 AutomationProperties.SetItemStatus(row.Select, isSelected ? $"已选中，{description}" : description);
             }
@@ -172,17 +177,27 @@ public partial class DockBar
             message.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         }
 
-        void UpdateConnectButton()
+        void UpdateActionButton()
         {
             using var secret = password.SecurePassword;
-            connect.IsEnabled = !wirelessBusy && selected is { Connected: false } network &&
-                (network.Access != DockWireless.NetworkAccess.Password || secret.Length > 0);
+            connect.IsEnabled = !wirelessBusy && selected is { } network &&
+                (connected.Contains(network) || network.Access != DockWireless.NetworkAccess.Password || secret.Length > 0);
         }
 
-        async Task ConnectSelected()
+        void UpdateConnection(WiFiAdapter adapter, string? ssid)
         {
-            if (!connect.IsEnabled || wirelessBusy || selected is not { Connected: false } network) return;
-            if (network.Access == DockWireless.NetworkAccess.WindowsSettings)
+            connected.RemoveWhere(item => ReferenceEquals(item.Adapter, adapter));
+            foreach (var item in networks)
+                if (ReferenceEquals(item.Adapter, adapter) && item.Name == ssid)
+                    connected.Add(item);
+            UpdateRows();
+        }
+
+        async Task ChangeConnection()
+        {
+            if (!connect.IsEnabled || wirelessBusy || selected is not { } network) return;
+            var disconnecting = connected.Contains(network);
+            if (!disconnecting && network.Access == DockWireless.NetworkAccess.WindowsSettings)
             {
                 CloseSystemPanel();
                 controller.Launch("ms-settings:network-wifi");
@@ -190,19 +205,32 @@ public partial class DockBar
             }
 
             wirelessBusy = true;
+            ++wirelessRevision;
             list.IsEnabled = false;
-            UpdateConnectButton();
-            var entered = network.Access == DockWireless.NetworkAccess.Password ? password.Password : null;
-            var savePassword = remember.IsChecked == true;
-            password.Clear();
-            SetConnectionMessage("正在连接…");
-            var connected = false;
-            string? credentialWarning = null;
+            UpdateActionButton();
+            SetConnectionMessage(disconnecting ? "正在断开…" : "正在连接…");
             try
             {
+                if (disconnecting)
+                {
+                    var ssid = await DockWireless.Disconnect(network);
+                    if (closed || version != panelVersion) return;
+                    UpdateConnection(network.Adapter, ssid);
+                    if (ssid == network.Name)
+                    {
+                        SetConnectionMessage("未能断开连接，请重试。");
+                        return;
+                    }
+                    SetConnectionMessage("");
+                    UpdateEditor(network);
+                    return;
+                }
+
+                var entered = network.Access == DockWireless.NetworkAccess.Password ? password.Password : null;
+                var savePassword = remember.IsChecked == true;
                 var result = await DockWireless.Connect(network, entered);
-                connected = result == WiFiConnectionStatus.Success;
-                if (connected && entered != null)
+                string? credentialWarning = null;
+                if (result == WiFiConnectionStatus.Success && entered != null)
                 {
                     try { WifiCredentials.Update(network, savePassword ? entered : null); }
                     catch (Win32Exception ex)
@@ -212,9 +240,15 @@ public partial class DockBar
                     }
                 }
                 if (closed || version != panelVersion) return;
+                if (result == WiFiConnectionStatus.Success)
+                {
+                    UpdateConnection(network.Adapter, network.Name);
+                    SetConnectionMessage(credentialWarning ?? "");
+                    UpdateEditor(network);
+                    return;
+                }
                 SetConnectionMessage(result switch
                 {
-                    WiFiConnectionStatus.Success => "已连接",
                     WiFiConnectionStatus.InvalidCredential => "密码不正确，请重新输入。",
                     WiFiConnectionStatus.NetworkNotAvailable => "网络已不可用，请刷新列表。",
                     WiFiConnectionStatus.AccessRevoked => "系统拒绝访问，请检查 Wi-Fi 和位置访问权限。",
@@ -222,25 +256,23 @@ public partial class DockBar
                     _ => "未能连接，请重试。"
                 });
             }
-            catch (TimeoutException) { if (version == panelVersion) SetConnectionMessage("连接超时，请重试。"); }
+            catch (TimeoutException)
+            {
+                if (version == panelVersion) SetConnectionMessage(disconnecting ? "确认断开超时，请重试。" : "连接超时，请重试。");
+            }
             catch (Exception ex) when (WirelessError(ex))
-            { if (version == panelVersion) SetConnectionMessage("连接失败，请重试或打开更多 Wi-Fi 设置。"); }
+            {
+                if (version == panelVersion)
+                    SetConnectionMessage(disconnecting ? "断开失败，请重试或打开更多 Wi-Fi 设置。" : "连接失败，请重试或打开更多 Wi-Fi 设置。");
+            }
             finally
             {
                 wirelessBusy = false;
                 if (!closed && version == panelVersion)
                 {
                     list.IsEnabled = true;
-                    UpdateConnectButton();
+                    UpdateActionButton();
                 }
-            }
-            if (connected && !closed && version == panelVersion)
-            {
-                var refreshed = ShowRadioDetails(RadioKind.WiFi);
-                var refreshedVersion = panelVersion;
-                await refreshed;
-                if (credentialWarning != null && !closed && panelVersion == refreshedVersion)
-                    SetPanelMessage(credentialWarning);
             }
         }
     }
