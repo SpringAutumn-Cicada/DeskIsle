@@ -48,7 +48,15 @@ public partial class MainWindow
     private void OnFileEvent(object sender, FileSystemEventArgs e)
     {
         if (e is RenamedEventArgs renamed && DesktopFiles.IsCardPath(renamed.OldFullPath) && DesktopFiles.IsCardPath(renamed.FullPath) && !Dispatcher.HasShutdownStarted)
-            Dispatcher.BeginInvoke(new Action(() => { renamedFiles.Add((renamed.OldFullPath, renamed.FullPath)); ScheduleFileSync(); }));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (workspace.DesktopIntegration && DesktopFiles.IsDesktopItem(renamed.OldFullPath) &&
+                    DesktopFiles.IsDesktopItem(renamed.FullPath))
+                    workspace.NotifyDesktopRename(renamed.OldFullPath, renamed.FullPath);
+                else
+                    renamedFiles.Add((renamed.OldFullPath, renamed.FullPath));
+                ScheduleFileSync();
+            }));
         QueueFileEvent();
     }
     private void OnWatcherError(object sender, ErrorEventArgs e) => QueueFileEvent();
@@ -67,8 +75,8 @@ public partial class MainWindow
     private async void RebuildFileWatchers()
     {
         var generation = ++watcherGeneration;
-        var folders = (directory == null ? state.References.Where(DesktopFiles.IsDesktopItem).Select(Path.GetDirectoryName).Append(DesktopFiles.Root) : new[] { directory })
-            .Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var folders = directory is { } folder && !FileMoveService.Same(folder, DesktopFiles.Root)
+            ? new[] { DesktopFiles.Root, folder } : new[] { DesktopFiles.Root };
         var replacements = await Task.Run(() =>
         {
             var result = new List<FileSystemWatcher>();
@@ -129,7 +137,7 @@ public partial class MainWindow
         { Availability = File.Exists(path) || Directory.Exists(path) ? "" : "桌面路径暂不可用" }).ToArray();
     }
 
-    private async void SyncFiles(object? sender, EventArgs e)
+    private async Task SyncFiles()
     {
         if (closing) return;
         if (syncingFiles || HasPendingCreation || IsReordering || loading != null || NewItemPanel.Visibility == Visibility.Visible)
@@ -153,8 +161,6 @@ public partial class MainWindow
                 foreach (var change in verified) workspace.RecordDesktopRename(change.Old, change.New);
                 if (verified.Length > 0) { ScheduleFileSync(); return; }
             }
-            await workspace.SyncDefaultDesktop();
-            if (closing) return;
             var updated = await Task.Run(() => folder == null ? ReadReferences(paths) : FolderReader.Read(folder, CancellationToken.None).Where(item => DesktopFiles.Displayable(item.FullPath)).Select(x => new FileTile(x)).ToArray());
             if (closing) return;
             if (version != viewVersion || folder != directory || IsReordering || HasPendingCreation || !paths.SequenceEqual(state.References.Where(DesktopFiles.IsDesktopItem).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))

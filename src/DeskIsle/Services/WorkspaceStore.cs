@@ -7,6 +7,7 @@ public sealed class WorkspaceState
     public int SchemaVersion { get; set; } = 3;
     public Guid? DefaultCardId { get; set; }
     public List<string>? SeenDesktopPaths { get; set; }
+    public bool DesktopOwnershipMigrated { get; set; }
     public bool DesktopMigrationPrompted { get; set; }
     public Dictionary<string, string> ImportedPaths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<CardState> Cards { get; set; } = [];
@@ -17,6 +18,7 @@ public sealed class WorkspaceStore
 {
     private readonly string dataDirectory;
     private readonly string path;
+    private string? loadedPath;
     public WorkspaceStore(string? dataDirectory = null)
     {
         this.dataDirectory = dataDirectory ?? CardStore.DataDirectory;
@@ -41,6 +43,7 @@ public sealed class WorkspaceStore
                 }
                 Validate(state);
                 state.SchemaVersion = 3;
+                loadedPath = candidate;
                 if (candidate != path) Warning = "已从有效备份恢复多卡片配置。";
                 return state;
             }
@@ -65,6 +68,21 @@ public sealed class WorkspaceStore
             return new() { Cards = [new()] };
         }
         return migrated;
+    }
+    internal void BackupBeforeOwnershipMigration()
+    {
+        // The legacy single-card document is never overwritten.
+        if (loadedPath == null) return;
+        var backup = Path.Combine(dataDirectory, "cards.pre-ownership.bak");
+        if (File.Exists(backup)) return;
+        var temp = backup + ".tmp";
+        File.Copy(loadedPath, temp, overwrite: true);
+        File.Move(temp, backup);
+    }
+    internal void ProtectOwnershipConfiguration()
+    {
+        ReadOnly = true;
+        Warning = "卡片配置升级未能保存，已保留原配置。本次使用只读模式。";
     }
     private static void Validate(WorkspaceState state)
     {

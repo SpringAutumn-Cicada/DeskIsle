@@ -16,7 +16,7 @@ public partial class MainWindow
         catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; return; }
         if (HasPendingCreation) return;
         if (!File.Exists(path) && !Directory.Exists(path))
-        { MessageBox.Show(this, "项目已不存在或路径不可用，可刷新或移出引用。", "无法删除"); return; }
+        { MessageBox.Show(this, "项目已不存在或路径不可用，请刷新后重试。", "无法删除"); return; }
         var operationStarted = false;
         deletingItem = true;
         try

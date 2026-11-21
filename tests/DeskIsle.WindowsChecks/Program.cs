@@ -138,10 +138,18 @@ internal static class Program
                 }
                 finally {monitor.Dispose();}
             });
-            Check("移出引用不改变临时文件",()=>
+            Check("移至默认卡片只更改唯一归属", () =>
             {
-                var tile=Field<IReadOnlyList<FileTile>>(window,"tiles")[0];var before=File.ReadAllBytes(tile.FullPath);var sender=new Button{DataContext=tile};Invoke(window,"RemoveReference",sender,new RoutedEventArgs(Button.ClickEvent));PumpUntil(()=>Field<IReadOnlyList<FileTile>>(window,"tiles").Count==999);
-                Assert(before.SequenceEqual(File.ReadAllBytes(tile.FullPath)),"Real file changed");Assert(!new WorkspaceStore(root).Load().Cards[0].References.Contains(tile.FullPath),"Reference not removed");
+                var destination = Field<Dictionary<Guid, MainWindow>>(manager, "windows").Single(pair => pair.Value != window);
+                manager.SetDefaultCard(destination.Key);
+                var tile = Field<IReadOnlyList<FileTile>>(window, "tiles")[0];
+                var before = File.ReadAllBytes(tile.FullPath);
+                Invoke(window, "MoveToDefaultCardClick", new Button { DataContext = tile }, new RoutedEventArgs(Button.ClickEvent));
+                PumpUntil(() => Field<IReadOnlyList<FileTile>>(destination.Value, "tiles").Any(item => item.FullPath == tile.FullPath));
+                Assert(Field<IReadOnlyList<FileTile>>(window, "tiles").All(item => item.FullPath != tile.FullPath), "Source tile still visible");
+                var owners = new WorkspaceStore(root).Load().Cards.Where(card => card.References.Contains(tile.FullPath)).ToArray();
+                Assert(owners.Length == 1 && owners[0].Id == destination.Key, "Expected one owner, the default card");
+                Assert(before.SequenceEqual(File.ReadAllBytes(tile.FullPath)), "Real file changed");
             });
         }
         catch(Exception ex){failures++;results.Add(new{name="harness setup",passed=false,error=ex.ToString()});Console.WriteLine(ex);}

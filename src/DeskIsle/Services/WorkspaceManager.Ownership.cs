@@ -11,6 +11,8 @@ public sealed partial class WorkspaceManager
         if (store.ReadOnly) throw new IOException("配置处于保护模式，无法修改文件分组。");
         var previousCards = state.Cards.ToArray();
         var previousDefault = state.DefaultCardId;
+        var previousSeen = state.SeenDesktopPaths;
+        var migrated = state.DesktopOwnershipMigrated;
         var previousImports = new Dictionary<string, string>(state.ImportedPaths, StringComparer.OrdinalIgnoreCase);
         var previous = previousCards.ToDictionary(card => card,
             card => (References: card.References.ToList(), card.FolderOrders, card.CreationDirectory));
@@ -23,6 +25,8 @@ public sealed partial class WorkspaceManager
         {
             state.Cards = previousCards.ToList();
             state.DefaultCardId = previousDefault;
+            state.SeenDesktopPaths = previousSeen;
+            state.DesktopOwnershipMigrated = migrated;
             state.ImportedPaths = previousImports;
             foreach (var (card, snapshot) in previous)
                 (card.References, card.FolderOrders, card.CreationDirectory) = snapshot;
@@ -49,6 +53,7 @@ public sealed partial class WorkspaceManager
             var assigned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             card.References.RemoveAll(path =>
             {
+                if (!DesktopFiles.IsDesktopItem(path)) return false;
                 var normalized = FileMoveService.Normalize(path);
                 return items.Contains(normalized) && (card != target || !assigned.Add(normalized));
             });
@@ -61,5 +66,37 @@ public sealed partial class WorkspaceManager
         var target = state.Cards.First(card => card.Id == targetId);
         var items = paths.Where(DesktopFiles.IsDesktopItem).ToArray();
         if (items.Length > 0) ChangeWorkspace(() => AssignDesktopItems(target, items));
+    }
+
+    private void MigrateDesktopOwnership()
+    {
+        var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var references = state.Cards.OrderBy(card => card == DefaultCard).ToDictionary(card => card, card =>
+            card.References.Select(path => DesktopFiles.IsDesktopItem(path) ? FileMoveService.Normalize(path) : path)
+                .Where(path => !DesktopFiles.IsDesktopItem(path) || claimed.Add(path)).ToList());
+        if (state.DesktopOwnershipMigrated &&
+            references.All(pair => pair.Key.References.SequenceEqual(pair.Value, StringComparer.Ordinal))) return;
+
+        void Apply()
+        {
+            foreach (var (card, paths) in references) card.References = paths;
+        }
+
+        try
+        {
+            if (store.ReadOnly) { Apply(); return; }
+            store.BackupBeforeOwnershipMigration();
+            ChangeWorkspace(() =>
+            {
+                Apply();
+                state.DesktopOwnershipMigrated = true;
+            });
+        }
+        catch (Exception ex) when (FileTransfer.Recoverable(ex))
+        {
+            Apply();
+            store.ProtectOwnershipConfiguration();
+            Warning = store.Warning;
+        }
     }
 }

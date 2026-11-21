@@ -133,7 +133,7 @@ public partial class MainWindow
         }
         if (closing) return;
         var path = report?.Roots.FirstOrDefault(item => item.Published)?.Target;
-        if (path != null && directory == null) await LoadReferences();
+        if (path != null && directory == null) await SyncFiles();
         if (closing) return;
         if (report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
         if (warning != null) Status.Text = warning;

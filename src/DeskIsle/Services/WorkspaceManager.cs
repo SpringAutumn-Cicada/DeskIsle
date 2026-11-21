@@ -64,6 +64,7 @@ public sealed partial class WorkspaceManager : IDisposable
         Warning = store.Warning;
         if (state.Cards.Count == 0) state.Cards.Add(new());
         if (!state.Cards.Any(c => c.Id == state.DefaultCardId)) state.DefaultCardId = state.Cards[0].Id;
+        if (DesktopIntegration) MigrateDesktopOwnership();
     }
     public void Start()
     {
@@ -124,15 +125,17 @@ public sealed partial class WorkspaceManager : IDisposable
     }
     public void Remove(MainWindow window, CardState card)
     {
-        if (window.HasPendingCreation) { MessageBox.Show(window, "正在处理文件，请完成后再移除卡片。", "DeskIsle"); return; }
+        if (state.Cards.Count <= 1) { MessageBox.Show(window, "至少需要保留一张卡片。", "DeskIsle"); return; }
+        if (windows.Values.Any(w => w.HasPendingCreation || w.IsReordering)) { MessageBox.Show(window, "正在处理文件，请完成后再移除卡片。", "DeskIsle"); return; }
         if (store.ReadOnly) { MessageBox.Show(window, "配置处于保护模式，不能移除卡片。", "DeskIsle"); return; }
-        if (MessageBox.Show(window, "移除此卡片及其收藏记录？真实文件不会删除。移除最后一张卡片后程序退出。", "移除卡片", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        var index = state.Cards.IndexOf(card);
-        var previousDefault = state.DefaultCardId;
-        state.Cards.Remove(card);
-        if (state.DefaultCardId == card.Id) state.DefaultCardId = state.Cards.FirstOrDefault()?.Id;
-        try { Save(); }
-        catch { state.Cards.Insert(index, card); state.DefaultCardId = previousDefault; throw; }
+        if (MessageBox.Show(window, "移除此卡片？卡片中的桌面项目将转到默认卡片，文件保留在原处。", "移除卡片", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (state.Cards.Count <= 1 || windows.Values.Any(w => w.HasPendingCreation || w.IsReordering)) return;
+        ChangeWorkspace(() =>
+        {
+            state.Cards.Remove(card);
+            if (state.DefaultCardId == card.Id) state.DefaultCardId = state.Cards[0].Id;
+            AssignDesktopItems(DefaultCard, card.References);
+        });
         window.Close();
     }
     public bool FileMoveInProgress { get; private set; }

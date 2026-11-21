@@ -56,8 +56,13 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SizeChanged += (_, _) => { if (!closing) { saveTimer.Stop(); saveTimer.Start(); } };
         SourceInitialized += (_, _) => host.SetHandle(this);
-        fileSync.Tick += (_, _) => { RebuildFileWatchers(); SyncFiles(null, EventArgs.Empty); };
-        eventSync.Tick += (_, _) => { eventSync.Stop(); eventSync.Interval = TimeSpan.FromMilliseconds(40); SyncFiles(null, EventArgs.Empty); };
+        fileSync.Tick += (_, _) =>
+        {
+            RebuildFileWatchers();
+            workspace.NotifyDesktopMutation();
+            _ = SyncFiles();
+        };
+        eventSync.Tick += (_, _) => { eventSync.Stop(); eventSync.Interval = TimeSpan.FromMilliseconds(40); _ = SyncFiles(); };
         ContentRendered += (_, _) => StartupDiagnostics.Mark("card-first-content-rendered");
         Loaded += async (_, _) => { await LoadReferences(); if (closing) return; fileSync.Start(); UpdateDesktopButton(); if (workspace.Warning != null) Status.Text = workspace.Warning; if (workspace.DesktopIntegration) { monitor.Start(); } };
         Closing += (_, e) => { if (HasPendingCreation) { e.Cancel = true; return; } closing = true; saveTimer.Stop(); ++viewVersion; FinishRename(true); SaveCard(); };
@@ -102,7 +107,7 @@ public partial class MainWindow : Window
     {
         DefaultCardToggle.IsChecked = workspace.IsDefaultCard(state.Id);
         DefaultCardToggle.Header = workspace.IsDefaultCard(state.Id) ? "default 卡片" : "设为 default 卡片";
-        DefaultCardToggle.ToolTip = "桌面新增文件自动显示到唯一的 default 卡片";
+        DefaultCardToggle.ToolTip = "未分组的桌面项目自动显示到唯一的 default 卡片";
         DefaultCardToggle.Icon = CMenuIcon("star", DefaultCardToggle.IsChecked);
         PositionLockToggle.IsChecked = state.PositionLocked;
         PositionLockToggle.Header = state.PositionLocked ? "取消固定卡片位置" : "固定卡片位置";
@@ -215,12 +220,18 @@ public partial class MainWindow : Window
         var captured = paths.ToArray();
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ImportDesktopFiles(captured, folder)));
     }
-    private async void RemoveReference(object sender, RoutedEventArgs e)
+    private void MoveToDefaultCardClick(object sender, RoutedEventArgs e)
     {
-        var tile = (sender as FrameworkElement)?.DataContext as FileTile ?? selectedTile;
-        if (tile == null || directory != null) return;
-        state.References.RemoveAll(x => string.Equals(x, tile.FullPath, StringComparison.OrdinalIgnoreCase));
-        await LoadReferences(); SaveCard();
+        var tile = ActionTile(sender);
+        if (tile == null || directory != null || workspace.IsDefaultCard(state.Id)) return;
+        try { workspace.MoveToDefaultCard(state.Id, tile.FullPath); }
+        catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
+    }
+    private void TileContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu }) return;
+        foreach (var item in menu.Items.OfType<MenuItem>().Where(item => Equals(item.Tag, "MoveToDefaultCard")))
+            item.IsEnabled = directory == null && !HasPendingCreation && !workspace.IsDefaultCard(state.Id);
     }
     private void OpenDesktopClick(object sender, RoutedEventArgs e) => ShellOpen(DesktopFiles.Root);
 
@@ -258,7 +269,11 @@ public partial class MainWindow : Window
         finally { if (ReferenceEquals(loading, request)) loading = null; request.Dispose(); }
     }
 
-    private async void RefreshClick(object sender, RoutedEventArgs e) { if (directory == null) await LoadReferences(); else await LoadFolder(); }
+    private async void RefreshClick(object sender, RoutedEventArgs e)
+    {
+        await workspace.SyncDefaultDesktop();
+        if (directory == null) await LoadReferences(); else await LoadFolder();
+    }
     private void OpenClick(object sender, RoutedEventArgs e)
     {
         if (DateTime.UtcNow < suppressOpenUntil) return;

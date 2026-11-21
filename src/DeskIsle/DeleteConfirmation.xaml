@@ -22,7 +22,7 @@
 </StackPanel>
 </Border>
 <TextBlock Text="将请求 Windows 移入回收站。" TextWrapping="Wrap" FontSize="12" Foreground="#CDD5E3" Margin="0,14,0,5"/>
-<TextBlock Text="若系统提示无法回收，可取消操作。仅想从卡片移除，请使用“移出卡片”。" TextWrapping="Wrap" FontSize="11" Foreground="#94A3BA"/>
+<TextBlock Text="若系统提示无法回收，可取消操作。只想调整分组时，可使用“移至默认卡片”。" TextWrapping="Wrap" FontSize="11" Foreground="#94A3BA"/>
 </StackPanel>
 </ScrollViewer>
 <Grid Grid.Row="2" Margin="0,20,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
