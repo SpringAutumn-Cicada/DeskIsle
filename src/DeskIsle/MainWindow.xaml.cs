@@ -203,9 +203,9 @@ public partial class MainWindow : Window
             if (folder != null)
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => MoveIntoFolder(payload.Path, folder)));
             else if (DesktopFiles.IsDesktopItem(payload.Path))
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(async () =>
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    try { await workspace.TransferCardReference(payload.CardId, state.Id, payload.Path); }
+                    try { workspace.TransferCardReference(payload.CardId, state.Id, payload.Path); }
                     catch (Exception ex) when (FileTransfer.Recoverable(ex)) { Status.Text = ex.Message; }
                 }));
             else

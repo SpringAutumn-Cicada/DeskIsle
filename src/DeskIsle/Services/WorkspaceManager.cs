@@ -144,35 +144,42 @@ public sealed partial class WorkspaceManager : IDisposable
         return true;
     }
     public void EndFileMove() { FileMoveInProgress = false; if (DesktopIntegration) NotifyDesktopMutation(); }
-    public void RecordTransfer(Guid sourceCard, TransferCompletion completion)
+    public void RecordTransfer(Guid targetCard, TransferCompletion completion)
     {
         DesktopFiles.Require(completion.Target);
-        if (!completion.Moved)
+        var target = state.Cards.First(card => card.Id == targetCard);
+        ChangeWorkspace(() =>
         {
-            if (!DesktopFiles.Private(completion.Source)) state.ImportedPaths[completion.Source] = completion.Target;
-            foreach (var card in state.Cards)
+            if (completion.Moved)
+                RemapWorkspacePaths(completion.Source, completion.Target);
+            else if (!DesktopFiles.Private(completion.Source))
             {
-                card.References = card.References.Select(path => FileMoveService.Same(path, completion.Source) ? completion.Target : path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                card.CreationDirectory = null;
+                state.ImportedPaths[completion.Source] = completion.Target;
+                foreach (var card in state.Cards)
+                    card.References.RemoveAll(path => FileMoveService.Same(path, completion.Source) &&
+                        !FileMoveService.Same(path, completion.Target));
             }
-        }
-        else
-        {
-            foreach (var card in state.Cards)
-            {
-                card.References = card.References.Where(path => card.Id != sourceCard || !FileMoveService.Same(path, completion.Source))
-                    .Select(path => FileMoveService.Remap(path, completion.Source, completion.Target)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                card.CreationDirectory = null;
-                card.FolderOrders = card.FolderOrders.GroupBy(pair => FileMoveService.Remap(pair.Key, completion.Source, completion.Target), StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.SelectMany(pair => pair.Value).Select(path => FileMoveService.Remap(path, completion.Source, completion.Target)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
-            }
-            foreach (var key in state.ImportedPaths.Keys.ToArray()) state.ImportedPaths[key] = FileMoveService.Remap(state.ImportedPaths[key], completion.Source, completion.Target);
-        }
-        Save();
+            foreach (var card in state.Cards) card.CreationDirectory = null;
+            AssignDesktopItems(target, [completion.Target]);
+        });
     }
     public void RecordDesktopRename(string source, string destination)
     {
         if (!DesktopFiles.IsCardPath(source) || !DesktopFiles.IsCardPath(destination)) return;
+        ChangeWorkspace(() => RenameWorkspaceItem(source, destination));
+    }
+    private void RenameWorkspaceItem(string source, string destination)
+    {
+        var owner = state.Cards.Where(card => card.References.Any(item => FileMoveService.Same(item, source)))
+            .OrderBy(card => card.Id == state.DefaultCardId).FirstOrDefault();
+        if (owner != null && !FileMoveService.Same(source, destination))
+            foreach (var card in state.Cards)
+                card.References.RemoveAll(path => FileMoveService.Same(path, destination));
+        RemapWorkspacePaths(source, destination);
+        if (owner != null) AssignDesktopItems(owner, [destination]);
+    }
+    private void RemapWorkspacePaths(string source, string destination)
+    {
         foreach (var card in state.Cards)
         {
             card.References = card.References.Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -180,7 +187,6 @@ public sealed partial class WorkspaceManager : IDisposable
                 .ToDictionary(group => group.Key, group => group.SelectMany(pair => pair.Value).Select(path => FileMoveService.Remap(path, source, destination)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
         }
         foreach (var key in state.ImportedPaths.Keys.ToArray()) state.ImportedPaths[key] = FileMoveService.Remap(state.ImportedPaths[key], source, destination);
-        Save();
     }
     public async Task RefreshAfterFileMove(string source, string destination)
     {

@@ -122,10 +122,7 @@ public partial class MainWindow
         try
         {
             report = await RunTransfer([draft.Path], DesktopFiles.Root, draft: true);
-            foreach (var item in report.Roots.Where(item => item.Published))
-                if (!state.References.Contains(item.Target, StringComparer.OrdinalIgnoreCase)) state.References.Add(item.Target);
-            state.CreationDirectory = null;
-            workspace.Save();
+            workspace.AssignPublishedItems(state.Id, report.Roots.Where(item => item.Published).Select(item => item.Target));
         }
         catch (Exception ex) when (FileTransfer.Recoverable(ex)) { warning = "保存布局未完成：" + ex.Message; }
         finally
@@ -134,11 +131,12 @@ public partial class MainWindow
             // Only the unique draft allocated above is removed, never a user source.
             if (!CleanupDraft(draft.Work)) warning ??= "草稿清理未完成，材料保留在桌面恢复目录。";
         }
-        await workspace.RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
+        if (closing) return;
+        var path = report?.Roots.FirstOrDefault(item => item.Published)?.Target;
+        if (path != null && directory == null) await LoadReferences();
         if (closing) return;
         if (report != null) Status.Text = report.Errors.Count > 0 ? report.Errors[0] : "";
         if (warning != null) Status.Text = warning;
-        var path = report?.Roots.FirstOrDefault(item => item.Published)?.Target;
         selectedTile = tiles.FirstOrDefault(x => string.Equals(x.FullPath, path, StringComparison.OrdinalIgnoreCase));
         if (selectedTile != null)
         {

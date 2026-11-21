@@ -22,6 +22,23 @@ public partial class MainWindow
         ++viewVersion; // In-flight snapshots cannot replace newer grouping changes.
         ScheduleFileSync();
     }
+    internal void RefreshCardOwnership()
+    {
+        if (closing) return;
+        if (directory == null)
+        {
+            var assigned = state.References.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var remaining = tiles.Where(tile => assigned.Contains(tile.FullPath)).ToArray();
+            if (remaining.Length != tiles.Count)
+            {
+                ClearReorderPreview();
+                if (selectedTile != null && !remaining.Contains(selectedTile)) selectedTile = null;
+                tiles = remaining;
+                RebuildRows();
+            }
+        }
+        RequestFileSync();
+    }
     private void ScheduleFileSync()
     {
         if (closing) return;
@@ -145,7 +162,7 @@ public partial class MainWindow
             // Retain the user's custom order and avoid rebuilding unchanged controls.
             var byPath = updated.GroupBy(x => x.FullPath, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
             var existing = tiles.Select(x => x.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var ordered = tiles.Where(x => byPath.ContainsKey(x.FullPath)).Select(x => byPath[x.FullPath])
+            var ordered = folder == null ? updated : tiles.Where(x => byPath.ContainsKey(x.FullPath)).Select(x => byPath[x.FullPath])
                 .Concat(updated.Where(x => !existing.Contains(x.FullPath))).ToArray();
             if (tiles.Select(x => (x.FullPath, x.Availability)).SequenceEqual(ordered.Select(x => (x.FullPath, x.Availability))))
             {

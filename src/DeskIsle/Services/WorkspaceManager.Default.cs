@@ -23,22 +23,16 @@ public sealed partial class WorkspaceManager
         try { Save(); }
         catch { state.DefaultCardId = previous; throw; }
     }
-    public async Task TransferCardReference(Guid sourceId, Guid targetId, string path)
+    public void TransferCardReference(Guid sourceId, Guid targetId, string path)
     {
         if (Exiting || FileMoveInProgress || windows.Values.Any(w => w.HasPendingCreation)) throw new IOException("请先完成当前文件操作。");
         if (store.ReadOnly) throw new IOException("配置处于保护模式，无法转移文件分组。");
         var source = state.Cards.FirstOrDefault(c => c.Id == sourceId);
         var target = state.Cards.FirstOrDefault(c => c.Id == targetId);
-        if (source == null || target == null || source == target || !source.References.Contains(path, StringComparer.OrdinalIgnoreCase)) return;
+        if (source == null || target == null || source == target || !source.References.Any(item => FileMoveService.Same(item, path))) return;
         DesktopFiles.Require(path);
         if (!DesktopFiles.IsDesktopItem(path) || !File.Exists(path) && !Directory.Exists(path)) throw new IOException("文件不可用，未改变分组。");
-        var previousSource = source.References.ToList();
-        var previousTarget = target.References.ToList();
-        source.References.RemoveAll(p => FileMoveService.Same(p, path));
-        if (!target.References.Contains(path, StringComparer.OrdinalIgnoreCase)) target.References.Add(path);
-        try { Save(); }
-        catch { source.References = previousSource; target.References = previousTarget; throw; }
-        await RefreshAfterFileMove(DesktopFiles.Root, DesktopFiles.Root);
+        ChangeWorkspace(() => AssignDesktopItems(target, [path]));
     }
     public async Task SyncDefaultDesktop()
     {
